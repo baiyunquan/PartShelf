@@ -34,6 +34,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "libraries_kicad_details.html": "libraries_kicad",
         "libraries_jlcparts.html": "libraries_jlcparts",
         "libraries_jlcparts_details.html": "libraries_jlcparts",
+        "search.html": "search",
     }
     if name in sections:
         page_dict = i18n.get_section(sections[name], lang)
@@ -86,6 +87,14 @@ def get_project_details_template(request: Request):
 @router.get("/procurement", response_class=HTMLResponse)
 def get_procurement_template(request: Request):
     return render_template(request=request, name="procurement.html", context={"active_page": "procurement"})
+
+@router.get("/search", response_class=HTMLResponse)
+def get_search_template(request: Request, q: str = ""):
+    return render_template(
+        request=request,
+        name="search.html",
+        context={"active_page": "search", "initial_query": q}
+    )
 
 # ==========================================
 # Component Libraries Routes

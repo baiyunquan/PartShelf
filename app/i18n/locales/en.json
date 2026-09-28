@@ -351,5 +351,30 @@
     "prop_lcsc_link": "View on LCSC Official Website",
     "th_qty_range": "Quantity Range",
     "th_unit_price": "Unit Price"
+  },
+  "search": {
+    "title": "Global Search - PartShelf",
+    "heading": "Global Component Search Center",
+    "subtitle": "Unified cross-library search across local inventory, 1,000,000+ JLCPCB parts, Altium and KiCad CAD libraries.",
+    "query_placeholder": "Enter MPN, LCSC #, parameter keyword (e.g. STM32, 10k, 0603, CH340)...",
+    "btn_search": "Global Search",
+    "btn_clear": "Clear",
+    "results_for": "Search keyword:",
+    "total_results": "{count} matching records found",
+    "tab_all": "All Overview",
+    "tab_inventory": "My Inventory",
+    "tab_jlcparts": "JLCPCB Parts",
+    "tab_altium": "Altium Libraries",
+    "tab_kicad": "KiCad Symbols",
+    "card_inventory_title": "Matching Inventory Parts",
+    "card_jlcparts_title": "Matching JLCPCB Components",
+    "card_altium_title": "Matching Altium Library Components",
+    "card_kicad_title": "Matching KiCad Symbols",
+    "view_all_matches": "View all matching records in this library",
+    "no_results_found": "No matching components found.",
+    "no_results_hint": "Try shortening your search query, checking spelling, or clicking a specific library tab above.",
+    "live_view_all": "View all search results",
+    "live_no_matches": "No quick matches found",
+    "searching": "Searching all libraries..."
   }
 }

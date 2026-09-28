@@ -351,5 +351,30 @@
     "prop_lcsc_link": "前往立创商城官网详情页",
     "th_qty_range": "采购起订量区间",
     "th_unit_price": "阶梯单价"
+  },
+  "search": {
+    "title": "全局聚合搜索 - PartShelf",
+    "heading": "全局聚合搜索中心",
+    "subtitle": "一站式跨库检索本地实验室库存、JLCPCB 百万现货库、Altium 与 KiCad 符号封装库",
+    "query_placeholder": "输入型号、LCSC 编号、参数关键词 (例如 STM32, 10k, 0603, CH340)...",
+    "btn_search": "全局搜索",
+    "btn_clear": "清空",
+    "results_for": "搜索关键词：",
+    "total_results": "共找到 {count} 条相关记录",
+    "tab_all": "全部总览",
+    "tab_inventory": "我的库存",
+    "tab_jlcparts": "JLCPCB 现货库",
+    "tab_altium": "Altium 贴片库",
+    "tab_kicad": "KiCad 符号库",
+    "card_inventory_title": "本地实验室库存",
+    "card_jlcparts_title": "JLCPCB / LCSC 现货器件",
+    "card_altium_title": "Altium 贴片与封装库",
+    "card_kicad_title": "KiCad 原理图符号库",
+    "view_all_matches": "查看该库全部匹配记录",
+    "no_results_found": "未检索到匹配的元器件记录",
+    "no_results_hint": "请尝试缩短搜索词、检查型号拼写，或切换至上方具体库选项卡查看。",
+    "live_view_all": "查看全部搜索结果",
+    "live_no_matches": "未找到即时匹配项",
+    "searching": "正在跨库检索..."
   }
 }
