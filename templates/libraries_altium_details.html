@@ -169,9 +169,11 @@
       </div>
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const compId = {{ comp_id }};
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
@@ -194,6 +196,14 @@
 
         document.getElementById('libReference').textContent = data.lib_reference || '-';
         document.getElementById('mfrPartNumber').textContent = data.mfr_part_number || data.lib_reference || '';
+
+        // Actions
+        const actionsContainer = document.getElementById('headerActions');
+        actionsContainer.innerHTML = `
+          <button class="btn btn-success btn-sm text-nowrap" onclick="openImportModal('altium', '${data.id}', '${escapeHtml(data.lib_reference)}', '${escapeHtml(data.package || '')} | ${escapeHtml(data.manufacturer || '')}')">
+            ${i18n.btn_quick_add || '+ Add to Inventory'}
+          </button>
+        `;
 
         // Badges
         const badges = document.getElementById('headerBadges');

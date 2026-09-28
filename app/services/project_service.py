@@ -17,6 +17,7 @@ from app.crud.project_part import (
     update_project_part_quantity,
 )
 from app.crud.part import get_part_by_id as get_part_by_id_crud
+from app.services.external_library_service import resolve_part_summary
 from app.models.project import Project
 from app.models.project_part import ProjectPart
 from app.schemas.project import (
@@ -72,12 +73,13 @@ class ProjectService:
             qty_needed = pp.quantity_needed or 0
             shortage = max(0, qty_needed - qty_avail)
 
+            summary = resolve_part_summary(part.library_source, part.external_part_id)
             part_items.append(ProjectPartItem(
                 part_id=part.id,
-                part_name=part.name,
-                manufacturer=part.manufacturer.name if part.manufacturer else None,
-                package=part.package.package_type if part.package else None,
-                part_type=part.type.part_type if part.type else None,
+                part_name=summary.get("name") or f"Part #{part.id}",
+                manufacturer=summary.get("manufacturer"),
+                package=summary.get("package"),
+                part_type=summary.get("part_type"),
                 quantity_available=qty_avail,
                 quantity_needed=qty_needed,
                 shortage=shortage
@@ -197,12 +199,13 @@ class ProjectService:
             total_needed = data["total_needed"]
             shortage = max(0, total_needed - qty_avail)
 
+            summary = resolve_part_summary(part.library_source, part.external_part_id)
             result.append(ProcurementItem(
                 part_id=part.id,
-                part_name=part.name,
-                manufacturer=part.manufacturer.name if part.manufacturer else None,
-                package=part.package.package_type if part.package else None,
-                part_type=part.type.part_type if part.type else None,
+                part_name=summary.get("name") or f"Part #{part.id}",
+                manufacturer=summary.get("manufacturer"),
+                package=summary.get("package"),
+                part_type=summary.get("part_type"),
                 quantity_available=qty_avail,
                 total_needed=total_needed,
                 shortage=shortage,

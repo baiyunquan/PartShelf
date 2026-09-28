@@ -15,37 +15,64 @@
     {% include 'partials/navbar.html' %}
 
     <div class="container mt-5 pt-5">
+      <!-- Breadcrumb & Top Bar -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <a href="/inventory" class="btn btn-outline-secondary btn-sm">
+          &larr; {{ t('details.back_to_inventory') }}
+        </a>
+        <div class="d-flex align-items-center gap-2">
+          <span id="source-library-badge" class="badge bg-secondary">...</span>
+          <a id="view-in-library-btn" href="#" target="_blank" class="btn btn-outline-primary btn-sm d-none">
+            {{ t('details.view_in_library') }} &rarr;
+          </a>
+        </div>
+      </div>
+
       <div class="row mb-3">
-        <div class="col-md-8">
+        <div class="col-md-12">
           <h2 id="part-name" class="mb-1 text-primary">...</h2>
           <h5 class="text-muted mb-0" id="part-manufacturer">...</h5>
         </div>
       </div>
 
-      <!-- Main Specifications Card -->
+      <!-- Main Specifications & Inventory Card -->
       <div class="card shadow-sm mb-4">
         <div class="card-body">
           <div class="row g-3">
             <div class="col-md-6">
-              <strong>{{ t('details.part_id') }}:</strong> <span id="part-id" class="badge bg-secondary">...</span><br>
+              <div><strong>{{ t('details.part_id') }}:</strong> <span id="part-id" class="badge bg-secondary">...</span></div>
+              <div class="mt-2"><strong>{{ t('details.source_library') }}:</strong> <span id="source-lib-text" class="text-secondary">...</span></div>
               <div class="mt-2"><strong>{{ t('details.type') }}:</strong> <span id="part-type" class="badge bg-info text-dark">...</span></div>
               <div class="mt-2"><strong>{{ t('details.package') }}:</strong> <code id="part-package">...</code></div>
             </div>
             <div class="col-md-6">
               <div><strong>{{ t('details.quantity') }}:</strong> <span id="part-quantity" class="fs-5 fw-bold text-primary">...</span></div>
               <div class="mt-2"><strong>{{ t('details.in_stock') }}:</strong> <span id="in-stock-status" class="badge bg-success">...</span></div>
+              <div class="mt-2"><strong>{{ t('details.storage_location') }}:</strong> <span id="part-location" class="badge bg-light text-dark border">...</span></div>
+              <div class="mt-2"><strong>{{ t('details.note') }}:</strong> <span id="part-note" class="text-muted">...</span></div>
             </div>              
           </div>
         </div>
       </div>
 
       <!-- Description Card -->
-      <div class="card shadow-sm mb-4">
+      <div class="card shadow-sm mb-4" id="description-card">
         <div class="card-header bg-white fw-bold">
           {{ t('details.description_header') }}
         </div>
         <div class="card-body">
           <p id="part-description" class="mb-0 text-secondary">...</p>
+        </div>
+      </div>
+
+      <!-- External Component Specifications Card -->
+      <div class="card shadow-sm mb-4" id="external-specs-card">
+        <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+          <span>{{ t('details.external_specs_header') }}</span>
+          <span id="external-source-name" class="badge bg-secondary">...</span>
+        </div>
+        <div class="card-body" id="external-specs-body">
+          <div class="text-muted text-center py-4">{{ t('libraries_common.loading') }}</div>
         </div>
       </div>
 
@@ -67,9 +94,29 @@
           {{ t('details.options_header') }}
         </div>
         <div class="card-body">
+          <!-- Update Storage Location & Notes -->
+          <div class="mb-4">
+            <h6 class="fw-bold mb-3">{{ t('details.update_meta_header') }}</h6>
+            <div class="row g-3" style="max-width: 700px;">
+              <div class="col-md-6">
+                <label for="editLocationInput" class="form-label small text-muted">{{ t('details.storage_location') }}</label>
+                <input type="text" id="editLocationInput" class="form-control" placeholder="e.g. Box A-1, Drawer 3">
+              </div>
+              <div class="col-md-6">
+                <label for="editNoteInput" class="form-label small text-muted">{{ t('details.note') }}</label>
+                <input type="text" id="editNoteInput" class="form-control" placeholder="e.g. Batch 2026-05, low noise version">
+              </div>
+              <div class="col-12">
+                <button class="btn btn-outline-primary btn-sm" id="saveMetaBtn">{{ t('details.update_meta_btn') }}</button>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+
           <!-- Update Quantity -->
           <div class="mb-4">
-            <label for="updateQuantity" class="form-label fw-bold">{{ t('details.update_quantity_header') }}</label>
+            <h6 class="fw-bold mb-2">{{ t('details.update_quantity_header') }}</h6>
             <div class="input-group" style="max-width: 450px;">
               <input type="number" id="updateQuantity" class="form-control" placeholder="{{ t('details.update_quantity_placeholder') }}">
               <button class="btn btn-primary" id="updateQuantityBtn">{{ t('details.update_quantity_btn') }}</button>
@@ -79,7 +126,7 @@
         
           <!-- Set Quantity Threshold -->
           <div class="mb-4">
-            <label for="notifyThreshold" class="form-label fw-bold">{{ t('details.threshold_header') }}</label>
+            <h6 class="fw-bold mb-2">{{ t('details.threshold_header') }}</h6>
             <div class="input-group" style="max-width: 450px;">
               <input type="number" id="notifyThreshold" class="form-control" placeholder="{{ t('details.threshold_placeholder') }}">
               <button class="btn btn-outline-warning" id="setThresholdBtn">{{ t('details.threshold_btn') }}</button>

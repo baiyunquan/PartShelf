@@ -68,7 +68,7 @@
               <th scope="col" style="min-width: 120px;">{{ t('libraries_kicad.th_extends') }}</th>
               <th scope="col" style="min-width: 160px;">{{ t('libraries_kicad.th_footprint') }}</th>
               <th scope="col">{{ t('libraries_kicad.th_description') }}</th>
-              <th scope="col" style="width: 100px;" class="text-end">{{ t('libraries_kicad.th_actions') }}</th>
+              <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_kicad.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -89,9 +89,11 @@
 
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
       let currentPage = 1;
@@ -166,9 +168,14 @@
             <td><small class="text-dark"><code>${escapeHtml(item.footprint || '-')}</code></small></td>
             <td><small class="text-secondary">${escapeHtml(descText)}</small></td>
             <td class="text-end">
-              <a href="/libraries/kicad/${item.id}" class="btn btn-outline-primary btn-sm text-nowrap">
-                ${i18n.view_details || 'Details'}
-              </a>
+              <div class="d-inline-flex gap-1">
+                <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('kicad', '${item.id}', '${escapeHtml(item.name)}', '${escapeHtml(item.footprint || '')} | ${escapeHtml(item.library || '')}')">
+                  ${i18n.btn_quick_add || '+ Add'}
+                </button>
+                <a href="/libraries/kicad/${item.id}" class="btn btn-outline-primary btn-sm text-nowrap">
+                  ${i18n.view_details || 'Details'}
+                </a>
+              </div>
             </td>
           `;
           tbody.appendChild(tr);

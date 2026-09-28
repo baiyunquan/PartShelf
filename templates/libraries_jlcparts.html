@@ -87,7 +87,7 @@
               <th scope="col" style="min-width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
               <th scope="col" style="width: 100px;">{{ t('libraries_jlcparts.th_stock') }}</th>
               <th scope="col" style="min-width: 120px;">{{ t('libraries_jlcparts.th_price') }}</th>
-              <th scope="col" style="width: 100px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
+              <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -108,9 +108,11 @@
 
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
       let currentPage = 1;
@@ -238,9 +240,14 @@
             <td><span class="${stockClass}">${stockText}</span></td>
             <td><small class="text-dark fw-bold">${priceText}</small></td>
             <td class="text-end">
-              <a href="/libraries/jlcparts/${item.lcsc}" class="btn btn-outline-primary btn-sm text-nowrap">
-                ${i18n.view_details || 'Details'}
-              </a>
+              <div class="d-inline-flex gap-1">
+                <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('jlcparts', '${item.lcsc}', 'C${item.lcsc} (${escapeHtml(item.mfr || '')})', '${escapeHtml(item.package || '')} | ${escapeHtml(item.category || '')}')">
+                  ${i18n.btn_quick_add || '+ Add'}
+                </button>
+                <a href="/libraries/jlcparts/${item.lcsc}" class="btn btn-outline-primary btn-sm text-nowrap">
+                  ${i18n.view_details || 'Details'}
+                </a>
+              </div>
             </td>
           `;
           tbody.appendChild(tr);

@@ -8,44 +8,45 @@
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
   </head>
-  <body>
+  <body class="bg-light pb-5">
     <!-- Navbar -->
     {% set active_page = 'inventory' %}
     {% include 'partials/navbar.html' %}
 
     <div class="container mt-5 pt-5 pb-5">
       <div class="row mb-4 align-items-center">
-        <div class="col-md-6 mb-2 mb-md-0">
+        <div class="col-md-7 mb-2 mb-md-0">
           <!-- Search Bar -->
           <div class="d-flex">
             <input class="form-control me-2" type="search" id="searchInput" placeholder="{{ t('inventory.search_placeholder') }}" aria-label="{{ t('inventory.search_btn') }}">
-            <button class="btn btn-success me-2" id="searchButton" type="button">{{ t('inventory.search_btn') }}</button>
+            <button class="btn btn-primary me-2 text-nowrap" id="searchButton" type="button">{{ t('inventory.search_btn') }}</button>
             <button class="btn btn-outline-secondary" id="resetSearchButton" type="button" style="display:none;" aria-label="{{ t('inventory.reset_search') }}">&times;</button>
           </div>
         </div>          
-        <div class="col-md-6 text-md-end">
-          <!-- Add Component and Add Component Order buttons -->
-          <button class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addComponentModal">
+        <div class="col-md-5 text-md-end">
+          <!-- Add Component button -->
+          <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#addComponentModal">
             <span class="me-1">+</span>{{ t('inventory.add_part_btn') }}
           </button>
-          <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#addComponentOrderModal">
+          <button class="btn btn-outline-secondary disabled" title="Deferred" style="display: none;">
             {{ t('inventory.import_order_btn') }}
           </button>
         </div>
       </div>
 
       <!-- Parts Table -->
-      <div class="table-responsive shadow-sm rounded">
-        <table class="table table-striped table-hover align-middle mb-0">
+      <div class="table-responsive shadow-sm rounded bg-white">
+        <table class="table table-hover align-middle mb-0">
           <thead class="table-dark">
             <tr>
               <th scope="col" style="width: 70px;">{{ t('inventory.th_id') }}</th>
-              <th scope="col">{{ t('inventory.th_name') }}</th>
-              <th scope="col">{{ t('inventory.th_type') }}</th>
-              <th scope="col">{{ t('inventory.th_package') }}</th>
+              <th scope="col" style="min-width: 170px;">{{ t('inventory.th_name') }}</th>
+              <th scope="col" style="width: 110px;">{{ t('inventory.th_source') }}</th>
+              <th scope="col" style="min-width: 140px;">{{ t('inventory.th_package') }}</th>
+              <th scope="col" style="min-width: 130px;">{{ t('inventory.th_location') }}</th>
               <th scope="col" style="width: 100px;">{{ t('inventory.th_quantity') }}</th>
               <th scope="col">{{ t('inventory.th_projects') }}</th>
-              <th scope="col" style="width: 90px;">{{ t('inventory.th_actions') }}</th>
+              <th scope="col" style="width: 90px;" class="text-end">{{ t('inventory.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="parts-table-body">
@@ -54,81 +55,92 @@
         </table>
       </div>
 
-      <!-- Add Part Modal -->
+      <!-- Interactive Multi-Library Add Part Modal -->
       <div class="modal fade" id="addComponentModal" tabindex="-1" aria-labelledby="addComponentModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
           <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title" id="addComponentModalLabel">{{ t('inventory.modal_add_title') }}</h5>
+            <div class="modal-header border-bottom">
+              <h5 class="modal-title fw-bold" id="addComponentModalLabel">{{ t('inventory.modal_add_title') }}</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
             </div>
             <div class="modal-body">
-              <form action="/api/inventory/add_part_to_inventory" method="post">
-                <div class="mb-3">
-                  <label for="Name" class="form-label fw-bold">{{ t('inventory.label_part_name') }}</label>
-                  <input type="text" class="form-control" id="Name" name="name" placeholder="{{ t('inventory.placeholder_part_name') }}" required>
+              
+              <!-- Step 1: External Library Search -->
+              <div class="card border mb-3 bg-light">
+                <div class="card-header bg-white fw-bold py-2">
+                  {{ t('inventory.step_search_title') }}
                 </div>
-                <div class="mb-3">
-                  <label for="manufacturer" class="form-label fw-bold">{{ t('inventory.label_manufacturer') }}</label>
-                  <input type="text" class="form-control" id="manufacturer" name="manufacturer" placeholder="{{ t('inventory.placeholder_manufacturer') }}" required>
+                <div class="card-body">
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-8">
+                      <div class="input-group">
+                        <input type="text" class="form-control" id="externalSearchInput" placeholder="{{ t('inventory.search_external_placeholder') }}">
+                        <button class="btn btn-primary" type="button" id="btnExternalSearch">{{ t('libraries_common.btn_search') }}</button>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <select class="form-select" id="externalTargetSelect">
+                        <option value="all" selected>All (All 3 Libraries)</option>
+                        <option value="jlcparts">JLCPCB In-Stock</option>
+                        <option value="altium">Altium Libraries</option>
+                        <option value="kicad">KiCad Symbols</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Search Results Box -->
+                  <div id="externalSearchResults" class="border rounded bg-white p-2" style="max-height: 220px; overflow-y: auto; display: none;">
+                    <!-- Results dynamically appended here -->
+                  </div>
+
+                  <!-- Selected Part Preview Card -->
+                  <div id="selectedPartPreview" class="alert alert-primary mb-0 mt-2 p-2" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div>
+                        <strong class="d-block text-primary" id="previewPartName">-</strong>
+                        <small class="text-secondary" id="previewPartMeta">-</small>
+                      </div>
+                      <span class="badge bg-dark" id="previewPartBadge">-</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="mb-3">
-                  <label for="part_type" class="form-label fw-bold">{{ t('inventory.label_type') }}</label>
-                  <input type="text" class="form-control" id="part_type" name="part_type" placeholder="{{ t('inventory.placeholder_type') }}" required>
+              </div>
+
+              <!-- Step 2: Local Inventory Attributes -->
+              <form id="addPartInventoryForm">
+                <input type="hidden" id="selectedSource" value="">
+                <input type="hidden" id="selectedExtId" value="">
+
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label for="inputQuantity" class="form-label fw-bold">{{ t('inventory.label_quantity') }}</label>
+                    <input type="number" min="0" class="form-control" id="inputQuantity" value="1" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="inputLocation" class="form-label fw-bold">{{ t('inventory.label_storage_location') }}</label>
+                    <input type="text" class="form-control" id="inputLocation" placeholder="{{ t('inventory.placeholder_storage_location') }}">
+                  </div>
                 </div>
+
                 <div class="mb-3">
-                  <label for="package" class="form-label fw-bold">{{ t('inventory.label_package') }}</label>
-                  <input type="text" class="form-control" id="package" name="package" placeholder="{{ t('inventory.placeholder_package') }}" required>
+                  <label for="inputNote" class="form-label fw-bold">{{ t('inventory.label_note') }}</label>
+                  <input type="text" class="form-control" id="inputNote" placeholder="{{ t('inventory.placeholder_note') }}">
                 </div>
-                <div class="mb-3">
-                  <label for="quantity" class="form-label fw-bold">{{ t('inventory.label_quantity') }}</label>
-                  <input type="number" min="0" class="form-control" id="quantity" name="quantity" placeholder="{{ t('inventory.placeholder_quantity') }}" required>
-                </div>
+
                 <div class="mb-3">
                   <label class="form-label fw-bold">{{ t('inventory.label_projects') }}</label>
                   <div id="project-checkboxes-container" class="border rounded p-2 bg-light" style="max-height: 120px; overflow-y: auto;">
                     <small class="text-muted d-block">{{ t('inventory.select_projects_help') }}</small>
                   </div>
                 </div>
-                <div class="mb-3">
-                  <label for="description" class="form-label">{{ t('inventory.label_description') }}</label>
-                  <textarea class="form-control" id="description" name="description" rows="3" placeholder="{{ t('inventory.placeholder_description') }}"></textarea>
-                </div>
-                <div class="modal-footer">
+
+                <div class="modal-footer px-0 pb-0 pt-3 border-top">
                   <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('inventory.btn_close') }}</button>
-                  <button type="submit" class="btn btn-primary">{{ t('inventory.btn_save') }}</button>
+                  <button type="submit" class="btn btn-primary" id="savePartBtn" disabled>{{ t('inventory.btn_save') }}</button>
                 </div>
               </form> 
+
             </div>
-          </div>
-        </div>
-      </div>
-        
-      <!-- Add Component Order (CSV Import) Modal -->
-      <div class="modal fade" id="addComponentOrderModal" tabindex="-1" aria-labelledby="addComponentOrderModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <form action="/api/inventory/import_order_csv_file" method="post" enctype="multipart/form-data">
-              <div class="modal-header">
-                <h5 class="modal-title" id="addComponentOrderModalLabel">{{ t('inventory.modal_import_title') }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
-              </div>
-              <div class="modal-body">
-                <div class="mb-3">
-                  <label for="orderFile" class="form-label fw-bold">{{ t('inventory.label_upload_csv') }}</label>
-                  <input class="form-control" type="file" id="orderFile" name="order_file" accept=".csv" required>
-                </div>
-                <div class="mb-3">
-                  <label for="templateSelect" class="form-label fw-bold">{{ t('inventory.label_select_template') }}</label>
-                  <select class="form-select" id="templateSelect" name="template_id" required>
-                  </select>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('inventory.btn_cancel') }}</button>
-                <button type="submit" class="btn btn-primary">{{ t('inventory.btn_import') }}</button>
-              </div>
-            </form>
           </div>
         </div>
       </div>

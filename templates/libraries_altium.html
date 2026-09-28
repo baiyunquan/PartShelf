@@ -76,7 +76,7 @@
               <th scope="col" style="min-width: 120px;">{{ t('libraries_altium.th_manufacturer') }}</th>
               <th scope="col" style="min-width: 180px;">{{ t('libraries_altium.th_specs') }}</th>
               <th scope="col" style="width: 100px;">{{ t('libraries_altium.th_type') }}</th>
-              <th scope="col" style="width: 100px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
+              <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -97,9 +97,11 @@
 
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
       let currentPage = 1;
@@ -193,9 +195,14 @@
             <td><small class="text-dark">${escapeHtml(formatSpecs(item))}</small></td>
             <td><span class="badge ${badgeClass}">${badgeText}</span></td>
             <td class="text-end">
-              <a href="/libraries/altium/${item.id}" class="btn btn-outline-primary btn-sm text-nowrap">
-                ${i18n.view_details || 'Details'}
-              </a>
+              <div class="d-inline-flex gap-1">
+                <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('altium', '${item.id}', '${escapeHtml(item.lib_reference)}', '${escapeHtml(item.package || '')} | ${escapeHtml(item.manufacturer || '')}')">
+                  ${i18n.btn_quick_add || '+ Add'}
+                </button>
+                <a href="/libraries/altium/${item.id}" class="btn btn-outline-primary btn-sm text-nowrap">
+                  ${i18n.view_details || 'Details'}
+                </a>
+              </div>
             </td>
           `;
           tbody.appendChild(tr);

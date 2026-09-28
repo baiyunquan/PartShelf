@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from db.database import get_db
 from app.services import external_library_service as lib_svc
@@ -168,61 +168,22 @@ def import_external_to_inventory(
     source: str = Query(..., description="'altium', 'kicad', or 'jlcparts'"),
     part_id: str = Query(..., description="Component identifier or LCSC part number"),
     quantity: int = Query(1, ge=0),
+    storage_location: Optional[str] = Query(None),
+    note: Optional[str] = Query(None),
+    project_ids: Optional[List[int]] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Import an external component into PartShelf's local inventory database (partshelf.db).
+    Import an external component into PartShelf's local inventory database (partshelf.db)
+    using pure reference architecture.
     """
-    part_name = ""
-    package_name = ""
-    type_name = ""
-    mfr_name = ""
-    desc = ""
-
-    if source == "jlcparts":
-        lcsc_num = int(part_id.replace("C", "")) if part_id.replace("C", "").isdigit() else 0
-        item = lib_svc.get_jlcparts_component(lcsc_num)
-        if not item:
-            raise HTTPException(status_code=404, detail="Component not found in JLCParts")
-        part_name = item.get("mfr") or f"C{item.get('lcsc')}"
-        package_name = item.get("package") or "Standard"
-        type_name = item.get("category") or "General"
-        mfr_name = item.get("manufacturer") or "Unknown"
-        desc = item.get("description") or f"LCSC: C{item.get('lcsc')}"
-
-    elif source == "altium":
-        comp_id = int(part_id) if part_id.isdigit() else 0
-        item = lib_svc.get_altium_component(comp_id)
-        if not item:
-            raise HTTPException(status_code=404, detail="Component not found in Altium library")
-        part_name = item.get("mfr_part_number") or item.get("lib_reference")
-        package_name = item.get("package") or "Standard"
-        type_name = item.get("category") or "General"
-        mfr_name = item.get("manufacturer") or "Generic"
-        desc = item.get("description") or f"Altium: {item.get('lib_reference')}"
-
-    elif source == "kicad":
-        sym_id = int(part_id) if part_id.isdigit() else 0
-        item = lib_svc.get_kicad_symbol(sym_id)
-        if not item:
-            raise HTTPException(status_code=404, detail="Symbol not found in KiCad libraries")
-        part_name = item.get("value") or item.get("name")
-        package_name = item.get("footprint") or "Symbol"
-        type_name = item.get("library") or "General"
-        mfr_name = "Generic"
-        desc = item.get("description") or f"KiCad: {item.get('name')}"
-    else:
-        raise HTTPException(status_code=400, detail="Invalid source library")
-
-    svc = InventoryService(db)
     part_in = PartToInventoryAdd(
-        name=part_name,
-        package=package_name,
-        part_type=type_name,
-        manufacturer=mfr_name,
+        library_source=source,
+        external_part_id=str(part_id),
         quantity=quantity,
-        description=desc,
-        project_ids=[]
+        storage_location=storage_location or "Default Storage",
+        note=note or "",
+        project_ids=project_ids or []
     )
-    result = svc.add_part_to_inventory(part_in)
+    result = InventoryService.add_part_to_inventory(db, part_in)
     return {"status": "success", "part": result}

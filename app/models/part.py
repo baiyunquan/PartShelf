@@ -1,19 +1,18 @@
+from datetime import datetime
 from db.database import Base
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 
 class Part(Base):
     __tablename__ = "parts"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True, index=True)
-    description = Column(String(255), nullable=True) 
-    manufacturer_id = Column(Integer, ForeignKey("manufacturers.id"))
-    package_id = Column(Integer, ForeignKey("packages.id"))
-    type_id = Column(Integer, ForeignKey("types.id"))
+    library_source = Column(String(32), nullable=False, index=True)  # 'altium', 'kicad', 'jlcparts'
+    external_part_id = Column(String(64), nullable=False, index=True)
+    storage_location = Column(String(128), nullable=True)
+    note = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    manufacturer = relationship("Manufacturer", back_populates="parts")
-    package= relationship("Package", back_populates="parts")
-    type = relationship("Type", back_populates="parts")
     inventory = relationship("Inventory", back_populates="part", uselist=False, cascade="all, delete-orphan")
     project_parts = relationship("ProjectPart", back_populates="part", cascade="all, delete-orphan")

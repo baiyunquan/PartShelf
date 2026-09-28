@@ -194,9 +194,11 @@
       </div>
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const lcscNum = {{ lcsc }};
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
@@ -220,6 +222,14 @@
         document.getElementById('mfrPartNumber').textContent = data.mfr || `C${data.lcsc}`;
         document.getElementById('lcscBadge').textContent = `C${data.lcsc}`;
         document.getElementById('manufacturerName').textContent = data.manufacturer || '';
+
+        // Actions
+        const actionsContainer = document.getElementById('headerActions');
+        actionsContainer.innerHTML = `
+          <button class="btn btn-success btn-sm text-nowrap" onclick="openImportModal('jlcparts', '${data.lcsc}', 'C${data.lcsc} (${escapeHtml(data.mfr || '')})', '${escapeHtml(data.package || '')} | ${escapeHtml(data.category || '')}')">
+            ${i18n.btn_quick_add || '+ Add to Inventory'}
+          </button>
+        `;
 
         // Badges
         const badges = document.getElementById('headerBadges');

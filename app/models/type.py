@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String
 from db.database import Base
 
 class Type(Base):
@@ -7,6 +6,3 @@ class Type(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     part_type = Column(String(255), index=True)
-    
-    parts = relationship("Part", back_populates="type")
-    

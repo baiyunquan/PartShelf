@@ -11,3 +11,4 @@ data/libraries/
 .env
 .venv/
 venv/
+*.bak

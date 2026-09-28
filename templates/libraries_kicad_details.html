@@ -153,9 +153,11 @@
       </div>
     </div>
 
+    {% include 'partials/import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const symId = {{ sym_id }};
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
@@ -211,12 +213,16 @@
         document.getElementById('propKeywords').textContent = data.keywords || '-';
         document.getElementById('propDescription').textContent = data.description || '-';
 
-        // Datasheet link
+        // Actions
         const actions = document.getElementById('headerActions');
-        actions.innerHTML = '';
+        actions.innerHTML = `
+          <button class="btn btn-success btn-sm me-2 text-nowrap" onclick="openImportModal('kicad', '${data.id}', '${escapeHtml(data.name)}', '${escapeHtml(data.footprint || '')} | ${escapeHtml(data.library || '')}')">
+            ${i18n.btn_quick_add || '+ Add to Inventory'}
+          </button>
+        `;
         if (data.datasheet && data.datasheet !== '~') {
-          actions.innerHTML = `
-            <a href="${data.datasheet}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+          actions.innerHTML += `
+            <a href="${data.datasheet}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm text-nowrap">
               ${i18n.external_datasheet || 'Datasheet (PDF)'}
             </a>`;
         }

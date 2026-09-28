@@ -27,17 +27,11 @@ def remove_part_from_project(db: Session, project_part: ProjectPart):
 
 def get_project_parts_by_project(db: Session, project_id: int):
     return db.query(ProjectPart).options(
-        joinedload(ProjectPart.part).joinedload(Part.inventory),
-        joinedload(ProjectPart.part).joinedload(Part.package),
-        joinedload(ProjectPart.part).joinedload(Part.manufacturer),
-        joinedload(ProjectPart.part).joinedload(Part.type)
+        joinedload(ProjectPart.part).joinedload(Part.inventory)
     ).filter(ProjectPart.project_id == project_id).all()
 
 def get_all_project_parts_with_details(db: Session):
     return db.query(ProjectPart).options(
         joinedload(ProjectPart.project),
-        joinedload(ProjectPart.part).joinedload(Part.inventory),
-        joinedload(ProjectPart.part).joinedload(Part.package),
-        joinedload(ProjectPart.part).joinedload(Part.manufacturer),
-        joinedload(ProjectPart.part).joinedload(Part.type)
+        joinedload(ProjectPart.part).joinedload(Part.inventory)
     ).all()

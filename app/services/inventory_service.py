@@ -1,11 +1,10 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List, Optional
+
 from app.crud.inventory import create_inventory, get_inventory_by_part_id, update_inventory_quantity
-from app.crud.manufacturer import *
-from app.crud.package import *
-from app.crud.part import create_part, delete_part, get_all_parts, get_part_by_id, get_part_by_name, get_parts_containing_key
+from app.crud.part import create_part, delete_part, get_all_parts, get_part_by_id, update_part
 from app.crud.project_part import add_part_to_project, get_project_part
-from app.crud.type import *
 from app.models.part import Part
 from app.models.inventory import Inventory
 from app.models.project_part import ProjectPart
@@ -14,67 +13,83 @@ from app.schemas.inventory import (
     PartInventoryFlatGet,
     PartInventoryQuantity,
     PartInventoryQuantityUpdate,
+    PartMetaUpdate,
     PartProjectItem,
     PartToInventoryAdd,
 )
+from app.services.external_library_service import resolve_part_summary, resolve_part_full
+
 
 class InventoryService:
+
     @staticmethod
-    def add_part_to_inventory(db: Session, part: PartToInventoryAdd):
+    def add_part_to_inventory(db: Session, part: PartToInventoryAdd) -> PartInventoryFlatGet:
         if part.quantity < 0:
             raise HTTPException(
                 status_code=status.HTTP_406_NOT_ACCEPTABLE,
-                detail="Cannot add new part with negative quantity"
+                detail="Cannot add part with negative quantity"
             )
 
-        db_manufacturer = get_manufacturer_by_name(db, part.manufacturer)
-        if not db_manufacturer:
-            db_manufacturer = create_manufacturer(db, part.manufacturer)
-           
-        db_package = get_package_by_name(db, part.package)
-        if not db_package:
-            db_package = create_part_package(db, part.package)
-
-        db_type = get_type_by_name(db, part.part_type)
-        if not db_type:
-            db_type = create_part_type(db, part.part_type)
-
-        db_part = get_part_by_name(db, part.name)
-        if not db_part:
-            db_part = create_part(db, Part(
-                name=part.name,
-                description=part.description,
-                manufacturer_id=db_manufacturer.id,
-                package_id=db_package.id,
-                type_id=db_type.id
-            ))
-            
-        db_inventory = get_inventory_by_part_id(db, db_part.id)
-        if not db_inventory:
-            db_inventory = Inventory(
-                part_id=db_part.id,
-                quantity_available=part.quantity                
+        src = (part.library_source or "").lower()
+        if src not in ("altium", "kicad", "jlcparts"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid library_source: '{part.library_source}'. Must be 'altium', 'kicad', or 'jlcparts'."
             )
-            create_inventory(db, db_inventory)            
-        else:
-            InventoryService.update_inventory_quantity(db, PartInventoryQuantityUpdate(part_id=db_part.id, quantity=part.quantity))
-        
-        # Link projects if specified
+
+        ext_id = str(part.external_part_id).strip()
+        if not ext_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="external_part_id cannot be empty"
+            )
+
+        # Validate that the external part exists
+        summary = resolve_part_summary(src, ext_id)
+        if not summary or summary.get("name", "").startswith("Part #"):
+            # Check if really invalid
+            full_res = resolve_part_full(src, ext_id)
+            if not full_res.get("external_details"):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Component #{ext_id} not found in {src} library."
+                )
+
+        # Create Part record (supports multiple records for the same external part if in different locations)
+        db_part = Part(
+            library_source=src,
+            external_part_id=ext_id,
+            storage_location=part.storage_location or "Default Storage",
+            note=part.note or (part.description or "")
+        )
+        created_part = create_part(db, db_part)
+
+        # Create Inventory record
+        db_inventory = Inventory(
+            part_id=created_part.id,
+            quantity_available=part.quantity
+        )
+        create_inventory(db, db_inventory)
+
+        # Link project IDs
+        projects_list = []
         if part.project_ids:
             for pid in part.project_ids:
                 if pid:
-                    existing_pp = get_project_part(db, pid, db_part.id)
+                    existing_pp = get_project_part(db, pid, created_part.id)
                     if not existing_pp:
-                        add_part_to_project(db, ProjectPart(
+                        pp = ProjectPart(
                             project_id=pid,
-                            part_id=db_part.id,
+                            part_id=created_part.id,
                             quantity_needed=0
-                        ))
+                        )
+                        add_part_to_project(db, pp)
 
-        return part
+        # Re-fetch for clean output
+        return InventoryService._map_flat_part(created_part)
 
     @staticmethod
-    def update_inventory_quantity(db: Session, inventory_quantity: PartInventoryQuantityUpdate):
+    def update_inventory_quantity(db: Session, inventory_quantity: PartInventoryQuantityUpdate) -> PartInventoryQuantity:
         db_inventory = get_inventory_by_part_id(db, inventory_quantity.part_id)
         if not db_inventory:
             raise HTTPException(
@@ -83,7 +98,6 @@ class InventoryService:
             )
 
         new_quantity = db_inventory.quantity_available + inventory_quantity.quantity
-
         if new_quantity < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -92,11 +106,25 @@ class InventoryService:
 
         db_inventory.quantity_available = new_quantity
         update_inventory_quantity(db, db_inventory)
-        
         return PartInventoryQuantity(updatedQuantity=db_inventory.quantity_available)
 
     @staticmethod
-    def _map_projects(part: Part):
+    def update_part_meta(db: Session, meta_in: PartMetaUpdate) -> PartInventoryFlatGet:
+        db_part = get_part_by_id(db, meta_in.part_id)
+        if not db_part:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Part not found"
+            )
+        if meta_in.storage_location is not None:
+            db_part.storage_location = meta_in.storage_location
+        if meta_in.note is not None:
+            db_part.note = meta_in.note
+        updated = update_part(db, db_part)
+        return InventoryService._map_flat_part(updated)
+
+    @staticmethod
+    def _map_projects(part: Part) -> List[PartProjectItem]:
         projects = []
         if getattr(part, "project_parts", None):
             for pp in part.project_parts:
@@ -109,66 +137,82 @@ class InventoryService:
         return projects
 
     @classmethod
-    def get_parts_inventory_list(cls, db: Session):
-        parts_list = get_all_parts(db)
-        
-        return [
-            PartInventoryFlatGet(
-                id=part.id,
-                name=part.name,
-                manufacturer=part.manufacturer.name if part.manufacturer else None,
-                part_type=part.type.part_type if part.type else None,
-                package=part.package.package_type if part.package else None,
-                quantity=part.inventory.quantity_available if part.inventory else 0,
-                projects=cls._map_projects(part)
-            )
-            for part in parts_list
-        ]
-
-    @classmethod
-    def get_part_by_id(cls, db: Session, id: int):
-        part_found = get_part_by_id(db, id)
-        if part_found is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Part with id = {id} does not exist"
-            )
-        
-        return PartDetailsFlatGet(
-            id=part_found.id,
-            name=part_found.name,
-            manufacturer=part_found.manufacturer.name if part_found.manufacturer else None,
-            part_type=part_found.type.part_type if part_found.type else None,
-            package=part_found.package.package_type if part_found.package else None,
-            quantity=part_found.inventory.quantity_available if part_found.inventory else 0,
-            description=part_found.description if part_found.description else None,
-            projects=cls._map_projects(part_found)
+    def _map_flat_part(cls, part: Part) -> PartInventoryFlatGet:
+        summary = resolve_part_summary(part.library_source, part.external_part_id)
+        qty = part.inventory.quantity_available if part.inventory else 0
+        return PartInventoryFlatGet(
+            id=part.id,
+            library_source=part.library_source,
+            external_part_id=part.external_part_id,
+            name=summary.get("name") or f"Part #{part.id}",
+            manufacturer=summary.get("manufacturer"),
+            package=summary.get("package"),
+            part_type=summary.get("part_type"),
+            storage_location=part.storage_location,
+            note=part.note,
+            quantity=qty,
+            image_url=summary.get("image_url"),
+            datasheet_url=summary.get("datasheet_url"),
+            projects=cls._map_projects(part)
         )
 
     @classmethod
-    def search(cls, search_key: str, db: Session):
-        parts_list = get_parts_containing_key(db, search_key)
-        
-        return [
-            PartInventoryFlatGet(
-                id=part.id,
-                name=part.name,
-                manufacturer=part.manufacturer.name if part.manufacturer else None,
-                part_type=part.type.part_type if part.type else None,
-                package=part.package.package_type if part.package else None,
-                quantity=part.inventory.quantity_available if part.inventory else 0,
-                projects=cls._map_projects(part)
+    def get_parts_inventory_list(cls, db: Session, limit: int = 0) -> List[PartInventoryFlatGet]:
+        parts_list = get_all_parts(db, limit=limit)
+        return [cls._map_flat_part(part) for part in parts_list]
+
+    @classmethod
+    def get_part_by_id(cls, db: Session, part_id: int) -> PartDetailsFlatGet:
+        part_found = get_part_by_id(db, part_id)
+        if part_found is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Part with id = {part_id} does not exist"
             )
-            for part in parts_list
-        ]
-    
+
+        full_info = resolve_part_full(part_found.library_source, part_found.external_part_id)
+        summary = full_info["summary"]
+        qty = part_found.inventory.quantity_available if part_found.inventory else 0
+
+        return PartDetailsFlatGet(
+            id=part_found.id,
+            library_source=part_found.library_source,
+            external_part_id=part_found.external_part_id,
+            name=summary.get("name") or f"Part #{part_found.id}",
+            manufacturer=summary.get("manufacturer"),
+            package=summary.get("package"),
+            part_type=summary.get("part_type"),
+            storage_location=part_found.storage_location,
+            note=part_found.note,
+            quantity=qty,
+            description=summary.get("description"),
+            image_url=summary.get("image_url"),
+            datasheet_url=summary.get("datasheet_url"),
+            projects=cls._map_projects(part_found),
+            external_details=full_info.get("external_details")
+        )
+
+    @classmethod
+    def search(cls, search_key: str, db: Session) -> List[PartInventoryFlatGet]:
+        q = (search_key or "").strip().lower()
+        if not q:
+            return cls.get_parts_inventory_list(db)
+
+        # Get all parts and filter dynamically against hydrated attributes or storage location / note
+        all_parts = cls.get_parts_inventory_list(db)
+        matched = []
+        for p in all_parts:
+            text_corpus = f"{p.name} {p.manufacturer or ''} {p.package or ''} {p.part_type or ''} {p.storage_location or ''} {p.note or ''}".lower()
+            if q in text_corpus or f"c{p.external_part_id}".lower() == q or str(p.id) == q:
+                matched.append(p)
+        return matched
+
     @staticmethod
     def delete_part_with_id(part_id: int, db: Session):
         part_to_delete = get_part_by_id(db, part_id)
         if part_to_delete is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,  
-                detail=f"Part to delete with id = {part_id} does not exist"
-            )    
-        
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Part with id = {part_id} does not exist"
+            )
         delete_part(db, part_to_delete)
