@@ -1,10 +1,10 @@
-<div class="mt-auto pt-3 border-top border-secondary">
-  <div class="small text-muted mb-2">{{ t('app.language') }}</div>
-  <div class="btn-group w-100" role="group" aria-label="{{ t('app.language') }}">
-    <a href="{{ language_url('zh') }}" class="btn btn-sm {% if lang == 'zh' %}btn-primary{% else %}btn-outline-light{% endif %}">
+<div class="d-inline-flex align-items-center gap-2">
+  <span class="text-secondary small d-none d-sm-inline">{{ t('app.language') }}:</span>
+  <div class="btn-group btn-group-sm" role="group" aria-label="{{ t('app.language') }}">
+    <a href="{{ language_url('zh') }}" class="btn btn-sm py-0 px-2 {% if lang == 'zh' %}btn-primary text-white{% else %}btn-outline-secondary text-light{% endif %}">
       {{ t('app.lang_zh') }}
     </a>
-    <a href="{{ language_url('en') }}" class="btn btn-sm {% if lang == 'en' %}btn-primary{% else %}btn-outline-light{% endif %}">
+    <a href="{{ language_url('en') }}" class="btn btn-sm py-0 px-2 {% if lang == 'en' %}btn-primary text-white{% else %}btn-outline-secondary text-light{% endif %}">
       {{ t('app.lang_en') }}
     </a>
   </div>

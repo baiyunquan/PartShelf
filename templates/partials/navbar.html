@@ -29,8 +29,8 @@
         <h5 class="offcanvas-title" id="offcanvasDarkNavbarLabel">{{ t('app.menu') }}</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="{{ t('app.close') }}"></button>
       </div>
-      <div class="offcanvas-body d-flex flex-column h-100">
-        <ul class="navbar-nav flex-grow-1 pe-3">
+      <div class="offcanvas-body">
+        <ul class="navbar-nav pe-3">
           <li class="nav-item mb-2">
             <a class="nav-link {% if active_page == 'home' %}active{% endif %}" {% if active_page == 'home' %}aria-current="page"{% endif %} href="/">
               {{ t('app.nav_home') }}
@@ -52,9 +52,6 @@
             </a>
           </li>
         </ul>
-
-        <!-- Language switcher at the very bottom -->
-        {% include 'partials/language_switcher.html' %}
       </div>
     </div>
   </div>
