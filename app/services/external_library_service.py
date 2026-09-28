@@ -21,6 +21,8 @@ from app.i18n.category_i18n import category_i18n
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
 SCRIPTS_DIR = BASE_DIR / "scripts"
+PARTS_IMAGES_DIR = BASE_DIR / "static" / "images" / "parts"
+PARTS_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 ALTIUM_DB_PATH = DATA_DIR / "altium_library.db"
 KICAD_DB_PATH = DATA_DIR / "kicad_symbols.db"
@@ -84,6 +86,55 @@ def get_connection(db_path: Path) -> Optional[sqlite3.Connection]:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_rw_connection(db_path: Path) -> Optional[sqlite3.Connection]:
+    if not db_path.exists():
+        return None
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+    except Exception:
+        pass
+    return conn
+
+
+def _build_part_image_urls(lcsc: int, db_image_name: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Constructs image URLs for a JLCParts component, prioritizing locally stored crawler images.
+    """
+    local_filename = f"{lcsc}.jpg"
+    local_file_path = PARTS_IMAGES_DIR / local_filename
+    if local_file_path.exists():
+        local_url = f"/static/images/parts/{local_filename}"
+        return {
+            "image_url_small": local_url,
+            "image_url_medium": local_url,
+            "image_url_large": local_url,
+        }
+
+    if not db_image_name or str(db_image_name).strip().upper() in ("NONE", "NO_IMAGE", "NULL", ""):
+        return {
+            "image_url_small": None,
+            "image_url_medium": None,
+            "image_url_large": None,
+        }
+
+    db_img_str = str(db_image_name).strip()
+    if db_img_str.startswith("http://") or db_img_str.startswith("https://") or db_img_str.startswith("/static/"):
+        return {
+            "image_url_small": db_img_str,
+            "image_url_medium": db_img_str,
+            "image_url_large": db_img_str,
+        }
+
+    return {
+        "image_url_small": f"https://assets.lcsc.com/images/lcsc/96x96/{db_img_str}",
+        "image_url_medium": f"https://assets.lcsc.com/images/lcsc/224x224/{db_img_str}",
+        "image_url_large": f"https://assets.lcsc.com/images/lcsc/900x900/{db_img_str}",
+    }
 
 
 def get_libraries_status() -> Dict[str, Any]:
@@ -536,15 +587,8 @@ def search_jlcparts(
     for r in rows:
         r["category_localized"] = category_i18n.translate_primary(r.get("category") or "", lang)
         r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "", lang)
-        # Build image URLs
-        if r.get("image"):
-            r["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{r['image']}"
-            r["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{r['image']}"
-            r["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{r['image']}"
-        else:
-            r["image_url_small"] = None
-            r["image_url_medium"] = None
-            r["image_url_large"] = None
+        # Build image URLs prioritizing local crawler images
+        r.update(_build_part_image_urls(r["lcsc"], r.get("image")))
 
         if r.get("attributes"):
             try:
@@ -585,15 +629,8 @@ def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, An
         item = dict(row)
         item["category_localized"] = category_i18n.translate_primary(item.get("category") or "", lang)
         item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "", lang)
-
-        if item.get("image"):
-            item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{item['image']}"
-            item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{item['image']}"
-            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{item['image']}"
-        else:
-            item["image_url_small"] = None
-            item["image_url_medium"] = None
-            item["image_url_large"] = None
+        # Build image URLs prioritizing local crawler images
+        item.update(_build_part_image_urls(item["lcsc"], item.get("image")))
 
         if item.get("attributes"):
             try:
@@ -738,3 +775,156 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
         "summary": summary,
         "external_details": external_details
     }
+
+
+# ==========================================
+# 4. LCSC Image Crawler Service Functions
+# ==========================================
+
+def get_missing_image_lcsc_list(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
+    """
+    Retrieves a list of LCSC part numbers that do not yet have an image or have not been crawled.
+    Ordered by j.lcsc ascending, filtered by j.lcsc > cursor.
+    """
+    limit = max(1, min(limit, 200))
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        return {"tasks": [], "cursor": cursor, "limit": limit, "count": 0}
+    try:
+        cur = conn.cursor()
+        sql = """
+        SELECT j.lcsc
+        FROM jlc_components j
+        LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+        WHERE (l.image IS NULL OR l.image = '')
+          AND j.lcsc > ?
+        ORDER BY j.lcsc ASC
+        LIMIT ?
+        """
+        cur.execute(sql, (cursor, limit))
+        rows = cur.fetchall()
+        tasks = [r["lcsc"] for r in rows]
+        next_cursor = tasks[-1] if tasks else cursor
+        return {
+            "tasks": tasks,
+            "cursor": next_cursor,
+            "limit": limit,
+            "count": len(tasks)
+        }
+    finally:
+        conn.close()
+
+
+def save_crawled_part_image(
+    lcsc: int,
+    image_bytes: Optional[bytes] = None,
+    image_url: Optional[str] = None,
+    product_model: Optional[str] = None,
+    has_image: bool = True
+) -> Dict[str, Any]:
+    """
+    Saves scraped component image bytes locally and records metadata into lcsc_components in jlcparts.db.
+    """
+    PARTS_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    import time
+    now_ts = int(time.time())
+
+    saved_filename = None
+    if has_image and image_bytes and len(image_bytes) > 0:
+        saved_filename = f"{lcsc}.jpg"
+        file_path = PARTS_IMAGES_DIR / saved_filename
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+        image_db_val = saved_filename
+    else:
+        # Mark as checked with no image available
+        image_db_val = "NONE"
+
+    conn = get_rw_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        raise RuntimeError("Cannot open JLCParts database for writing")
+
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT lcsc, manufacturer FROM lcsc_components WHERE lcsc = ?", (lcsc,))
+        existing = cur.fetchone()
+
+        if existing:
+            cur.execute("""
+                UPDATE lcsc_components
+                SET image = ?, fetched_at = ?
+                WHERE lcsc = ?
+            """, (image_db_val, now_ts, lcsc))
+        else:
+            mfr = product_model or ""
+            if not mfr:
+                cur.execute("SELECT manufacturer, mfr FROM jlc_components WHERE lcsc = ?", (lcsc,))
+                j_row = cur.fetchone()
+                if j_row:
+                    mfr = j_row["manufacturer"] or j_row["mfr"] or ""
+            cur.execute("""
+                INSERT INTO lcsc_components (lcsc, fetched_at, manufacturer, attributes, image, url_slug)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (lcsc, now_ts, mfr, "{}", image_db_val, ""))
+
+        conn.commit()
+
+        # Invalidate in-memory summary caches
+        _PART_SUMMARY_CACHE.pop(f"zh:jlcparts:{lcsc}", None)
+        _PART_SUMMARY_CACHE.pop(f"en:jlcparts:{lcsc}", None)
+
+        return {
+            "status": "success",
+            "lcsc": lcsc,
+            "has_image": bool(saved_filename),
+            "image_path": f"/static/images/parts/{saved_filename}" if saved_filename else None,
+            "image_url": image_url
+        }
+    finally:
+        conn.close()
+
+
+def get_crawler_stats() -> Dict[str, Any]:
+    """
+    Returns image crawling statistics: total components, parts with image, parts without image,
+    and remaining components to crawl.
+    """
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        return {
+            "total_components": 0,
+            "with_image": 0,
+            "no_image": 0,
+            "remaining": 0,
+            "local_image_files": 0
+        }
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT count(*) FROM jlc_components")
+        total = cur.fetchone()[0]
+
+        cur.execute("SELECT count(*) FROM lcsc_components WHERE image IS NOT NULL AND image != '' AND image != 'NONE'")
+        with_img = cur.fetchone()[0]
+
+        cur.execute("SELECT count(*) FROM lcsc_components WHERE image = 'NONE'")
+        no_img = cur.fetchone()[0]
+
+        local_files_count = 0
+        if PARTS_IMAGES_DIR.exists():
+            try:
+                with os.scandir(PARTS_IMAGES_DIR) as it:
+                    local_files_count = sum(1 for entry in it if entry.is_file() and entry.name.endswith(".jpg"))
+            except Exception:
+                local_files_count = 0
+
+        remaining = max(0, total - with_img - no_img)
+        return {
+            "total_components": total,
+            "with_image": with_img,
+            "no_image": no_img,
+            "remaining": remaining,
+            "local_image_files": local_files_count
+        }
+    finally:
+        conn.close()
+

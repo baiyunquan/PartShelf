@@ -1,6 +1,8 @@
+import base64
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
+from pydantic import BaseModel, Field, field_validator
 
 from db.database import get_db
 from app.services import external_library_service as lib_svc
@@ -10,6 +12,22 @@ from app.i18n.category_i18n import category_i18n
 from app.i18n import get_current_language
 
 router = APIRouter()
+
+
+class CrawlerImageUpload(BaseModel):
+    lcsc: Union[int, str] = Field(..., description="LCSC part number (integer or integer part of Cxxxx)")
+    image_base64: Optional[str] = Field(None, description="Base64-encoded image data, or empty string if no image")
+    image_url: Optional[str] = Field(None, description="Original source image URL")
+    product_model: Optional[str] = Field(None, description="Component model name or part number")
+    has_image: Optional[bool] = Field(True, description="Whether an image was found for this component")
+
+    @field_validator("lcsc", mode="before")
+    def parse_lcsc(cls, v):
+        if isinstance(v, str):
+            v_clean = v.strip().upper().replace("C", "")
+            return int(v_clean)
+        return int(v)
+
 
 
 @router.get("/status")
@@ -161,6 +179,54 @@ def search_jlcparts_library(
         page_size=page_size,
         lang=get_current_language(request)
     )
+
+
+# ==========================================
+# JLCParts Image Harvester Endpoints
+# ==========================================
+
+@router.get("/jlcparts/crawler/tasks")
+def get_crawler_tasks(
+    limit: int = Query(50, ge=1, le=200, description="Batch size of tasks to fetch"),
+    cursor: int = Query(0, ge=0, description="Cursor offset for pagination (LCSC ID)")
+):
+    """
+    Get a batch of missing-image LCSC part numbers for the ScriptCat crawler.
+    """
+    return lib_svc.get_missing_image_lcsc_list(limit=limit, cursor=cursor)
+
+
+@router.post("/jlcparts/crawler/upload")
+def upload_crawled_image(payload: CrawlerImageUpload):
+    """
+    Receive crawled component image data from ScriptCat crawler and persist locally.
+    """
+    image_bytes = None
+    if payload.has_image and payload.image_base64:
+        raw_b64 = payload.image_base64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            image_bytes = base64.b64decode(raw_b64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {e}")
+
+    result = lib_svc.save_crawled_part_image(
+        lcsc=int(payload.lcsc),
+        image_bytes=image_bytes,
+        image_url=payload.image_url,
+        product_model=payload.product_model,
+        has_image=bool(image_bytes and len(image_bytes) > 0)
+    )
+    return result
+
+
+@router.get("/jlcparts/crawler/stats")
+def get_crawler_stats():
+    """
+    Get summary statistics of image crawling progress.
+    """
+    return lib_svc.get_crawler_stats()
 
 
 @router.get("/jlcparts/{lcsc}")

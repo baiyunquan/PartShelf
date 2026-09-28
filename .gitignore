@@ -12,3 +12,5 @@ data/libraries/
 .venv/
 venv/
 *.bak
+static/images/parts/*
+!static/images/parts/.gitkeep
