@@ -8,7 +8,7 @@ class ProjectPart(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"))
     part_id = Column(Integer, ForeignKey("parts.id"))
-    quantity_needed = Column(Integer)
+    quantity_needed = Column(Integer, nullable=True, default=0)
 
     project = relationship("Project", back_populates="parts")
-    part = relationship("Part")
+    part = relationship("Part", back_populates="project_parts")

@@ -27,7 +27,13 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
     if current_query:
         next_url += "?" + urlencode(current_query)
     context["language_url"] = lambda target: "/set_language?" + urlencode({"lang": target, "next": next_url})
-    sections = {"inventory.html": "inventory", "component_details.html": "details"}
+    sections = {
+        "inventory.html": "inventory",
+        "component_details.html": "details",
+        "projects.html": "projects",
+        "project_details.html": "project_details",
+        "procurement.html": "procurement",
+    }
     if name in sections:
         context["page_translations"] = i18n.get_section(sections[name], lang)
     
@@ -56,16 +62,24 @@ def set_language(request: Request, lang: str = DEFAULT_LANGUAGE, next: str = "/"
 
 @router.get("/", response_class=HTMLResponse)
 def get_home_template(request: Request):
-    return render_template(request=request, name="home.html")
+    return render_template(request=request, name="home.html", context={"active_page": "home"})
 
 @router.get("/inventory", response_class=HTMLResponse)
 def get_inventory_template(request: Request):
-    return render_template(request=request, name="inventory.html")
+    return render_template(request=request, name="inventory.html", context={"active_page": "inventory"})
 
 @router.get("/component_details", response_class=HTMLResponse)
 def get_component_details_template(request: Request):
-    return render_template(request=request, name="component_details.html")
+    return render_template(request=request, name="component_details.html", context={"active_page": "details"})
 
 @router.get("/projects", response_class=HTMLResponse)
 def get_projects_template(request: Request):
-    return render_template(request=request, name="projects.html")
+    return render_template(request=request, name="projects.html", context={"active_page": "projects"})
+
+@router.get("/project_details", response_class=HTMLResponse)
+def get_project_details_template(request: Request):
+    return render_template(request=request, name="project_details.html", context={"active_page": "projects"})
+
+@router.get("/procurement", response_class=HTMLResponse)
+def get_procurement_template(request: Request):
+    return render_template(request=request, name="procurement.html", context={"active_page": "procurement"})

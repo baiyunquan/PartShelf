@@ -16,6 +16,7 @@ def add_part_to_inventory(
     package: str = Form(...),
     quantity: int = Form(...),
     description: str = Form(None),
+    project_ids: list[int] = Form(default=[]),
     db: Session = Depends(get_db)
 ):
     
@@ -25,7 +26,8 @@ def add_part_to_inventory(
         part_type=part_type,
         package=package,
         quantity=quantity,
-        description=description
+        description=description,
+        project_ids=project_ids
     )
 
     InventoryService.add_part_to_inventory(db, part_data)

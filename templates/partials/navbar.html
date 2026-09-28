@@ -20,6 +20,7 @@
           <li class="nav-item"><a class="nav-link {% if active_page == 'home' %}active{% endif %}" {% if active_page == 'home' %}aria-current="page"{% endif %} href="/">{{ t('app.nav_home') }}</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'inventory' %}active{% endif %}" {% if active_page == 'inventory' %}aria-current="page"{% endif %} href="/inventory">{{ t('app.nav_inventory') }}</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'projects' %}active{% endif %}" {% if active_page == 'projects' %}aria-current="page"{% endif %} href="/projects">{{ t('app.nav_projects') }}</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'procurement' %}active{% endif %}" {% if active_page == 'procurement' %}aria-current="page"{% endif %} href="/procurement">{{ t('app.nav_procurement') }}</a></li>
           {% include 'partials/language_switcher.html' %}
         </ul>
         <form class="d-flex mt-3" role="search" action="/inventory" method="get">

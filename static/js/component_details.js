@@ -30,6 +30,28 @@ fetch(`/api/inventory/get_part_by_id?part_id=${partId}`)
       inStockSpan.textContent = I18N.status_out_of_stock;
       inStockSpan.className = 'badge bg-danger';
     }
+
+    const projectsContainer = document.getElementById("part-projects");
+    if (projectsContainer) {
+      if (data.projects && data.projects.length > 0) {
+        projectsContainer.innerHTML = data.projects.map(p => `
+          <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded bg-light">
+            <div>
+              <a href="/project_details?project_id=${p.id}" class="fw-bold text-decoration-none">${p.name}</a>
+            </div>
+            <div>
+              <span class="text-muted small me-1">${I18N.quantity_needed_label}:</span>
+              <span class="badge bg-primary">${p.quantity_needed || 0}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        projectsContainer.innerHTML = `
+          <p class="text-muted mb-2">${I18N.no_projects_desc}</p>
+          <span class="badge bg-light text-muted border">${I18N.badge_loose_part}</span>
+        `;
+      }
+    }
   })
   .catch(error => {
     console.error(I18N.alert_fetch_failed, error);

@@ -6,12 +6,19 @@ function renderTable(parts) {
   tbody.innerHTML = "";
   if (!parts || parts.length === 0) {
     const emptyRow = document.createElement("tr");
-    emptyRow.innerHTML = `<td colspan="6" class="text-center text-muted py-4">${I18N.empty_hint}</td>`;
+    emptyRow.innerHTML = `<td colspan="7" class="text-center text-muted py-4">${I18N.empty_hint}</td>`;
     tbody.appendChild(emptyRow);
     return;
   }
 
   parts.forEach(part => {
+    let projectBadges = '';
+    if (part.projects && part.projects.length > 0) {
+      projectBadges = part.projects.map(p => `<a href="/project_details?project_id=${p.id}" class="badge bg-secondary text-decoration-none me-1">${p.name}</a>`).join('');
+    } else {
+      projectBadges = `<span class="badge bg-light text-muted border">${I18N.badge_loose_part}</span>`;
+    }
+
     const row = document.createElement("tr");
     row.innerHTML = `
       <td><span class="badge bg-light text-dark border">#${part.id}</span></td>
@@ -23,6 +30,7 @@ function renderTable(parts) {
           ${part.quantity !== null && part.quantity !== undefined ? part.quantity : 0}
         </span>
       </td>
+      <td>${projectBadges}</td>
       <td>
         <a href="/component_details?part_id=${part.id}" class="btn btn-outline-primary btn-sm">
           ${I18N.btn_details}
@@ -78,7 +86,7 @@ document.getElementById('searchInput').addEventListener('keyup', function(e) {
   }
 });
 
-// Load templates for CSV import
+// Load templates and project checkboxes on page load
 document.addEventListener("DOMContentLoaded", function () {
   // Check for URL query param search
   const urlParams = new URLSearchParams(window.location.search);
@@ -90,10 +98,12 @@ document.addEventListener("DOMContentLoaded", function () {
     loadAllParts();
   }
 
+  // Load CSV Templates
   fetch("/api/inventory/get_available_file_templates")
     .then(response => response.json())
     .then(templates => {
       const select = document.getElementById("templateSelect");
+      if (!select) return;
       templates.forEach(template => {
         const option = document.createElement("option");
         option.value = template.id;
@@ -103,5 +113,26 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     .catch(error => {
       console.error("Error fetching templates:", error);
+    });
+
+  // Load Projects for Add Part Modal
+  fetch("/api/projects/")
+    .then(response => response.json())
+    .then(projects => {
+      const container = document.getElementById("project-checkboxes-container");
+      if (!container) return;
+      if (!projects || projects.length === 0) {
+        container.innerHTML = `<small class="text-muted">${I18N.select_projects_help}</small>`;
+        return;
+      }
+      container.innerHTML = projects.map(p => `
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="project_ids" value="${p.id}" id="proj_${p.id}">
+          <label class="form-check-label" for="proj_${p.id}">${p.name}</label>
+        </div>
+      `).join('');
+    })
+    .catch(error => {
+      console.error("Error fetching projects for modal:", error);
     });
 });

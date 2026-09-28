@@ -9,5 +9,5 @@ class Project(Base):
     name = Column(String(255), index=True)
     description = Column(String(255), nullable=True)
 
-    parts = relationship("ProjectPart", back_populates="project")
+    parts = relationship("ProjectPart", back_populates="project", cascade="all, delete-orphan")
     

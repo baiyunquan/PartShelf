@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t('project_details.title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    <!-- Navbar -->
+    {% set active_page = 'projects' %}
+    {% include 'partials/navbar.html' %}
+
+    <div class="container mt-5 pt-5 pb-5">
+      <!-- Back & Actions Header -->
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="/projects" class="btn btn-outline-secondary btn-sm">
+          ← {{ t('project_details.back_to_projects') }}
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPartModal">
+          <span class="me-1">+</span>{{ t('project_details.add_part_btn') }}
+        </button>
+      </div>
+
+      <!-- Project Info Card -->
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-9">
+              <h3 id="project-name" class="fw-bold text-primary mb-1">...</h3>
+              <p id="project-description" class="text-secondary mb-0">...</p>
+            </div>
+            <div class="col-md-3 text-md-end mt-2 mt-md-0">
+              <span class="text-muted small d-block">{{ t('project_details.parts_count') }}</span>
+              <span id="project-parts-count" class="fs-4 fw-bold text-dark">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOM / Components Table Card -->
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white py-3">
+          <h5 class="fw-bold mb-0">{{ t('project_details.bom_header') }}</h5>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-striped table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th scope="col">{{ t('project_details.th_part_name') }}</th>
+                <th scope="col">{{ t('project_details.th_manufacturer') }}</th>
+                <th scope="col">{{ t('project_details.th_package') }}</th>
+                <th scope="col">{{ t('project_details.th_type') }}</th>
+                <th scope="col" style="width: 110px;">{{ t('project_details.th_available') }}</th>
+                <th scope="col" style="width: 120px;">{{ t('project_details.th_needed') }}</th>
+                <th scope="col" style="width: 110px;">{{ t('project_details.th_shortage') }}</th>
+                <th scope="col" style="width: 160px;" class="text-end">{{ t('project_details.th_actions') }}</th>
+              </tr>
+            </thead>
+            <tbody id="bom-table-body">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Project Shortage List Card -->
+      <div class="card shadow-sm border-0 mb-5">
+        <div class="card-header bg-white py-3">
+          <h5 class="fw-bold mb-1 text-danger">{{ t('project_details.procurement_summary_header') }}</h5>
+          <small class="text-muted">{{ t('project_details.procurement_summary_desc') }}</small>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="shortage-table">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">{{ t('project_details.th_part_name') }}</th>
+                <th scope="col">{{ t('project_details.th_package') }}</th>
+                <th scope="col">{{ t('project_details.th_available') }}</th>
+                <th scope="col">{{ t('project_details.th_needed') }}</th>
+                <th scope="col" class="text-danger fw-bold">{{ t('project_details.th_shortage') }}</th>
+              </tr>
+            </thead>
+            <tbody id="shortage-table-body">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div id="no-shortage-alert" class="p-4 text-center text-success fw-bold" style="display: none;">
+          {{ t('project_details.no_shortage_hint') }}
+        </div>
+      </div>
+
+      <!-- Add Part to Project Modal -->
+      <div class="modal fade" id="addPartModal" tabindex="-1" aria-labelledby="addPartModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="addPartModalLabel">{{ t('project_details.modal_add_title') }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
+            </div>
+            <form id="addPartForm" onsubmit="event.preventDefault(); submitAddPart();">
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label for="partSelect" class="form-label fw-bold">{{ t('project_details.label_select_part') }}</label>
+                  <select class="form-select" id="partSelect" required>
+                    <option value="">-- 请选择 / Select --</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="neededQuantity" class="form-label fw-bold">{{ t('project_details.label_quantity_needed') }}</label>
+                  <input type="number" min="0" class="form-control" id="neededQuantity" placeholder="{{ t('project_details.placeholder_quantity_needed') }}">
+                  <div class="form-text text-muted">{{ t('project_details.quantity_help') }}</div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('project_details.btn_cancel') }}</button>
+                <button type="submit" class="btn btn-primary">{{ t('project_details.btn_add') }}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Translations & Script -->
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script>
+      const I18N = JSON.parse(document.getElementById('page-translations').textContent);
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get("project_id");
+
+      if (!projectId) {
+        alert(I18N.missing_project_id);
+        window.location.href = "/projects";
+      }
+
+      function loadProjectDetails() {
+        fetch(`/api/projects/${projectId}`)
+          .then(res => {
+            if (!res.ok) throw new Error(I18N.alert_fetch_failed);
+            return res.json();
+          })
+          .then(data => {
+            document.getElementById("project-name").textContent = data.name;
+            document.getElementById("project-description").textContent = data.description || I18N.no_description;
+            document.getElementById("project-parts-count").textContent = data.parts_count || 0;
+
+            renderBomTable(data.parts || []);
+            renderShortageTable(data.parts || []);
+          })
+          .catch(err => {
+            console.error("Error loading project details:", err);
+            alert(I18N.alert_fetch_failed);
+          });
+      }
+
+      function renderBomTable(parts) {
+        const tbody = document.getElementById("bom-table-body");
+        tbody.innerHTML = "";
+        if (!parts || parts.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${I18N.empty_bom_hint}</td></tr>`;
+          return;
+        }
+
+        parts.forEach(p => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>
+              <a href="/component_details?part_id=${p.part_id}" class="fw-bold text-decoration-none">
+                ${p.part_name}
+              </a>
+            </td>
+            <td>${p.manufacturer || '-'}</td>
+            <td><code>${p.package || '-'}</code></td>
+            <td><span class="badge bg-info text-dark">${p.part_type || '-'}</span></td>
+            <td>
+              <span class="badge ${p.quantity_available > 0 ? 'bg-success' : 'bg-danger'}">
+                ${p.quantity_available}
+              </span>
+            </td>
+            <td class="fw-bold text-primary">${p.quantity_needed || 0}</td>
+            <td>
+              <span class="badge ${p.shortage > 0 ? 'bg-danger' : 'bg-success'}">
+                ${p.shortage > 0 ? `缺 ${p.shortage}` : '充足'}
+              </span>
+            </td>
+            <td class="text-end">
+              <button class="btn btn-outline-secondary btn-sm me-1" onclick="editQuantity(${p.part_id}, ${p.quantity_needed || 0})">
+                ${I18N.btn_edit_qty}
+              </button>
+              <button class="btn btn-outline-danger btn-sm" onclick="removePart(${p.part_id})">
+                ${I18N.btn_remove}
+              </button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      function renderShortageTable(parts) {
+        const tbody = document.getElementById("shortage-table-body");
+        const alertBox = document.getElementById("no-shortage-alert");
+        const table = document.getElementById("shortage-table");
+        tbody.innerHTML = "";
+
+        const shortageParts = parts.filter(p => p.shortage > 0);
+        if (shortageParts.length === 0) {
+          table.style.display = "none";
+          alertBox.style.display = "block";
+          return;
+        }
+
+        table.style.display = "table";
+        alertBox.style.display = "none";
+
+        shortageParts.forEach(p => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td><a href="/component_details?part_id=${p.part_id}" class="fw-bold text-decoration-none">${p.part_name}</a></td>
+            <td><code>${p.package || '-'}</code></td>
+            <td><span class="badge bg-secondary">${p.quantity_available}</span></td>
+            <td>${p.quantity_needed || 0}</td>
+            <td class="text-danger fw-bold fs-6">-${p.shortage}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      function loadInventoryForSelect() {
+        fetch("/api/inventory/get_parts_inventory")
+          .then(res => res.json())
+          .then(parts => {
+            const select = document.getElementById("partSelect");
+            select.innerHTML = '<option value="">-- 请选择 / Select --</option>';
+            parts.forEach(p => {
+              const opt = document.createElement("option");
+              opt.value = p.id;
+              opt.textContent = `${p.name} (${p.package || '-'}, 库存: ${p.quantity})`;
+              select.appendChild(opt);
+            });
+          })
+          .catch(err => console.error("Error loading inventory for select:", err));
+      }
+
+      function submitAddPart() {
+        const partId = document.getElementById("partSelect").value;
+        const qtyVal = document.getElementById("neededQuantity").value.trim();
+        const quantityNeeded = qtyVal ? parseInt(qtyVal, 10) : 0;
+
+        if (!partId) return;
+
+        fetch(`/api/projects/${projectId}/add_part`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            part_id: parseInt(partId, 10),
+            quantity_needed: isNaN(quantityNeeded) ? 0 : quantityNeeded
+          })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(I18N.alert_add_failed);
+          return res.json();
+        })
+        .then(() => {
+          const modalEl = document.getElementById('addPartModal');
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+          document.getElementById("addPartForm").reset();
+          loadProjectDetails();
+        })
+        .catch(err => {
+          console.error("Error adding part:", err);
+          alert(I18N.alert_add_failed);
+        });
+      }
+
+      function editQuantity(partId, currentQty) {
+        const input = prompt(I18N.prompt_new_qty, currentQty);
+        if (input === null) return;
+        const newQty = parseInt(input.trim(), 10);
+        if (isNaN(newQty) || newQty < 0) {
+          alert("请输入有效的非负整数");
+          return;
+        }
+
+        fetch(`/api/projects/${projectId}/update_part_quantity?part_id=${partId}&quantity_needed=${newQty}`, {
+          method: 'POST'
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(I18N.alert_update_failed);
+          return res.json();
+        })
+        .then(() => {
+          loadProjectDetails();
+        })
+        .catch(err => {
+          console.error("Error updating quantity:", err);
+          alert(I18N.alert_update_failed);
+        });
+      }
+
+      function removePart(partId) {
+        if (!window.confirm(I18N.confirm_remove_part)) return;
+
+        fetch(`/api/projects/${projectId}/remove_part/${partId}`, {
+          method: 'DELETE'
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(I18N.alert_remove_failed);
+          return res.json();
+        })
+        .then(() => {
+          loadProjectDetails();
+        })
+        .catch(err => {
+          console.error("Error removing part:", err);
+          alert(I18N.alert_remove_failed);
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        loadProjectDetails();
+        loadInventoryForSelect();
+      });
+    </script>
+  </body>
+</html>
