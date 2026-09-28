@@ -10,55 +10,17 @@
   </head>
   <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-dark bg-dark fixed-top">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">{{ t('app.brand') }}</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasDarkNavbar" aria-controls="offcanvasDarkNavbar" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" id="offcanvasDarkNavbar" aria-labelledby="offcanvasDarkNavbarLabel">
-          <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="offcanvasDarkNavbarLabel">Menu</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-          </div>
-          <div class="offcanvas-body">
-            <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
-              <li class="nav-item">
-                <a class="nav-link" aria-current="page" href="/">{{ t('app.nav_home') }}</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link active" href="/inventory">{{ t('app.nav_inventory') }}</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="/projects">{{ t('app.nav_projects') }}</a>
-              </li>
-              <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  🌐 {{ t('app.language') }} ({{ t('app.lang_' + lang) }})
-                </a>
-                <ul class="dropdown-menu dropdown-menu-dark">
-                  <li><a class="dropdown-item {% if lang == 'zh' %}active{% endif %}" href="/set_language?lang=zh&next={{ request.url.path }}">🇨🇳 中文</a></li>
-                  <li><a class="dropdown-item {% if lang == 'en' %}active{% endif %}" href="/set_language?lang=en&next={{ request.url.path }}">🇺🇸 English</a></li>
-                </ul>
-              </li>
-            </ul>
-            <form class="d-flex mt-3" role="search" id="menuSearchForm" onsubmit="event.preventDefault(); handleSearch(document.getElementById('searchInputMenu').value);">
-              <input class="form-control me-2" type="search" id="searchInputMenu" placeholder="{{ t('inventory.search_placeholder') }}" aria-label="Search">
-              <button class="btn btn-success" type="submit">{{ t('inventory.search_btn') }}</button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </nav>
+    {% set active_page = 'inventory' %}
+    {% include 'partials/navbar.html' %}
 
     <div class="container mt-5 pt-5 pb-5">
       <div class="row mb-4 align-items-center">
         <div class="col-md-6 mb-2 mb-md-0">
           <!-- Search Bar -->
           <div class="d-flex">
-            <input class="form-control me-2" type="search" id="searchInput" placeholder="{{ t('inventory.search_placeholder') }}" aria-label="Search">
+            <input class="form-control me-2" type="search" id="searchInput" placeholder="{{ t('inventory.search_placeholder') }}" aria-label="{{ t('inventory.search_btn') }}">
             <button class="btn btn-success me-2" id="searchButton" type="button">{{ t('inventory.search_btn') }}</button>
-            <button class="btn btn-outline-secondary" id="resetSearchButton" type="button" style="display:none;" onclick="loadAllParts()">✕</button>
+            <button class="btn btn-outline-secondary" id="resetSearchButton" type="button" style="display:none;" aria-label="{{ t('inventory.reset_search') }}">✕</button>
           </div>
         </div>          
         <div class="col-md-6 text-md-end">
@@ -97,7 +59,7 @@
           <div class="modal-content">
             <div class="modal-header">
               <h5 class="modal-title" id="addComponentModalLabel">{{ t('inventory.modal_add_title') }}</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
             </div>
             <div class="modal-body">
               <form action="/api/inventory/add_part_to_inventory" method="post">
@@ -106,7 +68,7 @@
                   <input type="text" class="form-control" id="Name" name="name" placeholder="{{ t('inventory.placeholder_part_name') }}" required>
                 </div>
                 <div class="mb-3">
-                  <label for="manufacturer" class="form-label fw-bold">{{ t('inventory.label_part_manufacturer') if t('inventory.label_part_manufacturer') != 'inventory.label_part_manufacturer' else t('inventory.label_manufacturer') }}</label>
+                  <label for="manufacturer" class="form-label fw-bold">{{ t('inventory.label_manufacturer') }}</label>
                   <input type="text" class="form-control" id="manufacturer" name="manufacturer" placeholder="{{ t('inventory.placeholder_manufacturer') }}" required>
                 </div>
                 <div class="mb-3">
@@ -142,7 +104,7 @@
             <form action="/api/inventory/import_order_csv_file" method="post" enctype="multipart/form-data">
               <div class="modal-header">
                 <h5 class="modal-title" id="addComponentOrderModalLabel">{{ t('inventory.modal_import_title') }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
               </div>
               <div class="modal-body">
                 <div class="mb-3">
@@ -167,113 +129,7 @@
     </div>
 
     <!-- Scripts -->
-    <script>
-      const I18N = {{ translations_json | safe }};
-      const tbody = document.getElementById("parts-table-body");
-      const resetButton = document.getElementById("resetSearchButton");
-
-      function renderTable(parts) {
-        tbody.innerHTML = "";
-        if (!parts || parts.length === 0) {
-          const emptyRow = document.createElement("tr");
-          emptyRow.innerHTML = `<td colspan="6" class="text-center text-muted py-4">${I18N.inventory.empty_hint}</td>`;
-          tbody.appendChild(emptyRow);
-          return;
-        }
-
-        parts.forEach(part => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td><span class="badge bg-light text-dark border">#${part.id}</span></td>
-            <td class="fw-bold">${part.name || '-'}</td>
-            <td><span class="badge bg-info text-dark">${part.part_type || '-'}</span></td>
-            <td><code>${part.package || '-'}</code></td>
-            <td>
-              <span class="badge ${part.quantity > 0 ? 'bg-success' : 'bg-danger'}">
-                ${part.quantity !== null && part.quantity !== undefined ? part.quantity : 0}
-              </span>
-            </td>
-            <td>
-              <a href="/component_details?part_id=${part.id}" class="btn btn-outline-primary btn-sm">
-                ${I18N.inventory.btn_details}
-              </a>
-            </td>
-          `;
-          tbody.appendChild(row);
-        });
-      }
-
-      function loadAllParts() {
-        document.getElementById('searchInput').value = '';
-        if (document.getElementById('searchInputMenu')) {
-          document.getElementById('searchInputMenu').value = '';
-        }
-        resetButton.style.display = 'none';
-
-        fetch("/api/inventory/get_parts_inventory")
-          .then(res => res.json())
-          .then(parts => renderTable(parts))
-          .catch(err => {
-            console.error(I18N.inventory.alert_fetch_error, err);
-          });
-      }
-
-      function handleSearch(searchKey) {
-        searchKey = (searchKey || '').trim();
-        if (!searchKey) {
-          loadAllParts();
-          return;
-        }
-
-        resetButton.style.display = 'inline-block';
-        fetch(`/api/inventory/search?search_key=${encodeURIComponent(searchKey)}`)
-          .then(res => res.json())
-          .then(parts => renderTable(parts))
-          .catch(err => {
-            console.error("Search error:", err);
-            alert(I18N.inventory.alert_fetch_error);
-          });
-      }
-
-      // Search button click
-      document.getElementById('searchButton').addEventListener('click', function() {
-        handleSearch(document.getElementById('searchInput').value);
-      });
-
-      // Enter key on search input
-      document.getElementById('searchInput').addEventListener('keyup', function(e) {
-        if (e.key === 'Enter') {
-          handleSearch(this.value);
-        }
-      });
-
-      // Load templates for CSV import
-      document.addEventListener("DOMContentLoaded", function () {
-        // Check for URL query param search
-        const urlParams = new URLSearchParams(window.location.search);
-        const searchParam = urlParams.get('search');
-        if (searchParam) {
-          document.getElementById('searchInput').value = searchParam;
-          handleSearch(searchParam);
-        } else {
-          loadAllParts();
-        }
-
-        fetch("/api/inventory/get_available_file_templates")
-          .then(response => response.json())
-          .then(templates => {
-            const select = document.getElementById("templateSelect");
-            templates.forEach(template => {
-              const option = document.createElement("option");
-              option.value = template.id;
-              option.textContent = template.template_name;
-              select.appendChild(option);
-            });
-          })
-          .catch(error => {
-            console.error("Error fetching templates:", error);
-          });
-      });
-    </script>
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/inventory.js"></script>
   </body>
 </html>

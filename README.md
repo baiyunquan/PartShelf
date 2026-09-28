@@ -48,3 +48,7 @@ A modern inventory management web app for electronic components. Easily track pa
 - **dotenv** – Environment variable handling
 - **Git** – Version control
 
+## Development checks
+
+Install `requirements-dev.txt`, then run `python -m pytest -q`. The tests check that the Chinese and English catalogs have matching keys and that translation keys used by templates and page scripts exist.
+

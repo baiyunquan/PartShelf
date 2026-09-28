@@ -53,7 +53,19 @@ class I18n:
     def get_all(self, lang: str = DEFAULT_LANGUAGE) -> Dict[str, Any]:
         if lang not in SUPPORTED_LANGUAGES:
             lang = DEFAULT_LANGUAGE
-        return self.translations.get(lang, self.translations.get(DEFAULT_LANGUAGE, {}))
+        def merge(default: dict, selected: dict) -> dict:
+            result = default.copy()
+            for key, value in selected.items():
+                if isinstance(value, dict) and isinstance(result.get(key), dict):
+                    result[key] = merge(result[key], value)
+                else:
+                    result[key] = value
+            return result
+
+        return merge(self.translations.get(DEFAULT_LANGUAGE, {}), self.translations.get(lang, {}))
+
+    def get_section(self, section: str, lang: str = DEFAULT_LANGUAGE) -> Dict[str, Any]:
+        return self.get_all(lang)[section]
 
 
 i18n = I18n()

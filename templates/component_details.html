@@ -11,24 +11,8 @@
   <body class="bg-light pb-5">
 
     <!-- Navbar -->
-    <nav class="navbar navbar-dark bg-dark fixed-top">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">{{ t('app.brand') }}</a>
-        <div class="d-flex align-items-center gap-2">
-          <!-- Language Selector -->
-          <div class="dropdown">
-            <button class="btn btn-outline-secondary btn-sm dropdown-toggle text-light" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-              🌐 {{ t('app.language') }} ({{ t('app.lang_' + lang) }})
-            </button>
-            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-              <li><a class="dropdown-item {% if lang == 'zh' %}active{% endif %}" href="/set_language?lang=zh&next={{ request.url.path }}%3Fpart_id={{ request.query_params.get('part_id', '') }}">🇨🇳 中文</a></li>
-              <li><a class="dropdown-item {% if lang == 'en' %}active{% endif %}" href="/set_language?lang=en&next={{ request.url.path }}%3Fpart_id={{ request.query_params.get('part_id', '') }}">🇺🇸 English</a></li>
-            </ul>
-          </div>
-          <a class="btn btn-outline-light btn-sm" href="/inventory">{{ t('details.back_to_inventory') }}</a>
-        </div>
-      </div>
-    </nav>
+    {% set active_page = 'details' %}
+    {% include 'partials/navbar.html' %}
 
     <div class="container mt-5 pt-5">
       <div class="row mb-3">
@@ -78,7 +62,7 @@
               <input type="number" id="updateQuantity" class="form-control" placeholder="{{ t('details.update_quantity_placeholder') }}">
               <button class="btn btn-primary" id="updateQuantityBtn">{{ t('details.update_quantity_btn') }}</button>
             </div>
-            <div class="form-text text-muted">输入正数表示新增入库，输入负数表示领用出库。</div>
+            <div class="form-text text-muted">{{ t('details.update_quantity_help') }}</div>
           </div>
         
           <!-- Set Quantity Threshold -->
@@ -93,8 +77,8 @@
           <!-- Additional Actions -->
           <hr>
           <div class="d-flex flex-wrap gap-2">
-            <button class="btn btn-secondary btn-sm" id="viewHistoryBtn" onclick="alert('历史记录功能正在开发中')">{{ t('details.view_history_btn') }}</button>
-            <button class="btn btn-info btn-sm text-white" id="exportDetailsBtn" onclick="alert('详情导出功能正在开发中')">{{ t('details.export_details_btn') }}</button>
+            <button class="btn btn-secondary btn-sm" id="viewHistoryBtn">{{ t('details.view_history_btn') }}</button>
+            <button class="btn btn-info btn-sm text-white" id="exportDetailsBtn">{{ t('details.export_details_btn') }}</button>
             <button class="btn btn-danger btn-sm ms-auto" id="deletePartBtn">{{ t('details.delete_part_btn') }}</button>
           </div>
         </div>
@@ -105,101 +89,7 @@
       <small>{{ t('app.footer_copyright') }}</small>
     </footer>
 
-    <script>
-      const I18N = {{ translations_json | safe }};
-      const urlParams = new URLSearchParams(window.location.search);
-      const partId = urlParams.get("part_id");
-    
-      if (!partId) {
-        alert("Missing part_id parameter");
-        window.location.href = "/inventory";
-      }
-
-      fetch(`/api/inventory/get_part_by_id?part_id=${partId}`)
-        .then(res => {
-          if (!res.ok) throw new Error("Component not found");
-          return res.json();
-        })
-        .then(data => {
-          document.getElementById("part-id").textContent = `#${data.id}`;
-          document.getElementById("part-name").textContent = data.name || '-';
-          document.getElementById("part-manufacturer").textContent = data.manufacturer || '-';
-          document.getElementById("part-type").textContent = data.part_type || '-';
-          document.getElementById("part-package").textContent = data.package || '-';
-          document.getElementById("part-quantity").textContent = (data.quantity !== null && data.quantity !== undefined) ? data.quantity : 0;
-          document.getElementById("part-description").textContent = data.description || I18N.details.no_description;
-          
-          const quantity = data.quantity || 0;
-          const inStockSpan = document.getElementById('in-stock-status');
-          if (quantity > 0) {
-            inStockSpan.textContent = I18N.details.status_in_stock;
-            inStockSpan.className = 'badge bg-success';
-          } else {
-            inStockSpan.textContent = I18N.details.status_out_of_stock;
-            inStockSpan.className = 'badge bg-danger';
-          }
-        })
-        .catch(error => {
-          console.error(I18N.details.alert_fetch_failed, error);
-          alert(I18N.details.alert_fetch_failed);
-        });
-
-      function updateQuantity() {
-        const inputVal = document.getElementById('updateQuantity').value.trim();
-        const delta = parseInt(inputVal, 10);
-        if (isNaN(delta) || delta === 0) {
-          alert(I18N.details.alert_invalid_quantity);
-          return;
-        }
-
-        fetch('/api/inventory/update_quantity', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            part_id: parseInt(partId),
-            quantity: delta
-          })
-        })
-        .then(response => {
-          if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.detail || I18N.details.alert_update_failed); });
-          }
-          return response.json();
-        })
-        .then(data => {
-          location.reload(); 
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert(error.message || I18N.details.alert_update_failed);
-        });
-      }
-
-      function deletePart() {
-        if (!window.confirm(I18N.details.confirm_delete)) return; 
-
-        fetch(`/api/inventory/delete_part?part_id=${partId}`, {
-          method: 'DELETE'
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(I18N.details.alert_delete_failed);
-          }
-          return response.json();
-        })
-        .then(() => {
-          window.location.href = "/inventory";
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert(I18N.details.alert_delete_failed);
-        });
-      }
-
-      document.getElementById('updateQuantityBtn').addEventListener('click', updateQuantity);
-      document.getElementById('deletePartBtn').addEventListener('click', deletePart);
-    </script>
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/component_details.js"></script>
   </body>
 </html>

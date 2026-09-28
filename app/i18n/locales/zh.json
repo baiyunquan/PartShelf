@@ -8,6 +8,8 @@
     "search_placeholder": "搜索器件型号...",
     "search_btn": "搜索",
     "language": "语言",
+    "menu": "菜单",
+    "close": "关闭",
     "lang_zh": "中文",
     "lang_en": "English",
     "footer_copyright": "© 2025 PartShelf. 保留所有权利。"
@@ -28,6 +30,7 @@
     "title": "我的库存 - PartShelf",
     "search_placeholder": "搜索器件型号/名称",
     "search_btn": "搜索",
+    "reset_search": "重置搜索",
     "add_part_btn": "添加器件",
     "import_order_btn": "导入订单物料",
     "th_id": "编号",
@@ -77,6 +80,7 @@
     "update_quantity_header": "增减库存数量",
     "update_quantity_placeholder": "输入调整数量（正数增加，负数扣减）",
     "update_quantity_btn": "更新数量",
+    "update_quantity_help": "输入正数表示新增入库，输入负数表示领用出库。",
     "threshold_header": "低库存预警阈值",
     "threshold_placeholder": "输入预警阈值数量",
     "threshold_btn": "设置阈值",
@@ -87,7 +91,10 @@
     "confirm_delete": "确定要删除该元器件吗？此操作无法撤销。",
     "alert_delete_failed": "删除器件失败",
     "alert_update_failed": "更新库存数量失败",
-    "alert_fetch_failed": "加载器件详情失败"
+    "alert_fetch_failed": "加载器件详情失败",
+    "history_coming_soon": "历史记录功能正在开发中",
+    "export_coming_soon": "详情导出功能正在开发中",
+    "missing_part_id": "缺少 part_id 参数"
   },
   "projects": {
     "title": "我的项目 - PartShelf",

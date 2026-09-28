@@ -8,6 +8,8 @@
     "search_placeholder": "Search part...",
     "search_btn": "Search",
     "language": "Language",
+    "menu": "Menu",
+    "close": "Close",
     "lang_zh": "中文",
     "lang_en": "English",
     "footer_copyright": "© 2025 PartShelf. All rights reserved."
@@ -28,6 +30,7 @@
     "title": "My Inventory - PartShelf",
     "search_placeholder": "Search part",
     "search_btn": "Search",
+    "reset_search": "Reset search",
     "add_part_btn": "Add Part",
     "import_order_btn": "Add Component Order",
     "th_id": "ID",
@@ -77,6 +80,7 @@
     "update_quantity_header": "Update Quantity",
     "update_quantity_placeholder": "Enter new quantity",
     "update_quantity_btn": "Update",
+    "update_quantity_help": "Enter a positive number to add stock or a negative number to remove it.",
     "threshold_header": "Notification Threshold",
     "threshold_placeholder": "Enter threshold",
     "threshold_btn": "Set Threshold",
@@ -87,7 +91,10 @@
     "confirm_delete": "Are you sure you want to delete this part?",
     "alert_delete_failed": "Failed to delete part",
     "alert_update_failed": "Failed to update quantity",
-    "alert_fetch_failed": "Error loading component details"
+    "alert_fetch_failed": "Error loading component details",
+    "history_coming_soon": "Usage history is under development",
+    "export_coming_soon": "Details export is under development",
+    "missing_part_id": "Missing part_id parameter"
   },
   "projects": {
     "title": "My Projects - PartShelf",

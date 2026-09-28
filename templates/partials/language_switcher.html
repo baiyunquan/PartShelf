@@ -1,0 +1,21 @@
+{% if active_page == 'details' %}
+<div class="dropdown">
+  <button class="btn btn-outline-secondary btn-sm dropdown-toggle text-light" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+    🌐 {{ t('app.language') }} ({{ t('app.lang_' + lang) }})
+  </button>
+  <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+    <li><a class="dropdown-item {% if lang == 'zh' %}active{% endif %}" href="{{ language_url('zh') }}">🇨🇳 中文</a></li>
+    <li><a class="dropdown-item {% if lang == 'en' %}active{% endif %}" href="{{ language_url('en') }}">🇺🇸 English</a></li>
+  </ul>
+</div>
+{% else %}
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    🌐 {{ t('app.language') }} ({{ t('app.lang_' + lang) }})
+  </a>
+  <ul class="dropdown-menu dropdown-menu-dark">
+    <li><a class="dropdown-item {% if lang == 'zh' %}active{% endif %}" href="{{ language_url('zh') }}">🇨🇳 中文</a></li>
+    <li><a class="dropdown-item {% if lang == 'en' %}active{% endif %}" href="{{ language_url('en') }}">🇺🇸 English</a></li>
+  </ul>
+</li>
+{% endif %}
