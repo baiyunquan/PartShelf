@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SZLCSC Part Image Harvester for PartShelf
 // @namespace    https://partshelf.local/
-// @version      1.1.0
-// @description  Automated in-page image harvester for LCSC components running on szlcsc.com by directly navigating to product pages and extracting images into local PartShelf database.
+// @version      2.0.0
+// @description  Multi-tab concurrent image harvester for LCSC components on szlcsc.com. Atomically claims tasks directly from PartShelf server without client-side cursor management.
 // @author       PartShelf
 // @match        https://*.szlcsc.com/*
 // @grant        GM_xmlhttpRequest
@@ -25,37 +25,29 @@
     // Configuration & Persistent State
     // ----------------------------------------------------
     const DEFAULT_API_URL = "http://127.0.0.1:8000";
-    const DEFAULT_DELAY_MS = 1500;
+    const DEFAULT_DELAY_MS = 1000;
 
     let apiUrl = GM_getValue("partshelf_api_url", DEFAULT_API_URL);
     let delayMs = GM_getValue("crawler_delay_ms", DEFAULT_DELAY_MS);
-
-    // Sanitize cursor to be strictly an integer >= 0
-    let rawCursor = GM_getValue("crawler_cursor", 0);
-    if (typeof rawCursor === "object" && rawCursor !== null) {
-        rawCursor = rawCursor.lcsc || 0;
-    }
-    let cursor = parseInt(rawCursor, 10);
-    if (isNaN(cursor) || cursor < 0) {
-        cursor = 0;
-    }
-    GM_setValue("crawler_cursor", cursor);
-
     let isCrawlerActive = GM_getValue("crawler_active", false);
 
-    let taskQueue = GM_getValue("crawler_task_queue", []);
-    let currentTask = GM_getValue("crawler_current_task", null);
-    let batchTotal = GM_getValue("crawler_batch_total", 50);
-    let batchIndex = GM_getValue("crawler_batch_index", 0);
+    // Tab-specific ID (persists within this specific browser tab across page navigations)
+    let tabId = sessionStorage.getItem("ps_tab_id");
+    if (!tabId) {
+        tabId = "T" + Math.floor(100 + Math.random() * 900);
+        sessionStorage.setItem("ps_tab_id", tabId);
+    }
 
-    let sessionStats = GM_getValue("crawler_stats", {
-        processed: 0,
-        downloaded: 0,
-        noImage: 0,
-        failed: 0,
-    });
-
-    let activityLogs = GM_getValue("crawler_log", []);
+    // Task claimed by this specific tab
+    let claimedTask = null;
+    const rawClaimed = sessionStorage.getItem("ps_claimed_task");
+    if (rawClaimed) {
+        try {
+            claimedTask = JSON.parse(rawClaimed);
+        } catch (e) {
+            claimedTask = null;
+        }
+    }
 
     let jumpTimeoutId = null;
 
@@ -68,9 +60,10 @@
 
     function logMessage(msg, type = "info") {
         const now = new Date().toTimeString().split(" ")[0];
-        const lineText = `[${now}] ${msg}`;
-        console.log(`[PartShelf Harvester] ${msg}`);
+        const lineText = `[${now}] [${tabId}] ${msg}`;
+        console.log(`[PartShelf Harvester] ${lineText}`);
 
+        let activityLogs = GM_getValue("crawler_log", []);
         activityLogs.push({ text: lineText, type: type });
         if (activityLogs.length > 50) {
             activityLogs.shift();
@@ -84,6 +77,7 @@
         const logBox = document.getElementById("ps-crawler-log");
         if (!logBox) return;
 
+        const activityLogs = GM_getValue("crawler_log", []);
         logBox.innerHTML = "";
         for (const item of activityLogs) {
             const line = document.createElement("div");
@@ -116,7 +110,7 @@
     }
 
     // ----------------------------------------------------
-    // Backend API Calls
+    // Server API Calls
     // ----------------------------------------------------
     async function checkBackendConnection() {
         try {
@@ -140,17 +134,31 @@
         }
     }
 
-    async function fetchTasks(limit = 50) {
-        const url = `${apiUrl}/api/libraries/jlcparts/crawler/tasks?limit=${limit}&cursor=${cursor}`;
+    async function claimTaskFromServer() {
+        const url = `${apiUrl}/api/libraries/jlcparts/crawler/claim-task`;
         const res = await gmRequest({
             method: "GET",
             url: url,
             headers: { "Accept": "application/json" },
         });
         if (res.status !== 200) {
-            throw new Error(`Failed to fetch tasks: HTTP ${res.status}`);
+            throw new Error(`Failed to claim task: HTTP ${res.status}`);
         }
-        return JSON.parse(res.responseText);
+        const data = JSON.parse(res.responseText);
+        return data.task || null;
+    }
+
+    async function releaseTaskOnServer(lcsc) {
+        if (!lcsc) return;
+        try {
+            await gmRequest({
+                method: "POST",
+                url: `${apiUrl}/api/libraries/jlcparts/crawler/release-task?lcsc=${lcsc}`,
+                headers: { "Accept": "application/json" },
+            });
+        } catch (e) {
+            console.warn("Error releasing task:", e);
+        }
     }
 
     async function uploadCrawledImage(payload) {
@@ -202,7 +210,7 @@
             }
         }
 
-        // 2. Fallback: Search DOM for product preview images
+        // 2. Fallback: Search DOM for preview images
         if (!imgUrl) {
             const previewImg = document.querySelector('img[title*="点击查看大图"], img[alt*="实物图"], img[alt*="商品缩略图"]');
             if (previewImg && previewImg.src && !previewImg.src.startsWith("data:")) {
@@ -222,170 +230,127 @@
     }
 
     // ----------------------------------------------------
-    // Harvester Flow: Process Loaded Page & Plan Next Jump
+    // Tab Worker Lifecycle
     // ----------------------------------------------------
-    async function processCurrentPage() {
-        if (!isCrawlerActive) return;
-
-        // Verify if we have an active task
-        if (!currentTask) {
-            logMessage("No current task found. Fetching next task queue...", "info");
-            await advanceToNextTask();
+    async function runTabWorker() {
+        isCrawlerActive = GM_getValue("crawler_active", false);
+        if (!isCrawlerActive) {
+            updateHarvesterStatus("Idle");
             return;
         }
 
-        const lcsc = currentTask.lcsc;
-        const wid = currentTask.website_component_id || lcsc;
-        const currentPath = window.location.pathname;
+        updateHarvesterStatus("Running");
 
-        updateCurrentTaskDisplay(`C${lcsc} (${wid})`);
+        // 1. If this tab has a pending claimed task, process it now
+        if (claimedTask) {
+            const lcsc = claimedTask.lcsc;
+            const wid = claimedTask.website_component_id || lcsc;
+            updateCurrentTaskDisplay(`C${lcsc} (${wid})`);
 
-        // Check if we are on an error or 404 page
-        const is404 = document.title.includes("404") || document.title.includes("不存在") || document.title.includes("已下架");
-        if (is404) {
-            logMessage(`[404] C${lcsc}: Product page not found or item discontinued`, "warn");
-            try {
-                await uploadCrawledImage({ lcsc: lcsc, has_image: false });
-            } catch (e) {
-                console.error(e);
+            const is404 = document.title.includes("404") || document.title.includes("不存在") || document.title.includes("已下架");
+            if (is404) {
+                logMessage(`[404] C${lcsc}: Product page not found or item discontinued`, "warn");
+                try {
+                    await uploadCrawledImage({ lcsc: lcsc, has_image: false });
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                const { imgUrl, productModel, productCode } = extractPageProductData();
+
+                if (!imgUrl) {
+                    logMessage(`[NO_IMG] C${lcsc}: No image on page (Model: ${productModel || "N/A"})`, "info");
+                    try {
+                        await uploadCrawledImage({
+                            lcsc: lcsc,
+                            product_model: productModel,
+                            has_image: false,
+                        });
+                    } catch (e) {
+                        console.error(e);
+                    }
+                } else {
+                    let fullImgUrl = imgUrl;
+                    if (fullImgUrl.startsWith("//")) {
+                        fullImgUrl = "https:" + fullImgUrl;
+                    }
+
+                    try {
+                        const imgRes = await gmRequest({
+                            method: "GET",
+                            url: fullImgUrl,
+                            responseType: "blob",
+                            headers: {
+                                "Referer": window.location.href,
+                            },
+                        });
+
+                        if (imgRes.status === 200 && imgRes.response) {
+                            const base64Data = await blobToBase64(imgRes.response);
+                            await uploadCrawledImage({
+                                lcsc: lcsc,
+                                image_base64: base64Data,
+                                image_url: fullImgUrl,
+                                product_model: productModel,
+                                has_image: true,
+                            });
+                            const sizeKb = Math.round((imgRes.response.size || 0) / 1024);
+                            logMessage(`[OK] C${lcsc}: Synced (${sizeKb} KB) - ${productModel}`, "success");
+                        } else {
+                            throw new Error(`HTTP ${imgRes.status}`);
+                        }
+                    } catch (e) {
+                        logMessage(`[IMG_FAIL] C${lcsc}: ${e.message}`, "error");
+                        await releaseTaskOnServer(lcsc);
+                    }
+                }
             }
-            sessionStats.noImage++;
-            sessionStats.processed++;
-            saveStats();
-            updateStatsDisplay();
-            await scheduleNextJump();
+
+            // Task completed for this tab
+            claimedTask = null;
+            sessionStorage.removeItem("ps_claimed_task");
+
+            // Refresh global progress stats
+            await checkBackendConnection();
+        }
+
+        // 2. Check if crawler is still globally active
+        isCrawlerActive = GM_getValue("crawler_active", false);
+        if (!isCrawlerActive) {
+            updateHarvesterStatus("Paused");
             return;
         }
 
-        // Extract product data from the loaded webpage
-        const { imgUrl, productModel, productCode } = extractPageProductData();
-
-        if (!imgUrl) {
-            logMessage(`[NO_IMG] C${lcsc}: No image on page (Model: ${productModel || "N/A"})`, "info");
-            try {
-                await uploadCrawledImage({
-                    lcsc: lcsc,
-                    product_model: productModel,
-                    has_image: false,
-                });
-            } catch (e) {
-                console.error(e);
-            }
-            sessionStats.noImage++;
-            sessionStats.processed++;
-            saveStats();
-            updateStatsDisplay();
-            await scheduleNextJump();
-            return;
-        }
-
-        // Normalize URL if protocol-relative
-        let fullImgUrl = imgUrl;
-        if (fullImgUrl.startsWith("//")) {
-            fullImgUrl = "https:" + fullImgUrl;
-        }
-
-        // Download image binary directly with browser credentials
+        // 3. Atomically claim the NEXT task directly from PartShelf server
+        logMessage("Claiming next task from PartShelf server...", "info");
+        let nextTask = null;
         try {
-            logMessage(`[DOWNLOADING] C${lcsc}: Fetching image binary...`, "info");
-            const imgRes = await gmRequest({
-                method: "GET",
-                url: fullImgUrl,
-                responseType: "blob",
-                headers: {
-                    "Referer": window.location.href,
-                },
-            });
-
-            if (imgRes.status !== 200 || !imgRes.response) {
-                throw new Error(`Image download HTTP ${imgRes.status}`);
-            }
-
-            const base64Data = await blobToBase64(imgRes.response);
-            await uploadCrawledImage({
-                lcsc: lcsc,
-                image_base64: base64Data,
-                image_url: fullImgUrl,
-                product_model: productModel,
-                has_image: true,
-            });
-
-            const sizeKb = Math.round((imgRes.response.size || 0) / 1024);
-            logMessage(`[OK] C${lcsc}: Synced (${sizeKb} KB) - ${productModel}`, "success");
-            sessionStats.downloaded++;
-            sessionStats.processed++;
-            saveStats();
-            updateStatsDisplay();
+            nextTask = await claimTaskFromServer();
         } catch (e) {
-            logMessage(`[IMG_FAIL] C${lcsc}: ${e.message}`, "error");
-            sessionStats.failed++;
-            updateStatsDisplay();
+            logMessage(`[CLAIM_ERR] ${e.message}. Retrying in 5s...`, "error");
+            jumpTimeoutId = setTimeout(runTabWorker, 5000);
+            return;
         }
 
-        await scheduleNextJump();
-    }
-
-    async function advanceToNextTask() {
-        // Refill queue if needed
-        if (!taskQueue || taskQueue.length === 0) {
-            logMessage(`Queue empty. Fetching batch of 50 tasks (cursor: ${cursor})...`, "info");
-            try {
-                const batch = await fetchTasks(50);
-                taskQueue = batch.tasks || [];
-                batchTotal = taskQueue.length;
-                batchIndex = 0;
-                GM_setValue("crawler_task_queue", taskQueue);
-                GM_setValue("crawler_batch_total", batchTotal);
-                GM_setValue("crawler_batch_index", batchIndex);
-
-                if (taskQueue.length === 0) {
-                    logMessage("Queue complete! No more pending items found in PartShelf database.", "success");
-                    stopHarvester();
-                    return null;
-                }
-            } catch (e) {
-                logMessage(`[FETCH_ERR] ${e.message}. Retrying in 5s...`, "error");
-                await sleep(5000);
-                if (isCrawlerActive) {
-                    return advanceToNextTask();
-                }
-                return null;
-            }
+        if (!nextTask) {
+            logMessage("Queue complete! No more pending items found on server.", "success");
+            stopHarvester();
+            return;
         }
 
-        // Pop next task
-        const nextTask = taskQueue.shift();
-        batchIndex++;
-        GM_setValue("crawler_task_queue", taskQueue);
-        GM_setValue("crawler_batch_index", batchIndex);
-
-        currentTask = nextTask;
-        GM_setValue("crawler_current_task", currentTask);
-
-        const nextLcsc = typeof nextTask === "object" ? nextTask.lcsc : nextTask;
-        cursor = parseInt(nextLcsc, 10) || 0;
-        GM_setValue("crawler_cursor", cursor);
-        updateCursorDisplay(cursor);
-
-        updateProgressBar();
-        return nextTask;
-    }
-
-    async function scheduleNextJump() {
-        if (!isCrawlerActive) return;
-
-        const nextTask = await advanceToNextTask();
-        if (!nextTask || !isCrawlerActive) return;
+        // 4. Save claimed task to sessionStorage and navigate
+        claimedTask = nextTask;
+        sessionStorage.setItem("ps_claimed_task", JSON.stringify(claimedTask));
 
         const targetId = nextTask.website_component_id || nextTask.lcsc;
         const targetUrl = `https://item.szlcsc.com/${targetId}.html`;
 
-        logMessage(`[NEXT] C${nextTask.lcsc} (ID: ${targetId}). Navigating in ${delayMs}ms...`, "info");
-
-        // Countdown visual display
+        logMessage(`[NEXT] Claimed C${nextTask.lcsc} (${targetId}). Jumping in ${delayMs}ms...`, "info");
+        updateCurrentTaskDisplay(`C${nextTask.lcsc} (${targetId})`);
         updateCountdownDisplay(delayMs);
 
         jumpTimeoutId = setTimeout(() => {
+            isCrawlerActive = GM_getValue("crawler_active", false);
             if (!isCrawlerActive) return;
             window.location.href = targetUrl;
         }, Math.max(500, delayMs));
@@ -401,17 +366,8 @@
         pauseBtn.disabled = false;
         pauseBtn.textContent = "Pause";
 
-        logMessage("Harvester activated", "info");
-
-        // If on item page matching currentTask, process it now; otherwise advance and navigate
-        const currentPath = window.location.pathname;
-        const currentWid = currentTask?.website_component_id || currentTask?.lcsc;
-
-        if (currentTask && currentWid && currentPath.includes(String(currentWid))) {
-            processCurrentPage();
-        } else {
-            scheduleNextJump();
-        }
+        logMessage("Crawler activated. Starting multi-tab worker...", "info");
+        runTabWorker();
     }
 
     function pauseHarvester() {
@@ -423,12 +379,19 @@
             jumpTimeoutId = null;
         }
 
+        // If currently holding an uncompleted task, release it on server
+        if (claimedTask && claimedTask.lcsc) {
+            releaseTaskOnServer(claimedTask.lcsc);
+            claimedTask = null;
+            sessionStorage.removeItem("ps_claimed_task");
+        }
+
         updateHarvesterStatus("Paused");
         document.getElementById("ps-btn-start").disabled = false;
         const pauseBtn = document.getElementById("ps-btn-pause");
         pauseBtn.textContent = "Resume";
 
-        logMessage("Harvester paused by user", "warn");
+        logMessage("Crawler paused. Released pending task.", "warn");
     }
 
     function stopHarvester() {
@@ -447,36 +410,6 @@
         pauseBtn.textContent = "Pause";
     }
 
-    function saveStats() {
-        GM_setValue("crawler_stats", sessionStats);
-    }
-
-    function resetStats() {
-        sessionStats = {
-            processed: 0,
-            downloaded: 0,
-            noImage: 0,
-            failed: 0,
-        };
-        cursor = 0;
-        taskQueue = [];
-        currentTask = null;
-        batchIndex = 0;
-        batchTotal = 50;
-        GM_setValue("crawler_cursor", 0);
-        GM_setValue("crawler_task_queue", []);
-        GM_setValue("crawler_current_task", null);
-        GM_setValue("crawler_batch_index", 0);
-        GM_setValue("crawler_batch_total", 50);
-
-        saveStats();
-        updateCursorDisplay(0);
-        updateStatsDisplay();
-        updateProgressBar();
-        updateCurrentTaskDisplay("None");
-        logMessage("Session statistics and cursor reset to 0", "warn");
-    }
-
     // ----------------------------------------------------
     // User Interface (Strictly No Emojis, Industrial Style)
     // ----------------------------------------------------
@@ -487,7 +420,7 @@
             <div id="ps-panel-header">
                 <div class="ps-header-title">
                     <span class="ps-brand">PartShelf</span>
-                    <span class="ps-subtitle">Direct Page Harvester</span>
+                    <span class="ps-subtitle">Multi-Tab Harvester [${tabId}]</span>
                 </div>
                 <div class="ps-header-actions">
                     <button id="ps-btn-minimize" class="ps-btn-icon" title="Minimize/Maximize">_</button>
@@ -499,20 +432,20 @@
                     <div class="ps-status-row">
                         <span class="ps-label">Backend:</span>
                         <span id="ps-backend-status" class="ps-badge ps-badge-gray">Checking...</span>
-                        <span class="ps-label" style="margin-left: 10px;">Harvester:</span>
+                        <span class="ps-label" style="margin-left: 10px;">Status:</span>
                         <span id="ps-crawler-status" class="ps-badge ps-badge-blue">Idle</span>
                     </div>
                     <div class="ps-status-row" style="margin-top: 6px;">
-                        <span class="ps-label">Current Target:</span>
+                        <span class="ps-label">Assigned Target:</span>
                         <span id="ps-current-task" class="ps-mono ps-text-cyan">None</span>
                     </div>
                 </div>
 
-                <!-- Progress Bar Section -->
+                <!-- Global Progress Bar Section -->
                 <div class="ps-section">
                     <div class="ps-progress-header">
-                        <span class="ps-label">Batch Progress:</span>
-                        <span id="ps-progress-text" class="ps-mono ps-text-cyan">0 / 0 (0%)</span>
+                        <span class="ps-label">Server Progress:</span>
+                        <span id="ps-progress-text" class="ps-mono ps-text-cyan">-- / -- (--%)</span>
                     </div>
                     <div class="ps-progress-track">
                         <div id="ps-progress-fill" class="ps-progress-fill" style="width: 0%;"></div>
@@ -526,40 +459,34 @@
                         <label class="ps-label">PartShelf API URL:</label>
                         <input id="ps-input-api" class="ps-input ps-mono" type="text" value="${apiUrl}" />
                     </div>
-                    <div class="ps-field-row" style="margin-top: 6px;">
-                        <div class="ps-field-col">
-                            <label class="ps-label">Jump Delay (ms):</label>
-                            <input id="ps-input-delay" class="ps-input ps-mono" type="number" min="500" max="10000" step="100" value="${delayMs}" />
-                        </div>
-                        <div class="ps-field-col" style="margin-left: 8px;">
-                            <label class="ps-label">Start Cursor (LCSC):</label>
-                            <input id="ps-input-cursor" class="ps-input ps-mono" type="number" min="0" value="${cursor}" />
-                        </div>
+                    <div class="ps-field" style="margin-top: 6px;">
+                        <label class="ps-label">Jump Delay (ms):</label>
+                        <input id="ps-input-delay" class="ps-input ps-mono" type="number" min="300" max="10000" step="100" value="${delayMs}" />
                     </div>
                 </div>
 
-                <!-- Session Stats -->
+                <!-- Summary Counters -->
                 <div class="ps-section">
                     <div class="ps-stats-grid">
                         <div class="ps-stat-box">
-                            <div class="ps-stat-val ps-text-green" id="ps-stat-downloaded">0</div>
-                            <div class="ps-stat-lbl">Downloaded</div>
+                            <div class="ps-stat-val ps-text-green" id="ps-stat-with-img">--</div>
+                            <div class="ps-stat-lbl">With Image</div>
                         </div>
                         <div class="ps-stat-box">
-                            <div class="ps-stat-val ps-text-yellow" id="ps-stat-noimg">0</div>
+                            <div class="ps-stat-val ps-text-yellow" id="ps-stat-no-img">--</div>
                             <div class="ps-stat-lbl">No Image</div>
                         </div>
                         <div class="ps-stat-box">
-                            <div class="ps-stat-val ps-text-red" id="ps-stat-failed">0</div>
-                            <div class="ps-stat-lbl">Failed</div>
+                            <div class="ps-stat-val ps-text-cyan" id="ps-stat-local-files">--</div>
+                            <div class="ps-stat-lbl">Local Files</div>
                         </div>
                         <div class="ps-stat-box">
-                            <div class="ps-stat-val ps-text-blue" id="ps-stat-processed">0</div>
-                            <div class="ps-stat-lbl">Processed</div>
+                            <div class="ps-stat-val ps-text-blue" id="ps-stat-remaining">--</div>
+                            <div class="ps-stat-lbl">Remaining</div>
                         </div>
                     </div>
                     <div class="ps-global-summary" id="ps-global-summary">
-                        Total: -- | With Image: -- | Remaining: --
+                        Total Components: 1,037,000
                     </div>
                 </div>
 
@@ -568,13 +495,12 @@
                     <button id="ps-btn-start" class="ps-btn ps-btn-primary">Start</button>
                     <button id="ps-btn-pause" class="ps-btn ps-btn-secondary" disabled>Pause</button>
                     <button id="ps-btn-test" class="ps-btn ps-btn-outline">Test API</button>
-                    <button id="ps-btn-reset-stats" class="ps-btn ps-btn-outline" title="Reset session stats">Reset</button>
                 </div>
 
                 <!-- Activity Log -->
                 <div class="ps-section" style="margin-bottom: 0;">
                     <div class="ps-log-header">
-                        <span>Activity Log</span>
+                        <span>Cluster Activity Log</span>
                         <span id="ps-btn-clear-log" class="ps-link-btn">Clear</span>
                     </div>
                     <div id="ps-crawler-log" class="ps-log-box ps-mono"></div>
@@ -582,7 +508,6 @@
             </div>
         `;
 
-        // Inject Styles (Strictly no flex child line collapse, clean scrollbar and progress bar)
         const style = document.createElement("style");
         style.textContent = `
             #ps-harvester-panel {
@@ -688,7 +613,6 @@
             .ps-text-blue { color: #60a5fa; }
             .ps-text-cyan { color: #38bdf8; font-weight: 600; margin-left: 6px; }
 
-            /* Progress Bar */
             .ps-progress-header {
                 display: flex;
                 justify-content: space-between;
@@ -722,16 +646,6 @@
                 flex-direction: column;
                 gap: 4px;
             }
-            .ps-field-row {
-                display: flex;
-                align-items: center;
-            }
-            .ps-field-col {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
             .ps-input {
                 background: #0f172a;
                 border: 1px solid #475569;
@@ -759,7 +673,7 @@
                 padding: 6px 4px;
             }
             .ps-stat-val {
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 700;
                 font-family: ui-monospace, SFMono-Regular, monospace;
             }
@@ -837,7 +751,6 @@
                 text-decoration: underline;
             }
 
-            /* Log Box (Clear display with scrollbar, no line overlap) */
             .ps-log-box {
                 background: #0f172a;
                 border: 1px solid #334155;
@@ -893,14 +806,12 @@
         const btnStart = document.getElementById("ps-btn-start");
         const btnPause = document.getElementById("ps-btn-pause");
         const btnTest = document.getElementById("ps-btn-test");
-        const btnResetStats = document.getElementById("ps-btn-reset-stats");
         const btnClearLog = document.getElementById("ps-btn-clear-log");
         const btnMinimize = document.getElementById("ps-btn-minimize");
         const panelBody = document.getElementById("ps-panel-body");
 
         const inputApi = document.getElementById("ps-input-api");
         const inputDelay = document.getElementById("ps-input-delay");
-        const inputCursor = document.getElementById("ps-input-cursor");
 
         inputApi.addEventListener("change", () => {
             apiUrl = inputApi.value.trim().replace(/\/+$/, "");
@@ -910,20 +821,10 @@
         });
 
         inputDelay.addEventListener("change", () => {
-            delayMs = Math.max(500, parseInt(inputDelay.value, 10) || DEFAULT_DELAY_MS);
+            delayMs = Math.max(300, parseInt(inputDelay.value, 10) || DEFAULT_DELAY_MS);
             inputDelay.value = delayMs;
             GM_setValue("crawler_delay_ms", delayMs);
             logMessage(`Delay set to ${delayMs}ms`, "info");
-        });
-
-        inputCursor.addEventListener("change", () => {
-            cursor = Math.max(0, parseInt(inputCursor.value, 10) || 0);
-            inputCursor.value = cursor;
-            GM_setValue("crawler_cursor", cursor);
-            // Clear current task queue so next fetch starts from new cursor
-            taskQueue = [];
-            GM_setValue("crawler_task_queue", []);
-            logMessage(`Cursor set to ${cursor}. Queue cleared.`, "warn");
         });
 
         btnStart.addEventListener("click", () => {
@@ -944,12 +845,7 @@
             }
         });
 
-        btnResetStats.addEventListener("click", () => {
-            resetStats();
-        });
-
         btnClearLog.addEventListener("click", () => {
-            activityLogs = [];
             GM_setValue("crawler_log", []);
             renderLogs();
         });
@@ -1023,45 +919,34 @@
         if (el) el.textContent = taskStr;
     }
 
-    function updateCursorDisplay(c) {
-        const el = document.getElementById("ps-input-cursor");
-        if (el && document.activeElement !== el) {
-            el.value = c;
-        }
-    }
-
-    function updateStatsDisplay() {
-        const elDown = document.getElementById("ps-stat-downloaded");
-        const elNoImg = document.getElementById("ps-stat-noimg");
-        const elFail = document.getElementById("ps-stat-failed");
-        const elProc = document.getElementById("ps-stat-processed");
-
-        if (elDown) elDown.textContent = sessionStats.downloaded;
-        if (elNoImg) elNoImg.textContent = sessionStats.noImage;
-        if (elFail) elFail.textContent = sessionStats.failed;
-        if (elProc) elProc.textContent = sessionStats.processed;
-    }
-
     function updateGlobalStats(stats) {
-        const el = document.getElementById("ps-global-summary");
-        if (!el) return;
-        const total = (stats.total_components || 0).toLocaleString();
-        const withImg = (stats.with_image || 0).toLocaleString();
-        const remaining = (stats.remaining || 0).toLocaleString();
-        el.textContent = `Total: ${total} | With Image: ${withImg} | Remaining: ${remaining}`;
-    }
+        const total = stats.total_components || 0;
+        const withImg = stats.with_image || 0;
+        const noImg = stats.no_image || 0;
+        const rem = stats.remaining || 0;
+        const local = stats.local_image_files || 0;
 
-    function updateProgressBar() {
-        const textEl = document.getElementById("ps-progress-text");
-        const fillEl = document.getElementById("ps-progress-fill");
-        if (!textEl || !fillEl) return;
+        const elWith = document.getElementById("ps-stat-with-img");
+        const elNo = document.getElementById("ps-stat-no-img");
+        const elLocal = document.getElementById("ps-stat-local-files");
+        const elRem = document.getElementById("ps-stat-remaining");
+        const elSum = document.getElementById("ps-global-summary");
 
-        const total = Math.max(1, batchTotal);
-        const idx = Math.min(total, batchIndex);
-        const pct = Math.round((idx / total) * 100);
+        if (elWith) elWith.textContent = withImg.toLocaleString();
+        if (elNo) elNo.textContent = noImg.toLocaleString();
+        if (elLocal) elLocal.textContent = local.toLocaleString();
+        if (elRem) elRem.textContent = rem.toLocaleString();
+        if (elSum) elSum.textContent = `Total Components: ${total.toLocaleString()}`;
 
-        textEl.textContent = `${idx} / ${total} (${pct}%)`;
-        fillEl.style.width = `${pct}%`;
+        // Update progress bar
+        const progText = document.getElementById("ps-progress-text");
+        const progFill = document.getElementById("ps-progress-fill");
+        if (progText && progFill && total > 0) {
+            const completed = withImg + noImg;
+            const pct = Math.min(100, Math.round((completed / total) * 100));
+            progText.textContent = `${completed.toLocaleString()} / ${total.toLocaleString()} (${pct}%)`;
+            progFill.style.width = `${pct}%`;
+        }
     }
 
     function updateCountdownDisplay(ms) {
@@ -1077,8 +962,6 @@
     function init() {
         createUI();
         renderLogs();
-        updateStatsDisplay();
-        updateProgressBar();
         checkBackendConnection();
 
         if (typeof GM_registerMenuCommand !== "undefined") {
@@ -1086,7 +969,7 @@
             GM_registerMenuCommand("Pause Harvester", pauseHarvester);
         }
 
-        // Restore active state
+        isCrawlerActive = GM_getValue("crawler_active", false);
         if (isCrawlerActive) {
             updateHarvesterStatus("Running");
             document.getElementById("ps-btn-start").disabled = true;
@@ -1094,9 +977,8 @@
             pauseBtn.disabled = false;
             pauseBtn.textContent = "Pause";
 
-            // Process current page after a short stabilization delay
             setTimeout(() => {
-                processCurrentPage();
+                runTabWorker();
             }, 600);
         } else {
             updateHarvesterStatus("Idle");

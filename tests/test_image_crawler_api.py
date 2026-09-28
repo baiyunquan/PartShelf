@@ -121,3 +121,34 @@ def test_crawler_upload_no_image():
             conn.execute("DELETE FROM lcsc_components WHERE lcsc = ?", (test_lcsc,))
             conn.commit()
             conn.close()
+
+
+def test_claim_and_release_task():
+    """Verify atomic claiming of tasks for concurrent workers."""
+    # Claim task 1
+    res1 = client.get("/api/libraries/jlcparts/crawler/claim-task")
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["status"] == "success"
+    task1 = data1["task"]
+    assert task1 is not None
+    assert "lcsc" in task1
+    assert "website_component_id" in task1
+
+    # Claim task 2 (must be different from task 1!)
+    res2 = client.get("/api/libraries/jlcparts/crawler/claim-task")
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["status"] == "success"
+    task2 = data2["task"]
+    assert task2 is not None
+    assert task2["lcsc"] != task1["lcsc"], "Concurrent tasks must be distinct!"
+
+    # Release both tasks
+    rel1 = client.post(f"/api/libraries/jlcparts/crawler/release-task?lcsc={task1['lcsc']}")
+    assert rel1.status_code == 200
+    assert rel1.json()["released"] is True
+
+    rel2 = client.post(f"/api/libraries/jlcparts/crawler/release-task?lcsc={task2['lcsc']}")
+    assert rel2.status_code == 200
+    assert rel2.json()["released"] is True

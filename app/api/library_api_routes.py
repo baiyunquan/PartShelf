@@ -204,6 +204,27 @@ def get_crawler_tasks(
     return lib_svc.get_missing_image_lcsc_list(limit=limit, cursor=cursor_val)
 
 
+@router.get("/jlcparts/crawler/claim-task")
+def claim_crawler_task():
+    """
+    Atomically claims the next pending component for a worker tab.
+    Ensures that multiple concurrent browser tabs never process the same item simultaneously.
+    """
+    task = lib_svc.claim_next_crawler_task()
+    if not task:
+        return {"status": "empty", "task": None}
+    return {"status": "success", "task": task}
+
+
+@router.post("/jlcparts/crawler/release-task")
+def release_crawler_task(lcsc: int = Query(...)):
+    """
+    Release a claimed task back to the queue if a tab closes or pauses before completing it.
+    """
+    released = lib_svc.release_crawler_task(lcsc)
+    return {"status": "success", "released": released}
+
+
 @router.post("/jlcparts/crawler/upload")
 def upload_crawled_image(payload: CrawlerImageUpload):
     """

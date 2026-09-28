@@ -13,6 +13,8 @@ import os
 import math
 import sqlite3
 import json
+import time
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -822,6 +824,66 @@ def get_missing_image_lcsc_list(limit: int = 50, cursor: int = 0) -> Dict[str, A
         conn.close()
 
 
+_LEASE_LOCK = threading.Lock()
+_LEASED_TASKS: Dict[int, float] = {}
+_LEASE_TIMEOUT_SECONDS = 60.0
+
+
+def claim_next_crawler_task() -> Optional[Dict[str, Any]]:
+    """
+    Atomically claims the next pending component for a worker tab.
+    Ensures that multiple concurrent browser tabs or workers never receive the same task.
+    """
+    now = time.time()
+    with _LEASE_LOCK:
+        # Clean up expired leases
+        expired = [lcsc for lcsc, exp in _LEASED_TASKS.items() if now - exp > _LEASE_TIMEOUT_SECONDS]
+        for lcsc in expired:
+            del _LEASED_TASKS[lcsc]
+
+        conn = get_connection(JLCPARTS_DB_PATH)
+        if not conn:
+            return None
+
+        try:
+            cur = conn.cursor()
+            sql = """
+            SELECT j.lcsc, j.website_component_id, j.mfr
+            FROM jlc_components j
+            LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+            WHERE (l.image IS NULL OR l.image = '')
+            ORDER BY j.lcsc ASC
+            LIMIT 100
+            """
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+            for r in rows:
+                lcsc = r["lcsc"]
+                if lcsc not in _LEASED_TASKS:
+                    _LEASED_TASKS[lcsc] = now
+                    return {
+                        "lcsc": lcsc,
+                        "website_component_id": str(r["website_component_id"] or "").strip(),
+                        "mfr": str(r["mfr"] or "").strip()
+                    }
+
+            return None
+        finally:
+            conn.close()
+
+
+def release_crawler_task(lcsc: int) -> bool:
+    """
+    Releases a claimed task if a worker tab closes, pauses, or encounters an unhandled error.
+    """
+    with _LEASE_LOCK:
+        if lcsc in _LEASED_TASKS:
+            del _LEASED_TASKS[lcsc]
+            return True
+        return False
+
+
 def save_crawled_part_image(
     lcsc: int,
     image_bytes: Optional[bytes] = None,
@@ -833,7 +895,6 @@ def save_crawled_part_image(
     Saves scraped component image bytes locally and records metadata into lcsc_components in jlcparts.db.
     """
     PARTS_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    import time
     now_ts = int(time.time())
 
     saved_filename = None
@@ -879,6 +940,9 @@ def save_crawled_part_image(
         # Invalidate in-memory summary caches
         _PART_SUMMARY_CACHE.pop(f"zh:jlcparts:{lcsc}", None)
         _PART_SUMMARY_CACHE.pop(f"en:jlcparts:{lcsc}", None)
+
+        with _LEASE_LOCK:
+            _LEASED_TASKS.pop(lcsc, None)
 
         return {
             "status": "success",
