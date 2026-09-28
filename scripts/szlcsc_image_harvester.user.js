@@ -29,7 +29,18 @@
 
     let apiUrl = GM_getValue("partshelf_api_url", DEFAULT_API_URL);
     let delayMs = GM_getValue("crawler_delay_ms", DEFAULT_DELAY_MS);
-    let cursor = GM_getValue("crawler_cursor", 0);
+
+    // Sanitize cursor to be strictly an integer >= 0
+    let rawCursor = GM_getValue("crawler_cursor", 0);
+    if (typeof rawCursor === "object" && rawCursor !== null) {
+        rawCursor = rawCursor.lcsc || 0;
+    }
+    let cursor = parseInt(rawCursor, 10);
+    if (isNaN(cursor) || cursor < 0) {
+        cursor = 0;
+    }
+    GM_setValue("crawler_cursor", cursor);
+
     let isCrawlerActive = GM_getValue("crawler_active", false);
 
     let taskQueue = GM_getValue("crawler_task_queue", []);
@@ -351,7 +362,8 @@
         currentTask = nextTask;
         GM_setValue("crawler_current_task", currentTask);
 
-        cursor = nextTask.lcsc;
+        const nextLcsc = typeof nextTask === "object" ? nextTask.lcsc : nextTask;
+        cursor = parseInt(nextLcsc, 10) || 0;
         GM_setValue("crawler_cursor", cursor);
         updateCursorDisplay(cursor);
 
@@ -446,9 +458,23 @@
             noImage: 0,
             failed: 0,
         };
+        cursor = 0;
+        taskQueue = [];
+        currentTask = null;
+        batchIndex = 0;
+        batchTotal = 50;
+        GM_setValue("crawler_cursor", 0);
+        GM_setValue("crawler_task_queue", []);
+        GM_setValue("crawler_current_task", null);
+        GM_setValue("crawler_batch_index", 0);
+        GM_setValue("crawler_batch_total", 50);
+
         saveStats();
+        updateCursorDisplay(0);
         updateStatsDisplay();
-        logMessage("Session statistics reset to 0", "warn");
+        updateProgressBar();
+        updateCurrentTaskDisplay("None");
+        logMessage("Session statistics and cursor reset to 0", "warn");
     }
 
     // ----------------------------------------------------

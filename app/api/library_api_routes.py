@@ -188,12 +188,20 @@ def search_jlcparts_library(
 @router.get("/jlcparts/crawler/tasks")
 def get_crawler_tasks(
     limit: int = Query(50, ge=1, le=200, description="Batch size of tasks to fetch"),
-    cursor: int = Query(0, ge=0, description="Cursor offset for pagination (LCSC ID)")
+    cursor: Any = Query(0, description="Cursor offset for pagination (LCSC ID)")
 ):
     """
     Get a batch of missing-image LCSC part numbers for the ScriptCat crawler.
     """
-    return lib_svc.get_missing_image_lcsc_list(limit=limit, cursor=cursor)
+    try:
+        if isinstance(cursor, str) and not cursor.isdigit():
+            cursor_val = 0
+        else:
+            cursor_val = max(0, int(cursor))
+    except (ValueError, TypeError):
+        cursor_val = 0
+
+    return lib_svc.get_missing_image_lcsc_list(limit=limit, cursor=cursor_val)
 
 
 @router.post("/jlcparts/crawler/upload")
