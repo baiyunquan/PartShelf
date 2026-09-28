@@ -159,7 +159,7 @@
     "btn_cancel": "Cancel",
     "btn_add": "Add to Project",
     "empty_bom_hint": "No components in this project yet. Click 'Add Component to Project' above.",
-    "no_shortage_hint": "🎉 All required components are currently in stock!",
+    "no_shortage_hint": "All required components are currently in stock.",
     "prompt_new_qty": "Enter new needed quantity for this project:",
     "confirm_remove_part": "Remove this component from project?",
     "alert_add_failed": "Failed to add component to project",
@@ -179,7 +179,7 @@
     "th_total_needed": "Total Needed",
     "th_shortage": "Plan Purchase Qty",
     "th_projects": "Related Projects",
-    "empty_hint": "🎉 All components are in stock. No procurement needed!",
+    "empty_hint": "All components are in stock. No procurement needed.",
     "alert_fetch_failed": "Failed to fetch procurement list"
   }
 }

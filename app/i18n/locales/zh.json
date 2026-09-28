@@ -159,7 +159,7 @@
     "btn_cancel": "取消",
     "btn_add": "确认添加",
     "empty_bom_hint": "本项目尚未添加任何元器件，请点击上方“向项目添加元器件”。",
-    "no_shortage_hint": "🎉 本项目所需元器件当前库存充足，暂无缺料！",
+    "no_shortage_hint": "本项目所需元器件当前库存充足，暂无缺料。",
     "prompt_new_qty": "请输入本项目对该元件的新需求数量（整数）：",
     "confirm_remove_part": "确定要从本项目中移除该元器件吗？",
     "alert_add_failed": "添加元器件到项目失败",
@@ -179,7 +179,7 @@
     "th_total_needed": "各项目总需求量",
     "th_shortage": "缺料采购量",
     "th_projects": "涉及项目",
-    "empty_hint": "🎉 太棒了！所有项目的元器件库存均充足，当前没有需要采购的物料。",
+    "empty_hint": "所有项目的元器件库存均充足，当前没有需要采购的物料。",
     "alert_fetch_failed": "获取采购清单失败"
   }
 }
