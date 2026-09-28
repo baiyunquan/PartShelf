@@ -173,12 +173,10 @@
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
-    <script id="category-translations" type="application/json">{{ category_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const compId = {{ comp_id }};
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
-      const catTranslations = JSON.parse(document.getElementById('category-translations')?.textContent || '{}');
 
       async function loadComponentDetails() {
         try {
@@ -216,7 +214,7 @@
           badges.innerHTML += `<span class="badge bg-secondary">${i18n.badge_extended || 'Extended Part'}</span>`;
         }
         if (data.category) {
-          const catLocalized = data.category_localized || catTranslations[data.category] || data.category;
+          const catLocalized = data.category_localized || data.category;
           badges.innerHTML += `<span class="badge bg-info text-dark" title="${escapeHtml(data.category)}">${escapeHtml(catLocalized)}</span>`;
         }
         if (data.package) {
@@ -230,7 +228,7 @@
         document.getElementById('propLibRef').textContent = data.lib_reference || '-';
         document.getElementById('propLcsc').innerHTML = data.lcsc_part ?
           `<span class="badge bg-light text-dark border">${escapeHtml(data.lcsc_part)}</span>` : '-';
-        const catLocalized = data.category_localized || catTranslations[data.category] || data.category;
+        const catLocalized = data.category_localized || data.category;
         document.getElementById('propCategory').textContent = data.category ? (catLocalized && catLocalized !== data.category ? `${catLocalized} (${data.category})` : (catLocalized || data.category)) : '-';
         document.getElementById('propPackage').textContent = data.package || '-';
         document.getElementById('propManufacturer').textContent = data.manufacturer || '-';

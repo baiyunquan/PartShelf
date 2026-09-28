@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
 
@@ -7,6 +7,7 @@ from app.services import external_library_service as lib_svc
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory import PartToInventoryAdd
 from app.i18n.category_i18n import category_i18n
+from app.i18n import get_current_language
 
 router = APIRouter()
 
@@ -18,13 +19,14 @@ def get_libraries_status():
 
 
 @router.get("/category-translations")
-def get_category_translations(lang: str = Query("zh")):
-    """Get all category and subcategory translation mappings for i18n."""
-    return category_i18n.get_flat_translations(lang)
+def get_category_translations(request: Request):
+    """Get category translations grouped by source and hierarchy level."""
+    return category_i18n.get_all(get_current_language(request))
 
 
 @router.get("/search")
 def search_libraries(
+    request: Request,
     q: str = Query(..., min_length=1, description="Search query keyword or part number"),
     target: str = Query("all", description="Target library: 'all', 'altium', 'kicad', or 'jlcparts'"),
     limit: int = Query(20, ge=1, le=100)
@@ -34,13 +36,13 @@ def search_libraries(
     """
     target = target.lower()
     if target == "altium":
-        return {"altium": lib_svc.search_altium(q, page_size=limit)}
+        return {"altium": lib_svc.search_altium(q, page_size=limit, lang=get_current_language(request))}
     elif target == "kicad":
         return {"kicad": lib_svc.search_kicad(q, page_size=limit)}
     elif target == "jlcparts":
-        return {"jlcparts": lib_svc.search_jlcparts(q, page_size=limit)}
+        return {"jlcparts": lib_svc.search_jlcparts(q, page_size=limit, lang=get_current_language(request))}
     else:
-        return lib_svc.search_all_libraries(q, limit_each=limit)
+        return lib_svc.search_all_libraries(q, limit_each=limit, lang=get_current_language(request))
 
 
 # ==========================================
@@ -48,9 +50,9 @@ def search_libraries(
 # ==========================================
 
 @router.get("/altium/categories")
-def get_altium_categories():
+def get_altium_categories(request: Request):
     """Get distinct component categories available in Altium libraries."""
-    return lib_svc.get_altium_categories()
+    return lib_svc.get_altium_categories(get_current_language(request))
 
 
 @router.get("/altium/packages")
@@ -61,6 +63,7 @@ def get_altium_packages():
 
 @router.get("/altium")
 def search_altium_library(
+    request: Request,
     q: Optional[str] = Query("", description="Keyword, part number or LCSC code"),
     category: Optional[str] = Query(None),
     package: Optional[str] = Query(None),
@@ -75,14 +78,15 @@ def search_altium_library(
         package=package,
         basic_only=basic_only,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        lang=get_current_language(request)
     )
 
 
 @router.get("/altium/{comp_id}")
-def get_altium_component_detail(comp_id: int):
+def get_altium_component_detail(comp_id: int, request: Request):
     """Get full details of a specific Altium component including all parameters."""
-    item = lib_svc.get_altium_component(comp_id)
+    item = lib_svc.get_altium_component(comp_id, get_current_language(request))
     if not item:
         raise HTTPException(status_code=404, detail="Altium component not found")
     return item
@@ -128,13 +132,14 @@ def get_kicad_symbol_detail(symbol_id: int):
 # ==========================================
 
 @router.get("/jlcparts/categories")
-def get_jlcparts_categories():
+def get_jlcparts_categories(request: Request):
     """Get hierarchical categories and subcategories from JLCParts database."""
-    return lib_svc.get_jlcparts_categories()
+    return lib_svc.get_jlcparts_categories(get_current_language(request))
 
 
 @router.get("/jlcparts")
 def search_jlcparts_library(
+    request: Request,
     q: Optional[str] = Query("", description="Keyword, part number or LCSC code"),
     category: Optional[str] = Query(None),
     subcategory: Optional[str] = Query(None),
@@ -153,14 +158,15 @@ def search_jlcparts_library(
         library_type=library_type,
         in_stock_only=in_stock_only,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        lang=get_current_language(request)
     )
 
 
 @router.get("/jlcparts/{lcsc}")
-def get_jlcparts_component_detail(lcsc: int):
+def get_jlcparts_component_detail(lcsc: int, request: Request):
     """Get full details of a specific JLCParts component including all attributes and pricing."""
-    item = lib_svc.get_jlcparts_component(lcsc)
+    item = lib_svc.get_jlcparts_component(lcsc, get_current_language(request))
     if not item:
         raise HTTPException(status_code=404, detail="JLCParts component not found")
     return item

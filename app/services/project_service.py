@@ -55,7 +55,7 @@ class ProjectService:
         return result
 
     @staticmethod
-    def get_project_details(db: Session, project_id: int) -> ProjectDetails:
+    def get_project_details(db: Session, project_id: int, lang: str = "zh") -> ProjectDetails:
         project = get_project_by_id(db, project_id)
         if not project:
             raise HTTPException(
@@ -73,7 +73,7 @@ class ProjectService:
             qty_needed = pp.quantity_needed or 0
             shortage = max(0, qty_needed - qty_avail)
 
-            summary = resolve_part_summary(part.library_source, part.external_part_id)
+            summary = resolve_part_summary(part.library_source, part.external_part_id, lang)
             part_items.append(ProjectPartItem(
                 part_id=part.id,
                 part_name=summary.get("name") or f"Part #{part.id}",
@@ -166,7 +166,7 @@ class ProjectService:
         remove_part_from_project(db, pp)
 
     @staticmethod
-    def get_global_procurement_list(db: Session) -> list[ProcurementItem]:
+    def get_global_procurement_list(db: Session, lang: str = "zh") -> list[ProcurementItem]:
         all_pps = get_all_project_parts_with_details(db)
         
         # Group by part
@@ -199,7 +199,7 @@ class ProjectService:
             total_needed = data["total_needed"]
             shortage = max(0, total_needed - qty_avail)
 
-            summary = resolve_part_summary(part.library_source, part.external_part_id)
+            summary = resolve_part_summary(part.library_source, part.external_part_id, lang)
             result.append(ProcurementItem(
                 part_id=part.id,
                 part_name=summary.get("name") or f"Part #{part.id}",

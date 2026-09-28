@@ -2,8 +2,7 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
-from app.i18n import i18n, DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES
-from app.i18n.category_i18n import category_i18n
+from app.i18n import i18n, DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, get_current_language
 
 templates = Jinja2Templates(directory="templates")
 
@@ -11,11 +10,6 @@ router = APIRouter()
 
 favicon_path = 'favicon.ico'
 
-def get_current_language(request: Request) -> str:
-    lang = request.query_params.get("lang") or request.cookies.get("lang") or DEFAULT_LANGUAGE
-    if lang not in SUPPORTED_LANGUAGES:
-        lang = DEFAULT_LANGUAGE
-    return lang
 
 def render_template(request: Request, name: str, context: dict = None) -> HTMLResponse:
     if context is None:
@@ -23,8 +17,6 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
     lang = get_current_language(request)
     context["lang"] = lang
     context["t"] = lambda key, **kwargs: i18n.get(key, lang, **kwargs)
-    context["t_cat"] = lambda key: category_i18n.translate(key, lang)
-    context["category_translations"] = category_i18n.get_flat_translations(lang)
     current_query = [(key, value) for key, value in request.query_params.multi_items() if key != "lang"]
     next_url = request.url.path
     if current_query:

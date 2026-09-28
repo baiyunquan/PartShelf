@@ -1,10 +1,17 @@
 import json
 from pathlib import Path
 from typing import Any, Dict
+from starlette.requests import Request
 
 LOCALES_DIR = Path(__file__).parent / "locales"
 DEFAULT_LANGUAGE = "zh"
 SUPPORTED_LANGUAGES = {"zh", "en"}
+
+
+def get_current_language(request: Request) -> str:
+    lang = request.query_params.get("lang") or request.cookies.get("lang") or DEFAULT_LANGUAGE
+    return lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+
 
 class I18n:
     def __init__(self):

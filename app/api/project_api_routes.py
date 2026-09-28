@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -12,6 +12,7 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.services.project_service import ProjectService
+from app.i18n import get_current_language
 
 router = APIRouter()
 
@@ -43,17 +44,17 @@ def create_project_api(
     )
 
 @router.get("/procurement/list", response_model=list[ProcurementItem])
-def get_global_procurement_list(db: Session = Depends(get_db)):
-    return ProjectService.get_global_procurement_list(db)
+def get_global_procurement_list(request: Request, db: Session = Depends(get_db)):
+    return ProjectService.get_global_procurement_list(db, lang=get_current_language(request))
 
 @router.get("/procurement/project/{project_id}", response_model=list[ProjectPartItem])
-def get_project_procurement_list(project_id: int, db: Session = Depends(get_db)):
-    details = ProjectService.get_project_details(db, project_id)
+def get_project_procurement_list(project_id: int, request: Request, db: Session = Depends(get_db)):
+    details = ProjectService.get_project_details(db, project_id, lang=get_current_language(request))
     return details.parts
 
 @router.get("/{project_id}", response_model=ProjectDetails)
-def get_project_details(project_id: int, db: Session = Depends(get_db)):
-    return ProjectService.get_project_details(db, project_id)
+def get_project_details(project_id: int, request: Request, db: Session = Depends(get_db)):
+    return ProjectService.get_project_details(db, project_id, lang=get_current_language(request))
 
 @router.put("/{project_id}")
 def update_project(

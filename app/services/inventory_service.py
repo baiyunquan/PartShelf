@@ -137,8 +137,8 @@ class InventoryService:
         return projects
 
     @classmethod
-    def _map_flat_part(cls, part: Part) -> PartInventoryFlatGet:
-        summary = resolve_part_summary(part.library_source, part.external_part_id)
+    def _map_flat_part(cls, part: Part, lang: str = "zh") -> PartInventoryFlatGet:
+        summary = resolve_part_summary(part.library_source, part.external_part_id, lang)
         qty = part.inventory.quantity_available if part.inventory else 0
         return PartInventoryFlatGet(
             id=part.id,
@@ -157,12 +157,12 @@ class InventoryService:
         )
 
     @classmethod
-    def get_parts_inventory_list(cls, db: Session, limit: int = 0) -> List[PartInventoryFlatGet]:
+    def get_parts_inventory_list(cls, db: Session, limit: int = 0, lang: str = "zh") -> List[PartInventoryFlatGet]:
         parts_list = get_all_parts(db, limit=limit)
-        return [cls._map_flat_part(part) for part in parts_list]
+        return [cls._map_flat_part(part, lang) for part in parts_list]
 
     @classmethod
-    def get_part_by_id(cls, db: Session, part_id: int) -> PartDetailsFlatGet:
+    def get_part_by_id(cls, db: Session, part_id: int, lang: str = "zh") -> PartDetailsFlatGet:
         part_found = get_part_by_id(db, part_id)
         if part_found is None:
             raise HTTPException(
@@ -170,7 +170,7 @@ class InventoryService:
                 detail=f"Part with id = {part_id} does not exist"
             )
 
-        full_info = resolve_part_full(part_found.library_source, part_found.external_part_id)
+        full_info = resolve_part_full(part_found.library_source, part_found.external_part_id, lang)
         summary = full_info["summary"]
         qty = part_found.inventory.quantity_available if part_found.inventory else 0
 
@@ -193,13 +193,13 @@ class InventoryService:
         )
 
     @classmethod
-    def search(cls, search_key: str, db: Session) -> List[PartInventoryFlatGet]:
+    def search(cls, search_key: str, db: Session, lang: str = "zh") -> List[PartInventoryFlatGet]:
         q = (search_key or "").strip().lower()
         if not q:
-            return cls.get_parts_inventory_list(db)
+            return cls.get_parts_inventory_list(db, lang=lang)
 
         # Get all parts and filter dynamically against hydrated attributes or storage location / note
-        all_parts = cls.get_parts_inventory_list(db)
+        all_parts = cls.get_parts_inventory_list(db, lang=lang)
         matched = []
         for p in all_parts:
             text_corpus = f"{p.name} {p.manufacturer or ''} {p.package or ''} {p.part_type or ''} {p.storage_location or ''} {p.note or ''}".lower()

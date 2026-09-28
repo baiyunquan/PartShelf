@@ -145,14 +145,17 @@ def get_libraries_status() -> Dict[str, Any]:
 # 1. Altium JLCPCB Libraries
 # ==========================================
 
-def get_altium_categories() -> List[str]:
+def get_altium_categories(lang: str = "zh") -> List[Dict[str, str]]:
     conn = get_connection(ALTIUM_DB_PATH)
     if not conn:
         return []
     try:
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT category FROM altium_components WHERE category != '' ORDER BY category")
-        return [r[0] for r in cur.fetchall()]
+        return [
+            {"category": r[0], "category_localized": category_i18n.translate_altium(r[0], lang)}
+            for r in cur.fetchall()
+        ]
     finally:
         conn.close()
 
@@ -176,7 +179,8 @@ def search_altium(
     basic_only: Optional[bool] = None,
     page: int = 1,
     page_size: int = 50,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    lang: str = "zh"
 ) -> Dict[str, Any]:
     conn = get_connection(ALTIUM_DB_PATH)
     if not conn:
@@ -233,7 +237,7 @@ def search_altium(
     conn.close()
 
     for r in rows:
-        r["category_localized"] = category_i18n.translate_altium(r.get("category") or "")
+        r["category_localized"] = category_i18n.translate_altium(r.get("category") or "", lang)
         if r.get("parameters_json"):
             try:
                 r["parameters"] = json.loads(r["parameters_json"])
@@ -252,7 +256,7 @@ def search_altium(
     }
 
 
-def get_altium_component(comp_id: int) -> Optional[Dict[str, Any]]:
+def get_altium_component(comp_id: int, lang: str = "zh") -> Optional[Dict[str, Any]]:
     conn = get_connection(ALTIUM_DB_PATH)
     if not conn:
         return None
@@ -263,7 +267,7 @@ def get_altium_component(comp_id: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         item = dict(row)
-        item["category_localized"] = category_i18n.translate_altium(item.get("category") or "")
+        item["category_localized"] = category_i18n.translate_altium(item.get("category") or "", lang)
         if item.get("parameters_json"):
             try:
                 item["parameters"] = json.loads(item["parameters_json"])
@@ -398,7 +402,7 @@ def get_kicad_symbol(symbol_id: int) -> Optional[Dict[str, Any]]:
 # 3. JLCParts Database
 # ==========================================
 
-def get_jlcparts_categories() -> List[Dict[str, Any]]:
+def get_jlcparts_categories(lang: str = "zh") -> List[Dict[str, Any]]:
     conn = get_connection(JLCPARTS_DB_PATH)
     if not conn:
         return []
@@ -420,13 +424,13 @@ def get_jlcparts_categories() -> List[Dict[str, Any]]:
             if cat not in result:
                 result[cat] = {
                     "category": cat,
-                    "category_localized": category_i18n.translate_primary(cat),
+                    "category_localized": category_i18n.translate_primary(cat, lang),
                     "subcategories": []
                 }
             if subcat:
                 result[cat]["subcategories"].append({
                     "subcategory": subcat,
-                    "subcategory_localized": category_i18n.translate_secondary(subcat),
+                    "subcategory_localized": category_i18n.translate_secondary(subcat, lang),
                     "count": cnt
                 })
         return list(result.values())
@@ -456,7 +460,8 @@ def search_jlcparts(
     in_stock_only: bool = False,
     page: int = 1,
     page_size: int = 50,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    lang: str = "zh"
 ) -> Dict[str, Any]:
     conn = get_connection(JLCPARTS_DB_PATH)
     if not conn:
@@ -529,8 +534,8 @@ def search_jlcparts(
     conn.close()
 
     for r in rows:
-        r["category_localized"] = category_i18n.translate_primary(r.get("category") or "")
-        r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "")
+        r["category_localized"] = category_i18n.translate_primary(r.get("category") or "", lang)
+        r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "", lang)
         # Build image URLs
         if r.get("image"):
             r["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{r['image']}"
@@ -561,7 +566,7 @@ def search_jlcparts(
     }
 
 
-def get_jlcparts_component(lcsc: int) -> Optional[Dict[str, Any]]:
+def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, Any]]:
     conn = get_connection(JLCPARTS_DB_PATH)
     if not conn:
         return None
@@ -578,8 +583,8 @@ def get_jlcparts_component(lcsc: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         item = dict(row)
-        item["category_localized"] = category_i18n.translate_primary(item.get("category") or "")
-        item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "")
+        item["category_localized"] = category_i18n.translate_primary(item.get("category") or "", lang)
+        item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "", lang)
 
         if item.get("image"):
             item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{item['image']}"
@@ -617,13 +622,13 @@ def get_jlcparts_component(lcsc: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
-def search_all_libraries(query: str, limit_each: int = 20) -> Dict[str, Any]:
+def search_all_libraries(query: str, limit_each: int = 20, lang: str = "zh") -> Dict[str, Any]:
     """Unified cross-library search across Altium, KiCad, and JLCParts."""
     return {
         "query": query,
-        "altium": search_altium(query, page_size=limit_each).get("items", []),
+        "altium": search_altium(query, page_size=limit_each, lang=lang).get("items", []),
         "kicad": search_kicad(query, page_size=limit_each).get("items", []),
-        "jlcparts": search_jlcparts(query, page_size=limit_each).get("items", []),
+        "jlcparts": search_jlcparts(query, page_size=limit_each, lang=lang).get("items", []),
     }
 
 
@@ -634,12 +639,12 @@ def search_all_libraries(query: str, limit_each: int = 20) -> Dict[str, Any]:
 _PART_SUMMARY_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
-def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str, Any]:
+def resolve_part_summary(library_source: str, external_part_id: str, lang: str = "zh") -> Dict[str, Any]:
     """
     Dynamically resolves common component attributes (name, manufacturer, package, type, etc.)
     from the referenced external database with in-memory caching.
     """
-    cache_key = f"{library_source}:{external_part_id}"
+    cache_key = f"{lang}:{library_source}:{external_part_id}"
     if cache_key in _PART_SUMMARY_CACHE:
         return _PART_SUMMARY_CACHE[cache_key]
 
@@ -658,13 +663,13 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
 
     if src == "altium":
         comp_id = int(pid_str) if pid_str.isdigit() else 0
-        comp = get_altium_component(comp_id)
+        comp = get_altium_component(comp_id, lang)
         if comp:
             summary["name"] = comp.get("lib_reference") or comp.get("mfr_part_number") or f"Altium #{comp_id}"
             summary["manufacturer"] = comp.get("manufacturer") or "Generic"
             summary["package"] = comp.get("package") or "Standard"
             raw_cat = comp.get("category") or "General"
-            summary["part_type"] = category_i18n.translate_altium(raw_cat) or raw_cat
+            summary["part_type"] = comp.get("category_localized") or raw_cat
             summary["part_type_localized"] = summary["part_type"]
             summary["part_type_en"] = raw_cat
             summary["description"] = comp.get("description") or ""
@@ -685,15 +690,15 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
 
     elif src == "jlcparts":
         lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
-        jlc = get_jlcparts_component(lcsc_num)
+        jlc = get_jlcparts_component(lcsc_num, lang)
         if jlc:
             summary["name"] = jlc.get("mfr") or f"C{jlc.get('lcsc')}"
             summary["manufacturer"] = jlc.get("manufacturer") or "Unknown"
             summary["package"] = jlc.get("package") or "Standard"
             cat_str = jlc.get("category") or ""
             sub_str = jlc.get("subcategory") or ""
-            cat_trans = category_i18n.translate_primary(cat_str)
-            sub_trans = category_i18n.translate_secondary(sub_str) if sub_str else ""
+            cat_trans = jlc.get("category_localized") or cat_str
+            sub_trans = jlc.get("subcategory_localized") or sub_str
             if cat_trans and sub_trans:
                 summary["part_type"] = f"{cat_trans} / {sub_trans}"
             else:
@@ -708,12 +713,12 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
     return summary
 
 
-def resolve_part_full(library_source: str, external_part_id: str) -> Dict[str, Any]:
+def resolve_part_full(library_source: str, external_part_id: str, lang: str = "zh") -> Dict[str, Any]:
     """
     Returns full external component details (including technical attributes or raw S-expressions)
     along with standard summary properties.
     """
-    summary = resolve_part_summary(library_source, external_part_id)
+    summary = resolve_part_summary(library_source, external_part_id, lang)
     external_details = None
 
     src = (library_source or "").lower()
@@ -721,13 +726,13 @@ def resolve_part_full(library_source: str, external_part_id: str) -> Dict[str, A
 
     if src == "altium":
         comp_id = int(pid_str) if pid_str.isdigit() else 0
-        external_details = get_altium_component(comp_id)
+        external_details = get_altium_component(comp_id, lang)
     elif src == "kicad":
         sym_id = int(pid_str) if pid_str.isdigit() else 0
         external_details = get_kicad_symbol(sym_id)
     elif src == "jlcparts":
         lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
-        external_details = get_jlcparts_component(lcsc_num)
+        external_details = get_jlcparts_component(lcsc_num, lang)
 
     return {
         "summary": summary,

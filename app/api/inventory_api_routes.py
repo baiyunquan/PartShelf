@@ -14,6 +14,7 @@ from app.schemas.inventory import (
 )
 from app.services.file_service import FileService
 from app.services.inventory_service import InventoryService
+from app.i18n import get_current_language
 from db.database import get_db
 
 router = APIRouter()
@@ -40,18 +41,18 @@ def update_part_meta(meta_in: PartMetaUpdate, db: Session = Depends(get_db)):
 
 
 @router.get("/get_parts_inventory")
-def get_parts_inventory_list(db: Session = Depends(get_db)):
-    return InventoryService.get_parts_inventory_list(db)
+def get_parts_inventory_list(request: Request, db: Session = Depends(get_db)):
+    return InventoryService.get_parts_inventory_list(db, lang=get_current_language(request))
 
 
 @router.get("/get_part_by_id")
-def get_part_by_id(part_id: int = Query(..., description="ID of the part to retrieve"), db: Session = Depends(get_db)):
-    return InventoryService.get_part_by_id(db, part_id)
+def get_part_by_id(request: Request, part_id: int = Query(..., description="ID of the part to retrieve"), db: Session = Depends(get_db)):
+    return InventoryService.get_part_by_id(db, part_id, lang=get_current_language(request))
 
 
 @router.get("/search")
-def search_in_inventory(search_key: str, db: Session = Depends(get_db)):
-    return InventoryService.search(search_key, db)
+def search_in_inventory(search_key: str, request: Request, db: Session = Depends(get_db)):
+    return InventoryService.search(search_key, db, lang=get_current_language(request))
 
 
 @router.delete("/delete_part")
