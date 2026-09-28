@@ -10,6 +10,7 @@ and provides unified, zero-data-loss querying capabilities.
 """
 
 import os
+import math
 import sqlite3
 import json
 from pathlib import Path
@@ -138,30 +139,94 @@ def get_libraries_status() -> Dict[str, Any]:
     return result
 
 
-def search_altium(query: str, category: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+# ==========================================
+# 1. Altium JLCPCB Libraries
+# ==========================================
+
+def get_altium_categories() -> List[str]:
     conn = get_connection(ALTIUM_DB_PATH)
     if not conn:
         return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT category FROM altium_components WHERE category != '' ORDER BY category")
+        return [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_altium_packages() -> List[str]:
+    conn = get_connection(ALTIUM_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT package FROM altium_components WHERE package != '' ORDER BY package LIMIT 200")
+        return [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def search_altium(
+    query: str = "",
+    category: Optional[str] = None,
+    package: Optional[str] = None,
+    basic_only: Optional[bool] = None,
+    page: int = 1,
+    page_size: int = 50,
+    limit: Optional[int] = None
+) -> Dict[str, Any]:
+    conn = get_connection(ALTIUM_DB_PATH)
+    if not conn:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    if limit is not None:
+        page_size = limit
+
+    page = max(1, page)
+    page_size = max(1, min(200, page_size))
+    offset = (page - 1) * page_size
 
     cur = conn.cursor()
-    sql = """
+    conditions = []
+    params = []
+
+    q = (query or "").strip()
+    if q:
+        conditions.append("(lib_reference LIKE ? OR lcsc_part LIKE ? OR mfr_part_number LIKE ? OR description LIKE ?)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
+
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
+
+    if package:
+        conditions.append("package = ?")
+        params.append(package)
+
+    if basic_only is True:
+        conditions.append("basic_part = 1")
+    elif basic_only is False:
+        conditions.append("basic_part = 0")
+
+    where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # Count
+    cur.execute(f"SELECT count(*) FROM altium_components{where_sql}", params)
+    total = cur.fetchone()[0]
+
+    # Data
+    sql = f"""
     SELECT id, lib_reference, lcsc_part, category, package, manufacturer,
            mfr_part_number, basic_part, description, resistance, capacitance,
            inductance, tolerance, voltage_rating, power_rating, datasheet_url,
            jlcpcb_url, lcsc_url, parameters_json, source_file
     FROM altium_components
-    WHERE (lib_reference LIKE ? OR lcsc_part LIKE ? OR mfr_part_number LIKE ? OR description LIKE ?)
+    {where_sql}
+    ORDER BY id
+    LIMIT ? OFFSET ?
     """
-    params = [f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"]
-
-    if category:
-        sql += " AND category = ?"
-        params.append(category)
-
-    sql += " LIMIT ?"
-    params.append(limit)
-
-    cur.execute(sql, params)
+    cur.execute(sql, params + [page_size, offset])
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -171,32 +236,115 @@ def search_altium(query: str, category: Optional[str] = None, limit: int = 50) -
                 r["parameters"] = json.loads(r["parameters_json"])
             except Exception:
                 r["parameters"] = {}
-    return rows
+        else:
+            r["parameters"] = {}
+
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 
-def search_kicad(query: str, library: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+def get_altium_component(comp_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection(ALTIUM_DB_PATH)
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM altium_components WHERE id = ?", (comp_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        if item.get("parameters_json"):
+            try:
+                item["parameters"] = json.loads(item["parameters_json"])
+            except Exception:
+                item["parameters"] = {}
+        else:
+            item["parameters"] = {}
+
+        if item.get("raw_data_json"):
+            try:
+                item["raw_data"] = json.loads(item["raw_data_json"])
+            except Exception:
+                item["raw_data"] = {}
+        else:
+            item["raw_data"] = None
+
+        return item
+    finally:
+        conn.close()
+
+
+# ==========================================
+# 2. KiCad Symbol Libraries
+# ==========================================
+
+def get_kicad_libraries() -> List[str]:
     conn = get_connection(KICAD_DB_PATH)
     if not conn:
         return []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT library FROM kicad_symbols ORDER BY library")
+        return [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def search_kicad(
+    query: str = "",
+    library: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    limit: Optional[int] = None
+) -> Dict[str, Any]:
+    conn = get_connection(KICAD_DB_PATH)
+    if not conn:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    if limit is not None:
+        page_size = limit
+
+    page = max(1, page)
+    page_size = max(1, min(200, page_size))
+    offset = (page - 1) * page_size
 
     cur = conn.cursor()
-    sql = """
+    conditions = []
+    params = []
+
+    q = (query or "").strip()
+    if q:
+        conditions.append("(name LIKE ? OR value LIKE ? OR keywords LIKE ? OR description LIKE ?)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
+
+    if library:
+        conditions.append("library = ?")
+        params.append(library)
+
+    where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # Count
+    cur.execute(f"SELECT count(*) FROM kicad_symbols{where_sql}", params)
+    total = cur.fetchone()[0]
+
+    # Data (omitting heavy raw_sexpr in list view for performance)
+    sql = f"""
     SELECT id, library, name, extends, reference, value, footprint,
            datasheet, description, keywords, fp_filters, in_bom, on_board,
            properties_json, source_file
     FROM kicad_symbols
-    WHERE (name LIKE ? OR value LIKE ? OR keywords LIKE ? OR description LIKE ?)
+    {where_sql}
+    ORDER BY library, name
+    LIMIT ? OFFSET ?
     """
-    params = [f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"]
-
-    if library:
-        sql += " AND library = ?"
-        params.append(library)
-
-    sql += " LIMIT ?"
-    params.append(limit)
-
-    cur.execute(sql, params)
+    cur.execute(sql, params + [page_size, offset])
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -206,33 +354,165 @@ def search_kicad(query: str, library: Optional[str] = None, limit: int = 50) -> 
                 r["properties"] = json.loads(r["properties_json"])
             except Exception:
                 r["properties"] = {}
-    return rows
+        else:
+            r["properties"] = {}
+
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 
-def search_jlcparts(query: str, category: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+def get_kicad_symbol(symbol_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection(KICAD_DB_PATH)
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM kicad_symbols WHERE id = ?", (symbol_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        if item.get("properties_json"):
+            try:
+                item["properties"] = json.loads(item["properties_json"])
+            except Exception:
+                item["properties"] = {}
+        else:
+            item["properties"] = {}
+        return item
+    finally:
+        conn.close()
+
+
+# ==========================================
+# 3. JLCParts Database
+# ==========================================
+
+def get_jlcparts_categories() -> List[Dict[str, Any]]:
     conn = get_connection(JLCPARTS_DB_PATH)
     if not conn:
         return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT category, subcategory, count(*) as cnt
+            FROM jlc_components
+            WHERE category != ''
+            GROUP BY category, subcategory
+            ORDER BY category, subcategory
+        """)
+        rows = cur.fetchall()
+        result = {}
+        for r in rows:
+            cat = r["category"]
+            subcat = r["subcategory"]
+            cnt = r["cnt"]
+            if cat not in result:
+                result[cat] = {"category": cat, "subcategories": []}
+            if subcat:
+                result[cat]["subcategories"].append({"subcategory": subcat, "count": cnt})
+        return list(result.values())
+    finally:
+        conn.close()
+
+
+def parse_jlcparts_prices(price_str: Optional[str]) -> List[Dict[str, Any]]:
+    if not price_str:
+        return []
+    breaks = []
+    # format: "1-9:1.5179,10-11:1.5179,12-199:1.5179,200-499:0.6069,500-999:0.5857,1000-:0.576"
+    for part in price_str.split(","):
+        part = part.strip()
+        if ":" in part:
+            qty_range, unit_price = part.split(":", 1)
+            breaks.append({"range": qty_range.strip(), "price": unit_price.strip()})
+    return breaks
+
+
+def search_jlcparts(
+    query: str = "",
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
+    package: Optional[str] = None,
+    library_type: Optional[str] = None,
+    in_stock_only: bool = False,
+    page: int = 1,
+    page_size: int = 50,
+    limit: Optional[int] = None
+) -> Dict[str, Any]:
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    if limit is not None:
+        page_size = limit
+
+    page = max(1, page)
+    page_size = max(1, min(200, page_size))
+    offset = (page - 1) * page_size
 
     cur = conn.cursor()
-    sql = """
-    SELECT j.lcsc, j.category, j.subcategory, j.mfr, j.package, j.joints,
-           j.manufacturer, j.library_type, j.preferred, j.stock, j.price,
-           j.description, j.datasheet, j.attributes, l.image, l.url_slug
-    FROM jlc_components j
-    LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
-    WHERE (j.mfr LIKE ? OR ('C' || j.lcsc) LIKE ? OR j.description LIKE ?)
-    """
-    params = [f"%{query}%", f"%{query}%", f"%{query}%"]
+    conditions = []
+    params = []
+
+    q = (query or "").strip()
+    if q:
+        # Check if user entered LCSC code e.g. "C12345" or "12345"
+        if q.upper().startswith("C") and q[1:].isdigit():
+            lcsc_num = int(q[1:])
+            conditions.append("(j.lcsc = ? OR j.mfr LIKE ?)")
+            params.extend([lcsc_num, f"%{q}%"])
+        elif q.isdigit():
+            lcsc_num = int(q)
+            conditions.append("(j.lcsc = ? OR j.mfr LIKE ?)")
+            params.extend([lcsc_num, f"%{q}%"])
+        else:
+            conditions.append("(j.mfr LIKE ? OR ('C' || j.lcsc) LIKE ? OR j.description LIKE ?)")
+            params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
 
     if category:
-        sql += " AND j.category = ?"
+        conditions.append("j.category = ?")
         params.append(category)
 
-    sql += " LIMIT ?"
-    params.append(limit)
+    if subcategory:
+        conditions.append("j.subcategory = ?")
+        params.append(subcategory)
 
-    cur.execute(sql, params)
+    if package:
+        conditions.append("j.package = ?")
+        params.append(package)
+
+    if library_type:
+        conditions.append("j.library_type = ?")
+        params.append(library_type)
+
+    if in_stock_only:
+        conditions.append("j.stock > 0")
+
+    where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # Count
+    cur.execute(f"SELECT count(*) FROM jlc_components j{where_sql}", params)
+    total = cur.fetchone()[0]
+
+    # Data
+    sql = f"""
+    SELECT j.lcsc, j.category, j.subcategory, j.mfr, j.package, j.joints,
+           j.manufacturer, j.library_type, j.preferred, j.stock, j.price,
+           j.description, j.datasheet, j.attributes, j.rohs, l.image, l.url_slug
+    FROM jlc_components j
+    LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+    {where_sql}
+    ORDER BY j.stock DESC, j.preferred DESC
+    LIMIT ? OFFSET ?
+    """
+    cur.execute(sql, params + [page_size, offset])
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -252,15 +532,80 @@ def search_jlcparts(query: str, category: Optional[str] = None, limit: int = 50)
                 r["attributes_dict"] = json.loads(r["attributes"])
             except Exception:
                 r["attributes_dict"] = {}
+        else:
+            r["attributes_dict"] = {}
 
-    return rows
+        r["price_breaks"] = parse_jlcparts_prices(r.get("price"))
+
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    return {
+        "items": rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
+
+
+def get_jlcparts_component(lcsc: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        sql = """
+        SELECT j.*, l.image, l.url_slug
+        FROM jlc_components j
+        LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+        WHERE j.lcsc = ?
+        """
+        cur.execute(sql, (lcsc,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        item = dict(row)
+
+        if item.get("image"):
+            item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{item['image']}"
+            item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{item['image']}"
+            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{item['image']}"
+        else:
+            item["image_url_small"] = None
+            item["image_url_medium"] = None
+            item["image_url_large"] = None
+
+        if item.get("attributes"):
+            try:
+                item["attributes_dict"] = json.loads(item["attributes"])
+            except Exception:
+                item["attributes_dict"] = {}
+        else:
+            item["attributes_dict"] = {}
+
+        if item.get("attrition"):
+            try:
+                item["attrition_dict"] = json.loads(item["attrition"])
+            except Exception:
+                item["attrition_dict"] = {}
+        else:
+            item["attrition_dict"] = {}
+
+        item["price_breaks"] = parse_jlcparts_prices(item.get("price"))
+        if item.get("url_slug"):
+            item["lcsc_url"] = f"https://www.lcsc.com/product-detail/{item['url_slug']}_C{item['lcsc']}.html"
+        else:
+            item["lcsc_url"] = f"https://www.lcsc.com/search?q=C{item['lcsc']}"
+
+        return item
+    finally:
+        conn.close()
 
 
 def search_all_libraries(query: str, limit_each: int = 20) -> Dict[str, Any]:
     """Unified cross-library search across Altium, KiCad, and JLCParts."""
     return {
         "query": query,
-        "altium": search_altium(query, limit=limit_each),
-        "kicad": search_kicad(query, limit=limit_each),
-        "jlcparts": search_jlcparts(query, limit=limit_each),
+        "altium": search_altium(query, page_size=limit_each).get("items", []),
+        "kicad": search_kicad(query, page_size=limit_each).get("items", []),
+        "jlcparts": search_jlcparts(query, page_size=limit_each).get("items", []),
     }

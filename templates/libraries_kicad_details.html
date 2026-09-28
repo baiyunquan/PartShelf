@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t('libraries_kicad.details_title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    {% set active_page = 'lib_kicad_details' %}
+    {% include 'partials/navbar.html' %}
+
+    <div class="container mt-5 pt-5 pb-5">
+      <!-- Breadcrumb & Back -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="/libraries/kicad" class="btn btn-outline-secondary btn-sm">
+          &larr; {{ t('libraries_common.back_to_list') }}
+        </a>
+        <span class="badge bg-secondary">KiCad Symbol Library</span>
+      </div>
+
+      <div id="loadingContainer" class="text-center py-5 text-muted">
+        {{ t('libraries_common.loading') }}
+      </div>
+
+      <div id="contentContainer" style="display: none;">
+        <!-- Header -->
+        <div class="row mb-4 align-items-center">
+          <div class="col-md-9">
+            <h2 class="fw-bold text-primary mb-1" id="symbolName">-</h2>
+            <h5 class="text-secondary mb-2" id="symbolValue">-</h5>
+            <div class="d-flex flex-wrap gap-2 align-items-center" id="headerBadges"></div>
+          </div>
+          <div class="col-md-3 text-md-end mt-3 mt-md-0" id="headerActions">
+            <!-- Datasheet button -->
+          </div>
+        </div>
+
+        <!-- Basic & Rules Cards -->
+        <div class="row g-4 mb-4">
+          <!-- Basic Properties -->
+          <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white fw-bold border-bottom">
+                {{ t('libraries_kicad.details_card_basic') }}
+              </div>
+              <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                  <tbody>
+                    <tr>
+                      <th class="text-muted" style="width: 140px;">{{ t('libraries_kicad.prop_name') }}</th>
+                      <td class="fw-bold" id="propName">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_value') }}</th>
+                      <td id="propValue">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_library') }}</th>
+                      <td><span class="badge bg-secondary" id="propLibrary">-</span></td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_reference') }}</th>
+                      <td><code id="propReference">-</code></td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_extends') }}</th>
+                      <td id="propExtends">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_footprint') }}</th>
+                      <td><code id="propFootprint">-</code></td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_source_file') }}</th>
+                      <td><small class="text-secondary" id="propSourceFile">-</small></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rules & Keywords -->
+          <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-white fw-bold border-bottom">
+                {{ t('libraries_kicad.details_card_flags') }}
+              </div>
+              <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                  <tbody>
+                    <tr>
+                      <th class="text-muted" style="width: 140px;">{{ t('libraries_kicad.prop_in_bom') }}</th>
+                      <td id="propInBom">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_on_board') }}</th>
+                      <td id="propOnBoard">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_fp_filters') }}</th>
+                      <td><code id="propFpFilters">-</code></td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_keywords') }}</th>
+                      <td id="propKeywords">-</td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted">{{ t('libraries_kicad.prop_description') }}</th>
+                      <td id="propDescription">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Structured Properties Card -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white fw-bold border-bottom">
+            {{ t('libraries_kicad.details_card_props') }}
+          </div>
+          <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 30%;">Property</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody id="propsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Raw KiCad S-Expression Code Block -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white fw-bold border-bottom d-flex justify-content-between align-items-center">
+            <span>{{ t('libraries_kicad.details_card_sexpr') }}</span>
+            <button class="btn btn-outline-secondary btn-sm" id="copySexprBtn" type="button">
+              {{ t('libraries_common.copy') }}
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <pre class="bg-dark text-light p-3 mb-0 rounded-bottom" style="max-height: 500px; overflow-y: auto; font-size: 0.85rem;"><code id="rawSexprBlock"></code></pre>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {% include 'partials/footer.html' %}
+
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script>
+      const symId = {{ sym_id }};
+      const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      let rawSexprText = '';
+
+      async function loadSymbolDetails() {
+        try {
+          const res = await fetch(`/api/libraries/kicad/${symId}`);
+          if (!res.ok) throw new Error('Not found');
+          const data = await res.json();
+          renderDetails(data);
+        } catch (e) {
+          document.getElementById('loadingContainer').innerHTML =
+            `<div class="alert alert-danger">${i18n.no_data || 'Symbol not found.'}</div>`;
+        }
+      }
+
+      function renderDetails(data) {
+        document.getElementById('loadingContainer').style.display = 'none';
+        document.getElementById('contentContainer').style.display = 'block';
+
+        document.getElementById('symbolName').textContent = data.name || '-';
+        document.getElementById('symbolValue').textContent = data.value || data.name || '';
+
+        // Badges
+        const badges = document.getElementById('headerBadges');
+        badges.innerHTML = '';
+        if (data.library) {
+          badges.innerHTML += `<span class="badge bg-secondary">${escapeHtml(data.library)}</span>`;
+        }
+        if (data.reference) {
+          badges.innerHTML += `<span class="badge bg-dark">Ref: ${escapeHtml(data.reference)}</span>`;
+        }
+        if (data.extends) {
+          badges.innerHTML += `<span class="badge bg-info text-dark">Extends: ${escapeHtml(data.extends)}</span>`;
+        }
+
+        // Basic
+        document.getElementById('propName').textContent = data.name || '-';
+        document.getElementById('propValue').textContent = data.value || '-';
+        document.getElementById('propLibrary').textContent = data.library || '-';
+        document.getElementById('propReference').textContent = data.reference || '-';
+        document.getElementById('propExtends').textContent = data.extends || '-';
+        document.getElementById('propFootprint').textContent = data.footprint || '-';
+        document.getElementById('propSourceFile').textContent = data.source_file || '-';
+
+        // Flags
+        document.getElementById('propInBom').innerHTML = data.in_bom === 1 ?
+          '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>';
+        document.getElementById('propOnBoard').innerHTML = data.on_board === 1 ?
+          '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>';
+        document.getElementById('propFpFilters').textContent = data.fp_filters || '-';
+        document.getElementById('propKeywords').textContent = data.keywords || '-';
+        document.getElementById('propDescription').textContent = data.description || '-';
+
+        // Datasheet link
+        const actions = document.getElementById('headerActions');
+        actions.innerHTML = '';
+        if (data.datasheet && data.datasheet !== '~') {
+          actions.innerHTML = `
+            <a href="${data.datasheet}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+              ${i18n.external_datasheet || 'Datasheet (PDF)'}
+            </a>`;
+        }
+
+        // Properties table
+        const propsTbody = document.getElementById('propsTableBody');
+        propsTbody.innerHTML = '';
+        const props = data.properties || {};
+        const keys = Object.keys(props);
+        if (keys.length === 0) {
+          propsTbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted py-3">${i18n.no_data || 'No properties available'}</td></tr>`;
+        } else {
+          keys.forEach(k => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="fw-bold text-secondary">${escapeHtml(k)}</td>
+              <td>${escapeHtml(String(props[k]))}</td>
+            `;
+            propsTbody.appendChild(tr);
+          });
+        }
+
+        // S-expression
+        rawSexprText = data.raw_sexpr || '';
+        document.getElementById('rawSexprBlock').textContent = rawSexprText;
+      }
+
+      document.getElementById('copySexprBtn').addEventListener('click', async () => {
+        if (!rawSexprText) return;
+        try {
+          await navigator.clipboard.writeText(rawSexprText);
+          const btn = document.getElementById('copySexprBtn');
+          const original = btn.textContent;
+          btn.textContent = i18n.copied || 'Copied!';
+          btn.className = 'btn btn-success btn-sm';
+          setTimeout(() => {
+            btn.textContent = original;
+            btn.className = 'btn btn-outline-secondary btn-sm';
+          }, 2000);
+        } catch (e) {
+          console.error('Clipboard copy failed', e);
+        }
+      });
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+      }
+
+      loadSymbolDetails();
+    </script>
+  </body>
+</html>

@@ -33,9 +33,17 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "projects.html": "projects",
         "project_details.html": "project_details",
         "procurement.html": "procurement",
+        "libraries_altium.html": "libraries_altium",
+        "libraries_altium_details.html": "libraries_altium",
+        "libraries_kicad.html": "libraries_kicad",
+        "libraries_kicad_details.html": "libraries_kicad",
+        "libraries_jlcparts.html": "libraries_jlcparts",
+        "libraries_jlcparts_details.html": "libraries_jlcparts",
     }
     if name in sections:
-        context["page_translations"] = i18n.get_section(sections[name], lang)
+        page_dict = i18n.get_section(sections[name], lang)
+        common_dict = i18n.get_section("libraries_common", lang)
+        context["page_translations"] = {**common_dict, **page_dict}
     
     response = templates.TemplateResponse(request=request, name=name, context=context)
     if "lang" in request.query_params:
@@ -83,3 +91,55 @@ def get_project_details_template(request: Request):
 @router.get("/procurement", response_class=HTMLResponse)
 def get_procurement_template(request: Request):
     return render_template(request=request, name="procurement.html", context={"active_page": "procurement"})
+
+# ==========================================
+# Component Libraries Routes
+# ==========================================
+
+@router.get("/libraries/altium", response_class=HTMLResponse)
+def get_altium_library_template(request: Request):
+    return render_template(
+        request=request,
+        name="libraries_altium.html",
+        context={"active_page": "lib_altium", "active_lib": "altium"}
+    )
+
+@router.get("/libraries/altium/{comp_id}", response_class=HTMLResponse)
+def get_altium_details_template(request: Request, comp_id: int):
+    return render_template(
+        request=request,
+        name="libraries_altium_details.html",
+        context={"active_page": "lib_altium_details", "active_lib": "altium", "comp_id": comp_id}
+    )
+
+@router.get("/libraries/kicad", response_class=HTMLResponse)
+def get_kicad_library_template(request: Request):
+    return render_template(
+        request=request,
+        name="libraries_kicad.html",
+        context={"active_page": "lib_kicad", "active_lib": "kicad"}
+    )
+
+@router.get("/libraries/kicad/{sym_id}", response_class=HTMLResponse)
+def get_kicad_details_template(request: Request, sym_id: int):
+    return render_template(
+        request=request,
+        name="libraries_kicad_details.html",
+        context={"active_page": "lib_kicad_details", "active_lib": "kicad", "sym_id": sym_id}
+    )
+
+@router.get("/libraries/jlcparts", response_class=HTMLResponse)
+def get_jlcparts_library_template(request: Request):
+    return render_template(
+        request=request,
+        name="libraries_jlcparts.html",
+        context={"active_page": "lib_jlcparts", "active_lib": "jlcparts"}
+    )
+
+@router.get("/libraries/jlcparts/{lcsc}", response_class=HTMLResponse)
+def get_jlcparts_details_template(request: Request, lcsc: int):
+    return render_template(
+        request=request,
+        name="libraries_jlcparts_details.html",
+        context={"active_page": "lib_jlcparts_details", "active_lib": "jlcparts", "lcsc": lcsc}
+    )

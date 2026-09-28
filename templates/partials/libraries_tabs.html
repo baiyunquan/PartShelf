@@ -1,0 +1,21 @@
+<div class="row mb-3">
+  <div class="col-12">
+    <ul class="nav nav-pills bg-white p-2 rounded shadow-sm border">
+      <li class="nav-item me-2">
+        <a class="nav-link {% if active_lib == 'altium' %}active fw-bold{% else %}text-secondary{% endif %}" href="/libraries/altium">
+          {{ t('libraries_common.tab_altium') }}
+        </a>
+      </li>
+      <li class="nav-item me-2">
+        <a class="nav-link {% if active_lib == 'kicad' %}active fw-bold{% else %}text-secondary{% endif %}" href="/libraries/kicad">
+          {{ t('libraries_common.tab_kicad') }}
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_lib == 'jlcparts' %}active fw-bold{% else %}text-secondary{% endif %}" href="/libraries/jlcparts">
+          {{ t('libraries_common.tab_jlcparts') }}
+        </a>
+      </li>
+    </ul>
+  </div>
+</div>

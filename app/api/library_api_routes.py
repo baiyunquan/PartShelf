@@ -27,44 +27,141 @@ def search_libraries(
     """
     target = target.lower()
     if target == "altium":
-        return {"altium": lib_svc.search_altium(q, limit=limit)}
+        return {"altium": lib_svc.search_altium(q, page_size=limit)}
     elif target == "kicad":
-        return {"kicad": lib_svc.search_kicad(q, limit=limit)}
+        return {"kicad": lib_svc.search_kicad(q, page_size=limit)}
     elif target == "jlcparts":
-        return {"jlcparts": lib_svc.search_jlcparts(q, limit=limit)}
+        return {"jlcparts": lib_svc.search_jlcparts(q, page_size=limit)}
     else:
         return lib_svc.search_all_libraries(q, limit_each=limit)
 
 
+# ==========================================
+# Altium Endpoints
+# ==========================================
+
+@router.get("/altium/categories")
+def get_altium_categories():
+    """Get distinct component categories available in Altium libraries."""
+    return lib_svc.get_altium_categories()
+
+
+@router.get("/altium/packages")
+def get_altium_packages():
+    """Get distinct packages available in Altium libraries."""
+    return lib_svc.get_altium_packages()
+
+
 @router.get("/altium")
 def search_altium_library(
-    q: str = Query(..., min_length=1),
-    category: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=200)
+    q: Optional[str] = Query("", description="Keyword, part number or LCSC code"),
+    category: Optional[str] = Query(None),
+    package: Optional[str] = Query(None),
+    basic_only: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200)
 ):
-    """Search specifically within Altium JLCPCB component libraries."""
-    return lib_svc.search_altium(q, category=category, limit=limit)
+    """Search or list Altium JLCPCB components with pagination and filtering."""
+    return lib_svc.search_altium(
+        query=q or "",
+        category=category,
+        package=package,
+        basic_only=basic_only,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/altium/{comp_id}")
+def get_altium_component_detail(comp_id: int):
+    """Get full details of a specific Altium component including all parameters."""
+    item = lib_svc.get_altium_component(comp_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Altium component not found")
+    return item
+
+
+# ==========================================
+# KiCad Endpoints
+# ==========================================
+
+@router.get("/kicad/libraries")
+def get_kicad_libraries():
+    """Get list of distinct library categories available in KiCad symbol libraries."""
+    return lib_svc.get_kicad_libraries()
 
 
 @router.get("/kicad")
 def search_kicad_library(
-    q: str = Query(..., min_length=1),
-    library: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=200)
+    q: Optional[str] = Query("", description="Keyword, symbol name or description"),
+    library: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200)
 ):
-    """Search specifically within KiCad symbol libraries."""
-    return lib_svc.search_kicad(q, library=library, limit=limit)
+    """Search or list KiCad symbols with pagination and filtering."""
+    return lib_svc.search_kicad(
+        query=q or "",
+        library=library,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/kicad/{symbol_id}")
+def get_kicad_symbol_detail(symbol_id: int):
+    """Get full details of a specific KiCad symbol including raw S-expression."""
+    item = lib_svc.get_kicad_symbol(symbol_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="KiCad symbol not found")
+    return item
+
+
+# ==========================================
+# JLCParts Endpoints
+# ==========================================
+
+@router.get("/jlcparts/categories")
+def get_jlcparts_categories():
+    """Get hierarchical categories and subcategories from JLCParts database."""
+    return lib_svc.get_jlcparts_categories()
 
 
 @router.get("/jlcparts")
 def search_jlcparts_library(
-    q: str = Query(..., min_length=1),
-    category: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=200)
+    q: Optional[str] = Query("", description="Keyword, part number or LCSC code"),
+    category: Optional[str] = Query(None),
+    subcategory: Optional[str] = Query(None),
+    package: Optional[str] = Query(None),
+    library_type: Optional[str] = Query(None),
+    in_stock_only: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200)
 ):
-    """Search specifically within JLCParts database (includes image URLs and pricing)."""
-    return lib_svc.search_jlcparts(q, category=category, limit=limit)
+    """Search or list JLCParts components with pagination, stock and category filtering."""
+    return lib_svc.search_jlcparts(
+        query=q or "",
+        category=category,
+        subcategory=subcategory,
+        package=package,
+        library_type=library_type,
+        in_stock_only=in_stock_only,
+        page=page,
+        page_size=page_size
+    )
 
+
+@router.get("/jlcparts/{lcsc}")
+def get_jlcparts_component_detail(lcsc: int):
+    """Get full details of a specific JLCParts component including all attributes and pricing."""
+    item = lib_svc.get_jlcparts_component(lcsc)
+    if not item:
+        raise HTTPException(status_code=404, detail="JLCParts component not found")
+    return item
+
+
+# ==========================================
+# Import to Inventory (Backend hook)
+# ==========================================
 
 @router.post("/import_to_inventory")
 def import_external_to_inventory(
@@ -74,54 +171,58 @@ def import_external_to_inventory(
     db: Session = Depends(get_db)
 ):
     """
-    Optionally import an external component into PartShelf's local inventory database (partshelf.db).
+    Import an external component into PartShelf's local inventory database (partshelf.db).
     """
     part_name = ""
     package_name = ""
     type_name = ""
     mfr_name = ""
+    desc = ""
 
     if source == "jlcparts":
-        results = lib_svc.search_jlcparts(part_id, limit=1)
-        if not results:
+        lcsc_num = int(part_id.replace("C", "")) if part_id.replace("C", "").isdigit() else 0
+        item = lib_svc.get_jlcparts_component(lcsc_num)
+        if not item:
             raise HTTPException(status_code=404, detail="Component not found in JLCParts")
-        item = results[0]
         part_name = item.get("mfr") or f"C{item.get('lcsc')}"
         package_name = item.get("package") or "Standard"
         type_name = item.get("category") or "General"
         mfr_name = item.get("manufacturer") or "Unknown"
+        desc = item.get("description") or f"LCSC: C{item.get('lcsc')}"
 
     elif source == "altium":
-        results = lib_svc.search_altium(part_id, limit=1)
-        if not results:
+        comp_id = int(part_id) if part_id.isdigit() else 0
+        item = lib_svc.get_altium_component(comp_id)
+        if not item:
             raise HTTPException(status_code=404, detail="Component not found in Altium library")
-        item = results[0]
         part_name = item.get("mfr_part_number") or item.get("lib_reference")
         package_name = item.get("package") or "Standard"
         type_name = item.get("category") or "General"
-        mfr_name = item.get("manufacturer") or "Unknown"
+        mfr_name = item.get("manufacturer") or "Generic"
+        desc = item.get("description") or f"Altium: {item.get('lib_reference')}"
 
     elif source == "kicad":
-        results = lib_svc.search_kicad(part_id, limit=1)
-        if not results:
-            raise HTTPException(status_code=404, detail="Symbol not found in KiCad symbols")
-        item = results[0]
-        part_name = item.get("name") or item.get("value")
-        package_name = item.get("footprint") or "Standard"
+        sym_id = int(part_id) if part_id.isdigit() else 0
+        item = lib_svc.get_kicad_symbol(sym_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Symbol not found in KiCad libraries")
+        part_name = item.get("value") or item.get("name")
+        package_name = item.get("footprint") or "Symbol"
         type_name = item.get("library") or "General"
-        mfr_name = "KiCad Standard"
-
+        mfr_name = "Generic"
+        desc = item.get("description") or f"KiCad: {item.get('name')}"
     else:
         raise HTTPException(status_code=400, detail="Invalid source library")
 
-    inv_svc = InventoryService(db)
-    inv_item = inv_svc.create_part(
-        PartToInventoryAdd(
-            name=part_name,
-            package=package_name,
-            part_type=type_name,
-            manufacturer=mfr_name,
-            quantity=quantity
-        )
+    svc = InventoryService(db)
+    part_in = PartToInventoryAdd(
+        name=part_name,
+        package=package_name,
+        part_type=type_name,
+        manufacturer=mfr_name,
+        quantity=quantity,
+        description=desc,
+        project_ids=[]
     )
-    return {"message": "Imported to local inventory successfully", "part_id": inv_item.id}
+    result = svc.add_part_to_inventory(part_in)
+    return {"status": "success", "part": result}

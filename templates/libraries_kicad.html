@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t('libraries_kicad.title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    {% set active_page = 'lib_kicad' %}
+    {% include 'partials/navbar.html' %}
+
+    <div class="container mt-5 pt-5 pb-5">
+      <!-- Tabs Header -->
+      {% set active_lib = 'kicad' %}
+      {% include 'partials/libraries_tabs.html' %}
+
+      <!-- Heading -->
+      <div class="row mb-3 align-items-center">
+        <div class="col-md-8">
+          <h2 class="fw-bold mb-1">{{ t('libraries_kicad.heading') }}</h2>
+          <p class="text-muted mb-0">{{ t('libraries_kicad.subtitle') }}</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-2 mt-md-0">
+          <span class="badge bg-primary fs-6" id="totalCountBadge">0</span>
+        </div>
+      </div>
+
+      <!-- Search & Filters Card -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+          <form id="filterForm" class="row g-2 align-items-center">
+            <div class="col-lg-5 col-md-6">
+              <div class="input-group">
+                <input type="text" class="form-control" id="searchInput" placeholder="{{ t('libraries_common.search_input_placeholder') }}">
+                <button class="btn btn-primary" type="submit">{{ t('libraries_common.btn_search') }}</button>
+              </div>
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <select class="form-select" id="libraryFilter">
+                <option value="">{{ t('libraries_kicad.filter_library') }}</option>
+              </select>
+            </div>
+            <div class="col-lg-3 col-md-12 d-flex gap-2">
+              <select class="form-select" id="pageSizeSelect" style="max-width: 90px;">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+              <button class="btn btn-outline-secondary flex-grow-1" type="button" id="resetBtn">
+                {{ t('libraries_common.btn_reset') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Parts Table -->
+      <div class="table-responsive shadow-sm rounded bg-white">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th scope="col" style="min-width: 150px;">{{ t('libraries_kicad.th_name') }}</th>
+              <th scope="col" style="min-width: 120px;">{{ t('libraries_kicad.th_library') }}</th>
+              <th scope="col" style="width: 90px;">{{ t('libraries_kicad.th_reference') }}</th>
+              <th scope="col" style="min-width: 120px;">{{ t('libraries_kicad.th_extends') }}</th>
+              <th scope="col" style="min-width: 160px;">{{ t('libraries_kicad.th_footprint') }}</th>
+              <th scope="col">{{ t('libraries_kicad.th_description') }}</th>
+              <th scope="col" style="width: 100px;" class="text-end">{{ t('libraries_kicad.th_actions') }}</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr>
+              <td colspan="7" class="text-center py-5 text-muted">{{ t('libraries_common.loading') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+        <div class="text-muted small" id="paginationInfo"></div>
+        <nav aria-label="Page navigation">
+          <ul class="pagination pagination-sm mb-0" id="paginationNav"></ul>
+        </nav>
+      </div>
+
+    </div>
+
+    {% include 'partials/footer.html' %}
+
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script>
+      const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      let currentPage = 1;
+
+      async function loadLibraries() {
+        try {
+          const res = await fetch('/api/libraries/kicad/libraries');
+          const libs = await res.json();
+          const select = document.getElementById('libraryFilter');
+          libs.forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l;
+            opt.textContent = l;
+            select.appendChild(opt);
+          });
+        } catch (e) {
+          console.error('Failed to load libraries', e);
+        }
+      }
+
+      async function fetchSymbols(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">${i18n.loading || 'Loading...'}</td></tr>`;
+
+        const q = document.getElementById('searchInput').value.trim();
+        const lib = document.getElementById('libraryFilter').value;
+        const pageSize = document.getElementById('pageSizeSelect').value;
+
+        const params = new URLSearchParams({
+          q: q,
+          page: page,
+          page_size: pageSize
+        });
+        if (lib) params.append('library', lib);
+
+        try {
+          const res = await fetch(`/api/libraries/kicad?${params.toString()}`);
+          const data = await res.json();
+          renderTable(data);
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger">Error loading data</td></tr>`;
+        }
+      }
+
+      function renderTable(data) {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        document.getElementById('totalCountBadge').textContent = (data.total || 0).toLocaleString();
+
+        if (!data.items || data.items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">${i18n.no_data || 'No records found'}</td></tr>`;
+          document.getElementById('paginationInfo').textContent = '';
+          document.getElementById('paginationNav').innerHTML = '';
+          return;
+        }
+
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          const descText = item.description || (item.keywords ? `Keywords: ${item.keywords}` : '-');
+
+          tr.innerHTML = `
+            <td>
+              <a href="/libraries/kicad/${item.id}" class="fw-bold text-decoration-none text-primary">
+                ${escapeHtml(item.name)}
+              </a>
+            </td>
+            <td><span class="badge bg-secondary">${escapeHtml(item.library)}</span></td>
+            <td><code>${escapeHtml(item.reference || '-')}</code></td>
+            <td><small class="text-muted">${escapeHtml(item.extends || '-')}</small></td>
+            <td><small class="text-dark"><code>${escapeHtml(item.footprint || '-')}</code></small></td>
+            <td><small class="text-secondary">${escapeHtml(descText)}</small></td>
+            <td class="text-end">
+              <a href="/libraries/kicad/${item.id}" class="btn btn-outline-primary btn-sm text-nowrap">
+                ${i18n.view_details || 'Details'}
+              </a>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        renderPagination(data);
+      }
+
+      function renderPagination(data) {
+        const infoEl = document.getElementById('paginationInfo');
+        const navEl = document.getElementById('paginationNav');
+        navEl.innerHTML = '';
+
+        const template = i18n.pagination_info || 'Total {total}, page {page} of {total_pages}';
+        infoEl.textContent = template
+          .replace('{total}', (data.total || 0).toLocaleString())
+          .replace('{page}', data.page)
+          .replace('{total_pages}', data.total_pages);
+
+        if (data.total_pages <= 1) return;
+
+        const createPageItem = (pageNum, text, isActive = false, isDisabled = false) => {
+          const li = document.createElement('li');
+          li.className = `page-item ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`;
+          const a = document.createElement('a');
+          a.className = 'page-link';
+          a.href = '#';
+          a.textContent = text;
+          if (!isDisabled && !isActive) {
+            a.onclick = (e) => {
+              e.preventDefault();
+              fetchSymbols(pageNum);
+            };
+          }
+          li.appendChild(a);
+          return li;
+        };
+
+        navEl.appendChild(createPageItem(data.page - 1, i18n.prev_page || 'Prev', false, data.page <= 1));
+
+        const startPage = Math.max(1, data.page - 2);
+        const endPage = Math.min(data.total_pages, data.page + 2);
+
+        if (startPage > 1) {
+          navEl.appendChild(createPageItem(1, '1'));
+          if (startPage > 2) {
+            const ellipsis = document.createElement('li');
+            ellipsis.className = 'page-item disabled';
+            ellipsis.innerHTML = '<span class="page-link">...</span>';
+            navEl.appendChild(ellipsis);
+          }
+        }
+
+        for (let p = startPage; p <= endPage; p++) {
+          navEl.appendChild(createPageItem(p, p.toString(), p === data.page));
+        }
+
+        if (endPage < data.total_pages) {
+          if (endPage < data.total_pages - 1) {
+            const ellipsis = document.createElement('li');
+            ellipsis.className = 'page-item disabled';
+            ellipsis.innerHTML = '<span class="page-link">...</span>';
+            navEl.appendChild(ellipsis);
+          }
+          navEl.appendChild(createPageItem(data.total_pages, data.total_pages.toString()));
+        }
+
+        navEl.appendChild(createPageItem(data.page + 1, i18n.next_page || 'Next', false, data.page >= data.total_pages));
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+      }
+
+      document.getElementById('filterForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        fetchSymbols(1);
+      });
+
+      document.getElementById('libraryFilter').addEventListener('change', () => fetchSymbols(1));
+      document.getElementById('pageSizeSelect').addEventListener('change', () => fetchSymbols(1));
+
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('libraryFilter').value = '';
+        fetchSymbols(1);
+      });
+
+      // Init
+      loadLibraries();
+      fetchSymbols(1);
+    </script>
+  </body>
+</html>

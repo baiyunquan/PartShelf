@@ -51,6 +51,25 @@
               {{ t('app.nav_procurement') }}
             </a>
           </li>
+          <li class="nav-item mb-2">
+            <hr class="border-secondary my-2">
+            <div class="text-uppercase small text-secondary fw-bold px-3 mb-2">{{ t('app.nav_libraries_section') }}</div>
+          </li>
+          <li class="nav-item mb-1 ps-2">
+            <a class="nav-link {% if active_page == 'lib_altium' or active_page == 'lib_altium_details' %}active{% endif %}" {% if active_page == 'lib_altium' %}aria-current="page"{% endif %} href="/libraries/altium">
+              {{ t('app.nav_lib_altium') }}
+            </a>
+          </li>
+          <li class="nav-item mb-1 ps-2">
+            <a class="nav-link {% if active_page == 'lib_kicad' or active_page == 'lib_kicad_details' %}active{% endif %}" {% if active_page == 'lib_kicad' %}aria-current="page"{% endif %} href="/libraries/kicad">
+              {{ t('app.nav_lib_kicad') }}
+            </a>
+          </li>
+          <li class="nav-item mb-1 ps-2">
+            <a class="nav-link {% if active_page == 'lib_jlcparts' or active_page == 'lib_jlcparts_details' %}active{% endif %}" {% if active_page == 'lib_jlcparts' %}aria-current="page"{% endif %} href="/libraries/jlcparts">
+              {{ t('app.nav_lib_jlcparts') }}
+            </a>
+          </li>
         </ul>
       </div>
     </div>
