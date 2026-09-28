@@ -69,12 +69,12 @@
         <table class="table table-hover align-middle mb-0">
           <thead class="table-dark">
             <tr>
-              <th scope="col" style="min-width: 160px;">{{ t('libraries_altium.th_lib_ref') }}</th>
-              <th scope="col" style="min-width: 100px;">{{ t('libraries_altium.th_lcsc_part') }}</th>
-              <th scope="col" style="min-width: 130px;">{{ t('libraries_altium.th_category') }}</th>
+              <th scope="col" style="min-width: 170px;">{{ t('libraries_altium.th_specs') }}</th>
               <th scope="col" style="min-width: 110px;">{{ t('libraries_altium.th_package') }}</th>
+              <th scope="col" style="min-width: 160px;">{{ t('libraries_altium.th_lib_ref') }}</th>
+              <th scope="col" style="min-width: 130px;">{{ t('libraries_altium.th_category') }}</th>
               <th scope="col" style="min-width: 120px;">{{ t('libraries_altium.th_manufacturer') }}</th>
-              <th scope="col" style="min-width: 180px;">{{ t('libraries_altium.th_specs') }}</th>
+              <th scope="col" style="min-width: 100px;">{{ t('libraries_altium.th_lcsc_part') }}</th>
               <th scope="col" style="width: 100px;">{{ t('libraries_altium.th_type') }}</th>
               <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
             </tr>
@@ -181,18 +181,18 @@
           const badgeText = isBasic ? (i18n.badge_basic || 'Basic') : (i18n.badge_extended || 'Extended');
 
           tr.innerHTML = `
+            <td><strong class="text-dark">${escapeHtml(formatSpecs(item))}</strong></td>
+            <td><code>${escapeHtml(item.package || '-')}</code></td>
             <td>
               <a href="/libraries/altium/${item.id}" class="fw-bold text-decoration-none text-primary">
                 ${escapeHtml(item.lib_reference || '-')}
               </a>
             </td>
+            <td><small class="text-secondary" title="${escapeHtml(item.category || '')}">${escapeHtml(item.category_localized || item.category || '-')}</small></td>
+            <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
             <td>
               ${item.lcsc_part ? `<span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part)}</span>` : '-'}
             </td>
-            <td><small class="text-secondary" title="${escapeHtml(item.category || '')}">${escapeHtml(item.category_localized || item.category || '-')}</small></td>
-            <td><code>${escapeHtml(item.package || '-')}</code></td>
-            <td><small>${escapeHtml(item.manufacturer || '-')}</small></td>
-            <td><small class="text-dark">${escapeHtml(formatSpecs(item))}</small></td>
             <td><span class="badge ${badgeClass}">${badgeText}</span></td>
             <td class="text-end">
               <div class="d-inline-flex gap-1">

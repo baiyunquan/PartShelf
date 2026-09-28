@@ -167,16 +167,19 @@
                 <thead class="table-light">
                   <tr>
                     <th style="width: 60px;">{{ t('libraries_jlcparts.th_image') }}</th>
-                    <th style="width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
+                    <th style="min-width: 150px;">{{ t('libraries_jlcparts.th_specs') }}</th>
+                    <th style="width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
                     <th>{{ t('libraries_jlcparts.th_mfr') }}</th>
-                    <th style="width: 140px;">{{ t('libraries_jlcparts.th_package') }}</th>
-                    <th style="width: 100px;">{{ t('libraries_jlcparts.th_stock') }}</th>
-                    <th style="width: 100px;">{{ t('libraries_jlcparts.th_price') }}</th>
-                    <th style="width: 160px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
+                    <th style="min-width: 140px;">{{ t('libraries_jlcparts.th_category') }}</th>
+                    <th style="min-width: 110px;">{{ t('libraries_jlcparts.th_manufacturer') }}</th>
+                    <th style="width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
+                    <th style="width: 90px;">{{ t('libraries_jlcparts.th_stock') }}</th>
+                    <th style="width: 90px;">{{ t('libraries_jlcparts.th_price') }}</th>
+                    <th style="width: 150px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-jlcparts-body">
-                  <tr><td colspan="7" class="text-center py-3 text-muted">No data</td></tr>
+                  <tr><td colspan="10" class="text-center py-3 text-muted">No data</td></tr>
                 </tbody>
               </table>
             </div>
@@ -198,15 +201,17 @@
               <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                   <tr>
+                    <th style="min-width: 160px;">{{ t('libraries_altium.th_specs') }}</th>
+                    <th style="width: 110px;">{{ t('libraries_altium.th_package') }}</th>
                     <th>{{ t('libraries_altium.th_lib_ref') }}</th>
-                    <th style="width: 120px;">{{ t('libraries_altium.th_lcsc_part') }}</th>
-                    <th style="width: 140px;">{{ t('libraries_altium.th_package') }}</th>
-                    <th>{{ t('libraries_altium.th_manufacturer') }}</th>
-                    <th style="width: 160px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
+                    <th style="min-width: 130px;">{{ t('libraries_altium.th_category') }}</th>
+                    <th style="min-width: 120px;">{{ t('libraries_altium.th_manufacturer') }}</th>
+                    <th style="width: 110px;">{{ t('libraries_altium.th_lcsc_part') }}</th>
+                    <th style="width: 150px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-altium-body">
-                  <tr><td colspan="5" class="text-center py-3 text-muted">No data</td></tr>
+                  <tr><td colspan="7" class="text-center py-3 text-muted">No data</td></tr>
                 </tbody>
               </table>
             </div>
@@ -299,6 +304,18 @@
         return String(str).replace(/[&<>"']/g, m => ({
           '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         })[m]);
+      }
+
+      function formatAltiumSpecs(item) {
+        const parts = [];
+        if (item.resistance) parts.push(item.resistance);
+        if (item.capacitance) parts.push(item.capacitance);
+        if (item.inductance) parts.push(item.inductance);
+        if (item.tolerance) parts.push(item.tolerance);
+        if (item.voltage_rating) parts.push(item.voltage_rating);
+        if (item.power_rating) parts.push(item.power_rating);
+        if (parts.length > 0) return parts.join(', ');
+        return item.description ? (item.description.length > 35 ? item.description.substring(0, 33) + '...' : item.description) : '-';
       }
 
       function updateUrl() {
@@ -406,7 +423,7 @@
         jlcBody.innerHTML = '';
         const jlcItems = data.jlcparts?.items || [];
         if (jlcItems.length === 0) {
-          jlcBody.innerHTML = `<tr><td colspan="7" class="text-center py-3 text-muted">No JLCPCB matches</td></tr>`;
+          jlcBody.innerHTML = `<tr><td colspan="10" class="text-center py-3 text-muted">No JLCPCB matches</td></tr>`;
         } else {
           jlcItems.forEach(item => {
             const tr = document.createElement('tr');
@@ -417,12 +434,17 @@
             const price = item.price_breaks && item.price_breaks[0] ? `$${item.price_breaks[0].price}` : '-';
             tr.innerHTML = `
               <td>${imgHtml}</td>
-              <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
+              <td><strong class="text-dark">${escapeHtml(item.specs || '-')}</strong></td>
+              <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td>
                 <a href="/libraries/jlcparts/${item.lcsc}" class="fw-bold text-decoration-none text-primary d-block">${escapeHtml(item.mfr || '-')}</a>
-                <small class="text-secondary">${escapeHtml(item.category || '')}</small>
               </td>
-              <td><code>${escapeHtml(item.package || '-')}</code></td>
+              <td>
+                <small class="d-block fw-bold text-dark">${escapeHtml(item.category_localized || item.category || '-')}</small>
+                <small class="text-secondary">${escapeHtml(item.subcategory_localized || item.subcategory || '')}</small>
+              </td>
+              <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
+              <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
               <td><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
               <td><small class="fw-bold text-dark">${price}</small></td>
               <td class="text-end">
@@ -443,18 +465,19 @@
         altiumBody.innerHTML = '';
         const altiumItems = data.altium?.items || [];
         if (altiumItems.length === 0) {
-          altiumBody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-muted">No Altium matches</td></tr>`;
+          altiumBody.innerHTML = `<tr><td colspan="7" class="text-center py-3 text-muted">No Altium matches</td></tr>`;
         } else {
           altiumItems.forEach(item => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+              <td><strong class="text-dark">${escapeHtml(formatAltiumSpecs(item))}</strong></td>
+              <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td>
                 <a href="/libraries/altium/${item.id}" class="fw-bold text-decoration-none text-primary d-block">${escapeHtml(item.lib_reference || '-')}</a>
-                <small class="text-muted">${escapeHtml(item.description || '')}</small>
               </td>
-              <td><span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part || '-')}</span></td>
-              <td><code>${escapeHtml(item.package || '-')}</code></td>
+              <td><small class="text-secondary">${escapeHtml(item.category_localized || item.category || '-')}</small></td>
               <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
+              <td><span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part || '-')}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1">
                   <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('altium', '${item.id}', '${escapeHtml(item.lib_reference || '')}', '${escapeHtml(item.package || '')}')">
@@ -549,12 +572,15 @@
           thead.innerHTML = `
             <tr>
               <th style="width: 60px;">${I18N.th_image || 'Image'}</th>
-              <th style="width: 100px;">${I18N.th_lcsc || 'LCSC #'}</th>
+              <th style="min-width: 150px;">${I18N.th_specs || 'Specs'}</th>
+              <th style="width: 110px;">${I18N.th_package || 'Package'}</th>
               <th>${I18N.th_mfr || 'Part Number'}</th>
-              <th style="width: 140px;">${I18N.th_package || 'Package'}</th>
-              <th style="width: 100px;">${I18N.th_stock || 'Stock'}</th>
-              <th style="width: 100px;">${I18N.th_price || 'Price'}</th>
-              <th style="width: 160px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th style="min-width: 140px;">${I18N.th_category || 'Category'}</th>
+              <th style="min-width: 110px;">${I18N.th_manufacturer || 'Manufacturer'}</th>
+              <th style="width: 100px;">${I18N.th_lcsc || 'LCSC #'}</th>
+              <th style="width: 90px;">${I18N.th_stock || 'Stock'}</th>
+              <th style="width: 90px;">${I18N.th_price || 'Price'}</th>
+              <th style="width: 150px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
@@ -566,12 +592,17 @@
             const price = item.price_breaks && item.price_breaks[0] ? `$${item.price_breaks[0].price}` : '-';
             tr.innerHTML = `
               <td>${imgHtml}</td>
-              <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
+              <td><strong class="text-dark">${escapeHtml(item.specs || '-')}</strong></td>
+              <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td>
                 <a href="/libraries/jlcparts/${item.lcsc}" class="fw-bold text-decoration-none text-primary d-block">${escapeHtml(item.mfr || '-')}</a>
-                <small class="text-secondary">${escapeHtml(item.category || '')}</small>
               </td>
-              <td><code>${escapeHtml(item.package || '-')}</code></td>
+              <td>
+                <small class="d-block fw-bold text-dark">${escapeHtml(item.category_localized || item.category || '-')}</small>
+                <small class="text-secondary">${escapeHtml(item.subcategory_localized || item.subcategory || '')}</small>
+              </td>
+              <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
+              <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
               <td><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
               <td><small class="fw-bold text-dark">${price}</small></td>
               <td class="text-end">
@@ -589,23 +620,26 @@
           document.getElementById('singleViewTitle').textContent = I18N.tab_altium || 'Altium Libraries';
           thead.innerHTML = `
             <tr>
+              <th style="min-width: 160px;">${I18N.th_specs || 'Specs'}</th>
+              <th style="width: 110px;">${I18N.th_package || 'Package'}</th>
               <th>${I18N.th_lib_ref || 'Library Ref'}</th>
-              <th style="width: 120px;">${I18N.th_lcsc_part || 'LCSC Part'}</th>
-              <th style="width: 140px;">${I18N.th_package || 'Package'}</th>
-              <th>${I18N.th_manufacturer || 'Manufacturer'}</th>
-              <th style="width: 160px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th style="min-width: 130px;">${I18N.th_category || 'Category'}</th>
+              <th style="min-width: 120px;">${I18N.th_manufacturer || 'Manufacturer'}</th>
+              <th style="width: 110px;">${I18N.th_lcsc_part || 'LCSC Part'}</th>
+              <th style="width: 150px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+              <td><strong class="text-dark">${escapeHtml(formatAltiumSpecs(item))}</strong></td>
+              <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td>
                 <a href="/libraries/altium/${item.id}" class="fw-bold text-decoration-none text-primary d-block">${escapeHtml(item.lib_reference || '-')}</a>
-                <small class="text-muted">${escapeHtml(item.description || '')}</small>
               </td>
-              <td><span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part || '-')}</span></td>
-              <td><code>${escapeHtml(item.package || '-')}</code></td>
+              <td><small class="text-secondary">${escapeHtml(item.category_localized || item.category || '-')}</small></td>
               <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
+              <td><span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part || '-')}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1">
                   <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('altium', '${item.id}', '${escapeHtml(item.lib_reference || '')}', '${escapeHtml(item.package || '')}')">

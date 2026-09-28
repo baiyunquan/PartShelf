@@ -39,7 +39,17 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
     if name in sections:
         page_dict = i18n.get_section(sections[name], lang)
         common_dict = i18n.get_section("libraries_common", lang)
-        context["page_translations"] = {**common_dict, **page_dict}
+        if name == "search.html":
+            context["page_translations"] = {
+                **common_dict,
+                **i18n.get_section("inventory", lang),
+                **i18n.get_section("libraries_altium", lang),
+                **i18n.get_section("libraries_jlcparts", lang),
+                **i18n.get_section("libraries_kicad", lang),
+                **page_dict,
+            }
+        else:
+            context["page_translations"] = {**common_dict, **page_dict}
     
     response = templates.TemplateResponse(request=request, name=name, context=context)
     if "lang" in request.query_params:

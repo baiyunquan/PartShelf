@@ -81,10 +81,12 @@
           <thead class="table-dark">
             <tr>
               <th scope="col" style="width: 70px;">{{ t('libraries_jlcparts.th_image') }}</th>
-              <th scope="col" style="min-width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
+              <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_specs') }}</th>
+              <th scope="col" style="min-width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
               <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_mfr') }}</th>
               <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_category') }}</th>
-              <th scope="col" style="min-width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
+              <th scope="col" style="min-width: 120px;">{{ t('libraries_jlcparts.th_manufacturer') }}</th>
+              <th scope="col" style="min-width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
               <th scope="col" style="width: 100px;">{{ t('libraries_jlcparts.th_stock') }}</th>
               <th scope="col" style="min-width: 120px;">{{ t('libraries_jlcparts.th_price') }}</th>
               <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
@@ -92,7 +94,7 @@
           </thead>
           <tbody id="tableBody">
             <tr>
-              <td colspan="8" class="text-center py-5 text-muted">{{ t('libraries_common.loading') }}</td>
+              <td colspan="10" class="text-center py-5 text-muted">{{ t('libraries_common.loading') }}</td>
             </tr>
           </tbody>
         </table>
@@ -159,7 +161,7 @@
       async function fetchParts(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">${i18n.loading || 'Loading...'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted">${i18n.loading || 'Loading...'}</td></tr>`;
 
         const q = document.getElementById('searchInput').value.trim();
         const cat = document.getElementById('categoryFilter').value;
@@ -183,7 +185,7 @@
           const data = await res.json();
           renderTable(data);
         } catch (e) {
-          tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">Error loading data</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-danger">Error loading data</td></tr>`;
         }
       }
 
@@ -194,7 +196,7 @@
         document.getElementById('totalCountBadge').textContent = (data.total || 0).toLocaleString();
 
         if (!data.items || data.items.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">${i18n.no_data || 'No records found'}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted">${i18n.no_data || 'No records found'}</td></tr>`;
           document.getElementById('paginationInfo').textContent = '';
           document.getElementById('paginationNav').innerHTML = '';
           return;
@@ -222,11 +224,8 @@
 
           tr.innerHTML = `
             <td class="text-center">${imgHtml}</td>
-            <td>
-              <a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">
-                C${item.lcsc}
-              </a>
-            </td>
+            <td><strong class="text-dark">${escapeHtml(item.specs || '-')}</strong></td>
+            <td><code>${escapeHtml(item.package || '-')}</code></td>
             <td>
               <a href="/libraries/jlcparts/${item.lcsc}" class="fw-bold text-decoration-none text-primary d-block">
                 ${escapeHtml(item.mfr || '-')}
@@ -237,7 +236,12 @@
               <small class="d-block fw-bold text-dark" title="${escapeHtml(item.category || '')}">${escapeHtml(item.category_localized || item.category || '-')}</small>
               <small class="text-secondary" title="${escapeHtml(item.subcategory || '')}">${escapeHtml(item.subcategory_localized || item.subcategory || '-')}</small>
             </td>
-            <td><code>${escapeHtml(item.package || '-')}</code></td>
+            <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
+            <td>
+              <a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">
+                C${item.lcsc}
+              </a>
+            </td>
             <td><span class="${stockClass}">${stockText}</span></td>
             <td><small class="text-dark fw-bold">${priceText}</small></td>
             <td class="text-end">

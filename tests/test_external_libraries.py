@@ -40,6 +40,19 @@ def test_jlcparts_search():
     assert results["total"] > 0
     assert len(results["items"]) > 0
     assert "mfr" in results["items"][0]
+    assert "specs" in results["items"][0]
+    assert "manufacturer" in results["items"][0]
+
+    # Test specs extraction for capacitor
+    cap_specs = lib_svc.extract_jlcparts_specs(
+        category="Capacitors",
+        subcategory="Multilayer Ceramic Capacitors MLCC - SMD/SMT",
+        attrs_dict={"Capacitance": "10uF", "Tolerance": "±10%", "Voltage Rated": "25V"},
+        description="10uF 25V X7R 0805"
+    )
+    assert "10uF" in cap_specs
+    assert "±10%" in cap_specs
+    assert "25V" in cap_specs
 
 
 def test_api_libraries_status():

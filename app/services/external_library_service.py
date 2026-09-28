@@ -451,6 +451,81 @@ def parse_jlcparts_prices(price_str: Optional[str]) -> List[Dict[str, Any]]:
     return breaks
 
 
+def extract_jlcparts_specs(category: str, subcategory: str, attrs_dict: Dict[str, Any], description: Optional[str] = "") -> str:
+    """
+    Extracts up to 3 most important technical parameters (e.g. Capacitance, Tolerance, Voltage)
+    for JLCPCB/LCSC components based on component category.
+    """
+    if not attrs_dict and not description:
+        return "-"
+
+    cat_lower = f"{category or ''} {subcategory or ''}".lower()
+    specs = []
+
+    # 1. Targeted priority attributes by category
+    if "capacitor" in cat_lower:
+        for k in ["Capacitance", "Tolerance", "Voltage Rating"]:
+            if attrs_dict.get(k):
+                specs.append(str(attrs_dict[k]))
+    elif "resistor" in cat_lower:
+        for k in ["Resistance", "Tolerance", "Power(Watts)"]:
+            if attrs_dict.get(k):
+                specs.append(str(attrs_dict[k]))
+    elif "inductor" in cat_lower or "choke" in cat_lower:
+        for k in ["Inductance", "Tolerance", "Current Rating", "DC Resistance(DCR)"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "diode" in cat_lower:
+        for k in ["Zener Voltage(Range)", "Forward Voltage (Vf)", "Current - Average Rectified (Io)", "Pd - Power Dissipation"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "mosfet" in cat_lower or "transistor" in cat_lower or "bjt" in cat_lower:
+        for k in ["Drain to Source Voltage", "Collector - Emitter Voltage VCEO", "Current - Continuous Drain(Id)", "Current - Collector(Ic)", "RDS(on)", "type"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "crystal" in cat_lower or "oscillator" in cat_lower:
+        for k in ["Frequency", "Frequency Tolerance", "Load Capacitance"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "fuse" in cat_lower:
+        for k in ["Current Rating", "Voltage Rating", "Response Time"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "led" in cat_lower:
+        for k in ["Emitted Color", "Dominant Wavelength", "Forward Voltage (Vf)"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+    elif "linear" in cat_lower or "ldo" in cat_lower or "pmic" in cat_lower:
+        for k in ["Output Voltage", "Output Current", "Input Voltage"]:
+            if attrs_dict.get(k) and len(specs) < 3:
+                specs.append(str(attrs_dict[k]))
+
+    # 2. If priority mappings didn't get 3, check generic important keys
+    if len(specs) < 3:
+        generic_keys = [
+            "Capacitance", "Resistance", "Inductance", "Voltage Rating", "Tolerance", 
+            "Power(Watts)", "Current Rating", "Frequency", "Operating Temperature", "Type"
+        ]
+        for k in generic_keys:
+            if k in attrs_dict and str(attrs_dict[k]) not in specs:
+                specs.append(str(attrs_dict[k]))
+                if len(specs) >= 3:
+                    break
+
+    # 3. Fallback to remaining non-boilerplate attributes
+    if len(specs) < 3:
+        for k, v in attrs_dict.items():
+            val_str = str(v)
+            if k not in ["RoHS", "Package", "Lifecycle Status"] and val_str not in specs and len(val_str) < 30:
+                specs.append(val_str)
+                if len(specs) >= 3:
+                    break
+
+    if specs:
+        return ", ".join(specs[:3])
+    return (description[:35] + "...") if description and len(description) > 35 else (description or "-")
+
+
 def search_jlcparts(
     query: str = "",
     category: Optional[str] = None,
@@ -554,6 +629,13 @@ def search_jlcparts(
         else:
             r["attributes_dict"] = {}
 
+        r["specs"] = extract_jlcparts_specs(
+            r.get("category") or "",
+            r.get("subcategory") or "",
+            r.get("attributes_dict") or {},
+            r.get("description")
+        )
+
         r["price_breaks"] = parse_jlcparts_prices(r.get("price"))
 
     total_pages = math.ceil(total / page_size) if total > 0 else 1
@@ -610,6 +692,13 @@ def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, An
                 item["attrition_dict"] = {}
         else:
             item["attrition_dict"] = {}
+
+        item["specs"] = extract_jlcparts_specs(
+            item.get("category") or "",
+            item.get("subcategory") or "",
+            item.get("attributes_dict") or {},
+            item.get("description")
+        )
 
         item["price_breaks"] = parse_jlcparts_prices(item.get("price"))
         if item.get("url_slug"):
