@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from app.api import inventory_api_routes, web_routes
 from db.database import engine, Base
+import app.models
 
 Base.metadata.create_all(bind=engine)
 

@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Home</title>
-    <link href="../static/css/bootstrap.css" rel="stylesheet">
-    <script src="../static/js/bootstrap.js"></script>
+    <title>{{ t('home.title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <style>
         html, body {
@@ -45,13 +45,11 @@
           padding: 1rem;
         }
       </style>
-      
-
 </head>
   <body>
     <nav class="navbar navbar-dark bg-dark fixed-top">
         <div class="container-fluid">
-          <a class="navbar-brand" href="/">PartShelf</a>
+          <a class="navbar-brand" href="/">{{ t('app.brand') }}</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasDarkNavbar" aria-controls="offcanvasDarkNavbar" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
@@ -63,18 +61,27 @@
             <div class="offcanvas-body">
               <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
                 <li class="nav-item">
-                  <a class="nav-link active" aria-current="page" href="/">Home</a>
+                  <a class="nav-link active" aria-current="page" href="/">{{ t('app.nav_home') }}</a>
                 </li>
                 <li class="nav-item">
-                  <a class="nav-link" href="/inventory">My Inventory</a>
+                  <a class="nav-link" href="/inventory">{{ t('app.nav_inventory') }}</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="/projects">My Projects</a>
-                  </li>
+                  <a class="nav-link" href="/projects">{{ t('app.nav_projects') }}</a>
+                </li>
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    🌐 {{ t('app.language') }} ({{ t('app.lang_' + lang) }})
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-dark">
+                    <li><a class="dropdown-item {% if lang == 'zh' %}active{% endif %}" href="/set_language?lang=zh&next=/">🇨🇳 中文</a></li>
+                    <li><a class="dropdown-item {% if lang == 'en' %}active{% endif %}" href="/set_language?lang=en&next=/">🇺🇸 English</a></li>
+                  </ul>
+                </li>
               </ul>
-              <form class="d-flex mt-3" role="search">
-                <input class="form-control me-2" type="search" placeholder="Search part" aria-label="Search">
-                <button class="btn btn-success" type="submit">Search</button>
+              <form class="d-flex mt-3" role="search" action="/inventory" method="get">
+                <input class="form-control me-2" type="search" placeholder="{{ t('app.search_placeholder') }}" aria-label="{{ t('app.search_btn') }}">
+                <button class="btn btn-success" type="submit">{{ t('app.search_btn') }}</button>
               </form>
             </div>
           </div>
@@ -83,31 +90,31 @@
 
       <div class="hero bg-light mt-5 pt-5">
         <div class="container">
-          <h1>Welcome to PartShelf</h1>
-          <p class="mb-4">Your open-source component inventory manager for electronics projects.</p>
-          <a href="/inventory" class="btn btn-primary btn-lg">Browse Components</a>
+          <h1>{{ t('home.hero_title') }}</h1>
+          <p class="mb-4">{{ t('home.hero_subtitle') }}</p>
+          <a href="/inventory" class="btn btn-primary btn-lg">{{ t('home.browse_inventory') }}</a>
         </div>
       </div>
   
       <div class="container my-5">
         <div class="row text-center">
-          <div class="col-md-4">
-            <h4>Organize</h4>
-            <p>Keep track of parts with categories, manufacturers, and packages.</p>
+          <div class="col-md-4 mb-4">
+            <h4>{{ t('home.card_organize_title') }}</h4>
+            <p>{{ t('home.card_organize_desc') }}</p>
           </div>
-          <div class="col-md-4">
-            <h4>Search & Filter</h4>
-            <p>Find components quickly with smart searching and filters.</p>
+          <div class="col-md-4 mb-4">
+            <h4>{{ t('home.card_search_title') }}</h4>
+            <p>{{ t('home.card_search_desc') }}</p>
           </div>
-          <div class="col-md-4">
-            <h4>Maintain Stock</h4>
-            <p>Monitor quantities and availability for your projects.</p>
+          <div class="col-md-4 mb-4">
+            <h4>{{ t('home.card_stock_title') }}</h4>
+            <p>{{ t('home.card_stock_desc') }}</p>
           </div>
         </div>
       </div>
   
       <footer class="text-center py-2 bg-dark text-light fixed-bottom">
-        <small>&copy; 2025 PartShelf. All rights reserved.</small>
+        <small>{{ t('app.footer_copyright') }}</small>
       </footer>
   </body>
 </html>

@@ -5,12 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./partshelf.db")
 
-if SQLALCHEMY_DATABASE_URL is None:
-    raise ValueError("DATABASE_URL not found in environment variables")
-
-engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=True) 
+connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args, echo=True) 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
