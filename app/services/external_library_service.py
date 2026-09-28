@@ -783,7 +783,7 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
 
 def get_missing_image_lcsc_list(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
     """
-    Retrieves a list of LCSC part numbers that do not yet have an image or have not been crawled.
+    Retrieves a list of LCSC part numbers with website_component_id that do not yet have an image or have not been crawled.
     Ordered by j.lcsc ascending, filtered by j.lcsc > cursor.
     """
     limit = max(1, min(limit, 200))
@@ -793,7 +793,7 @@ def get_missing_image_lcsc_list(limit: int = 50, cursor: int = 0) -> Dict[str, A
     try:
         cur = conn.cursor()
         sql = """
-        SELECT j.lcsc
+        SELECT j.lcsc, j.website_component_id, j.mfr
         FROM jlc_components j
         LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
         WHERE (l.image IS NULL OR l.image = '')
@@ -803,8 +803,15 @@ def get_missing_image_lcsc_list(limit: int = 50, cursor: int = 0) -> Dict[str, A
         """
         cur.execute(sql, (cursor, limit))
         rows = cur.fetchall()
-        tasks = [r["lcsc"] for r in rows]
-        next_cursor = tasks[-1] if tasks else cursor
+        tasks = [
+            {
+                "lcsc": r["lcsc"],
+                "website_component_id": str(r["website_component_id"] or "").strip(),
+                "mfr": str(r["mfr"] or "").strip()
+            }
+            for r in rows
+        ]
+        next_cursor = tasks[-1]["lcsc"] if tasks else cursor
         return {
             "tasks": tasks,
             "cursor": next_cursor,

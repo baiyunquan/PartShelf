@@ -23,8 +23,11 @@ def test_crawler_tasks_endpoint():
     assert "count" in data
     assert len(data["tasks"]) <= 10
     if data["tasks"]:
-        assert isinstance(data["tasks"][0], int)
-        assert data["cursor"] >= data["tasks"][0]
+        first = data["tasks"][0]
+        assert isinstance(first, dict)
+        assert "lcsc" in first
+        assert "website_component_id" in first
+        assert data["cursor"] >= first["lcsc"]
 
 
 def test_crawler_stats_endpoint():

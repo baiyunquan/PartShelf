@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SZLCSC Part Image Harvester for PartShelf
 // @namespace    https://partshelf.local/
-// @version      1.0.0
-// @description  Automated background image harvester for LCSC components running on szlcsc.com to sync with local PartShelf database.
+// @version      1.1.0
+// @description  Automated in-page image harvester for LCSC components running on szlcsc.com by directly navigating to product pages and extracting images into local PartShelf database.
 // @author       PartShelf
 // @match        https://*.szlcsc.com/*
 // @grant        GM_xmlhttpRequest
@@ -30,17 +30,23 @@
     let apiUrl = GM_getValue("partshelf_api_url", DEFAULT_API_URL);
     let delayMs = GM_getValue("crawler_delay_ms", DEFAULT_DELAY_MS);
     let cursor = GM_getValue("crawler_cursor", 0);
+    let isCrawlerActive = GM_getValue("crawler_active", false);
 
-    let isRunning = false;
-    let isPaused = false;
-    let currentTask = null;
+    let taskQueue = GM_getValue("crawler_task_queue", []);
+    let currentTask = GM_getValue("crawler_current_task", null);
+    let batchTotal = GM_getValue("crawler_batch_total", 50);
+    let batchIndex = GM_getValue("crawler_batch_index", 0);
 
-    const sessionStats = {
+    let sessionStats = GM_getValue("crawler_stats", {
         processed: 0,
         downloaded: 0,
         noImage: 0,
         failed: 0,
-    };
+    });
+
+    let activityLogs = GM_getValue("crawler_log", []);
+
+    let jumpTimeoutId = null;
 
     // ----------------------------------------------------
     // Helper Functions
@@ -51,19 +57,30 @@
 
     function logMessage(msg, type = "info") {
         const now = new Date().toTimeString().split(" ")[0];
-        const logBox = document.getElementById("ps-crawler-log");
-        if (logBox) {
-            const line = document.createElement("div");
-            line.className = `ps-log-line ps-log-${type}`;
-            line.textContent = `[${now}] ${msg}`;
-            logBox.appendChild(line);
-            logBox.scrollTop = logBox.scrollHeight;
-
-            while (logBox.children.length > 50) {
-                logBox.removeChild(logBox.firstChild);
-            }
-        }
+        const lineText = `[${now}] ${msg}`;
         console.log(`[PartShelf Harvester] ${msg}`);
+
+        activityLogs.push({ text: lineText, type: type });
+        if (activityLogs.length > 50) {
+            activityLogs.shift();
+        }
+        GM_setValue("crawler_log", activityLogs);
+
+        renderLogs();
+    }
+
+    function renderLogs() {
+        const logBox = document.getElementById("ps-crawler-log");
+        if (!logBox) return;
+
+        logBox.innerHTML = "";
+        for (const item of activityLogs) {
+            const line = document.createElement("div");
+            line.className = `ps-log-line ps-log-${item.type || "info"}`;
+            line.textContent = item.text;
+            logBox.appendChild(line);
+        }
+        logBox.scrollTop = logBox.scrollHeight;
     }
 
     function gmRequest(options) {
@@ -142,61 +159,23 @@
     }
 
     // ----------------------------------------------------
-    // Harvester Processing Logic
+    // In-Page Data Extraction
     // ----------------------------------------------------
-    async function processSingleLcsc(lcsc) {
-        currentTask = lcsc;
-        updateCurrentTaskDisplay(`C${lcsc}`);
-
-        const itemUrl = `https://item.szlcsc.com/${lcsc}.html`;
-        let htmlRes;
-
-        try {
-            htmlRes = await gmRequest({
-                method: "GET",
-                url: itemUrl,
-                headers: {
-                    "User-Agent": navigator.userAgent,
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                },
-            });
-        } catch (e) {
-            logMessage(`[NET_ERR] C${lcsc}: ${e.message}`, "error");
-            sessionStats.failed++;
-            updateStatsDisplay();
-            return;
-        }
-
-        // Product not found or discontinued
-        if (htmlRes.status === 404 || htmlRes.status === 301 || htmlRes.status === 302) {
-            logMessage(`[404] C${lcsc}: Page not found or redirected`, "warn");
-            await uploadCrawledImage({ lcsc: lcsc, has_image: false });
-            sessionStats.noImage++;
-            sessionStats.processed++;
-            updateStatsDisplay();
-            return;
-        }
-
-        if (htmlRes.status !== 200) {
-            logMessage(`[HTTP ${htmlRes.status}] C${lcsc}: Request failed`, "warn");
-            sessionStats.failed++;
-            updateStatsDisplay();
-            return;
-        }
-
-        const html = htmlRes.responseText || "";
-        const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-
+    function extractPageProductData() {
         let imgUrl = null;
         let productModel = "";
+        let productCode = "";
 
-        if (nextDataMatch) {
+        // 1. Check __NEXT_DATA__ script tag in DOM
+        const nextDataEl = document.getElementById("__NEXT_DATA__");
+        if (nextDataEl && nextDataEl.textContent) {
             try {
-                const nextData = JSON.parse(nextDataMatch[1]);
+                const nextData = JSON.parse(nextDataEl.textContent);
                 const webData = nextData?.props?.pageProps?.webData;
                 const prod = webData?.productRecord;
 
                 if (prod) {
+                    productCode = prod.productCode || "";
                     productModel = prod.productModel || prod.productName || "";
                     if (prod.breviaryImageUrl) {
                         imgUrl = prod.breviaryImageUrl;
@@ -208,44 +187,102 @@
                     }
                 }
             } catch (e) {
-                logMessage(`[PARSE_ERR] C${lcsc}: JSON parse error: ${e.message}`, "warn");
+                console.warn("[PartShelf Harvester] Error parsing __NEXT_DATA__:", e);
             }
         }
 
-        // Fallback: check OpenGraph or meta image tags
+        // 2. Fallback: Search DOM for product preview images
         if (!imgUrl) {
-            const ogMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-            if (ogMatch) {
-                imgUrl = ogMatch[1];
+            const previewImg = document.querySelector('img[title*="点击查看大图"], img[alt*="实物图"], img[alt*="商品缩略图"]');
+            if (previewImg && previewImg.src && !previewImg.src.startsWith("data:")) {
+                imgUrl = previewImg.src;
             }
         }
 
+        // 3. Fallback: Meta OpenGraph image tag
         if (!imgUrl) {
-            logMessage(`[NO_IMG] C${lcsc}: No image found on item page`, "info");
-            await uploadCrawledImage({
-                lcsc: lcsc,
-                product_model: productModel,
-                has_image: false,
-            });
-            sessionStats.noImage++;
-            sessionStats.processed++;
-            updateStatsDisplay();
+            const ogMeta = document.querySelector('meta[property="og:image"]');
+            if (ogMeta && ogMeta.content) {
+                imgUrl = ogMeta.content;
+            }
+        }
+
+        return { imgUrl, productModel, productCode };
+    }
+
+    // ----------------------------------------------------
+    // Harvester Flow: Process Loaded Page & Plan Next Jump
+    // ----------------------------------------------------
+    async function processCurrentPage() {
+        if (!isCrawlerActive) return;
+
+        // Verify if we have an active task
+        if (!currentTask) {
+            logMessage("No current task found. Fetching next task queue...", "info");
+            await advanceToNextTask();
             return;
         }
 
-        // Normalize image URL
-        if (imgUrl.startsWith("//")) {
-            imgUrl = "https:" + imgUrl;
+        const lcsc = currentTask.lcsc;
+        const wid = currentTask.website_component_id || lcsc;
+        const currentPath = window.location.pathname;
+
+        updateCurrentTaskDisplay(`C${lcsc} (${wid})`);
+
+        // Check if we are on an error or 404 page
+        const is404 = document.title.includes("404") || document.title.includes("不存在") || document.title.includes("已下架");
+        if (is404) {
+            logMessage(`[404] C${lcsc}: Product page not found or item discontinued`, "warn");
+            try {
+                await uploadCrawledImage({ lcsc: lcsc, has_image: false });
+            } catch (e) {
+                console.error(e);
+            }
+            sessionStats.noImage++;
+            sessionStats.processed++;
+            saveStats();
+            updateStatsDisplay();
+            await scheduleNextJump();
+            return;
         }
 
-        // Download image binary
+        // Extract product data from the loaded webpage
+        const { imgUrl, productModel, productCode } = extractPageProductData();
+
+        if (!imgUrl) {
+            logMessage(`[NO_IMG] C${lcsc}: No image on page (Model: ${productModel || "N/A"})`, "info");
+            try {
+                await uploadCrawledImage({
+                    lcsc: lcsc,
+                    product_model: productModel,
+                    has_image: false,
+                });
+            } catch (e) {
+                console.error(e);
+            }
+            sessionStats.noImage++;
+            sessionStats.processed++;
+            saveStats();
+            updateStatsDisplay();
+            await scheduleNextJump();
+            return;
+        }
+
+        // Normalize URL if protocol-relative
+        let fullImgUrl = imgUrl;
+        if (fullImgUrl.startsWith("//")) {
+            fullImgUrl = "https:" + fullImgUrl;
+        }
+
+        // Download image binary directly with browser credentials
         try {
+            logMessage(`[DOWNLOADING] C${lcsc}: Fetching image binary...`, "info");
             const imgRes = await gmRequest({
                 method: "GET",
-                url: imgUrl,
+                url: fullImgUrl,
                 responseType: "blob",
                 headers: {
-                    "Referer": "https://item.szlcsc.com/",
+                    "Referer": window.location.href,
                 },
             });
 
@@ -257,7 +294,7 @@
             await uploadCrawledImage({
                 lcsc: lcsc,
                 image_base64: base64Data,
-                image_url: imgUrl,
+                image_url: fullImgUrl,
                 product_model: productModel,
                 has_image: true,
             });
@@ -266,99 +303,152 @@
             logMessage(`[OK] C${lcsc}: Synced (${sizeKb} KB) - ${productModel}`, "success");
             sessionStats.downloaded++;
             sessionStats.processed++;
+            saveStats();
             updateStatsDisplay();
         } catch (e) {
             logMessage(`[IMG_FAIL] C${lcsc}: ${e.message}`, "error");
             sessionStats.failed++;
             updateStatsDisplay();
         }
+
+        await scheduleNextJump();
     }
 
-    async function harvesterLoop() {
-        logMessage("Harvester loop started", "info");
-
-        while (isRunning) {
-            if (isPaused) {
-                await sleep(500);
-                continue;
-            }
-
-            let taskBatch;
+    async function advanceToNextTask() {
+        // Refill queue if needed
+        if (!taskQueue || taskQueue.length === 0) {
+            logMessage(`Queue empty. Fetching batch of 50 tasks (cursor: ${cursor})...`, "info");
             try {
-                taskBatch = await fetchTasks(50);
+                const batch = await fetchTasks(50);
+                taskQueue = batch.tasks || [];
+                batchTotal = taskQueue.length;
+                batchIndex = 0;
+                GM_setValue("crawler_task_queue", taskQueue);
+                GM_setValue("crawler_batch_total", batchTotal);
+                GM_setValue("crawler_batch_index", batchIndex);
+
+                if (taskQueue.length === 0) {
+                    logMessage("Queue complete! No more pending items found in PartShelf database.", "success");
+                    stopHarvester();
+                    return null;
+                }
             } catch (e) {
                 logMessage(`[FETCH_ERR] ${e.message}. Retrying in 5s...`, "error");
                 await sleep(5000);
-                continue;
-            }
-
-            const tasks = taskBatch.tasks || [];
-            if (tasks.length === 0) {
-                logMessage("No more pending tasks in queue. All components crawled.", "success");
-                stopHarvester();
-                break;
-            }
-
-            logMessage(`Fetched batch of ${tasks.length} tasks (cursor: ${cursor})`, "info");
-
-            for (const lcsc of tasks) {
-                if (!isRunning) break;
-                while (isPaused && isRunning) {
-                    await sleep(500);
+                if (isCrawlerActive) {
+                    return advanceToNextTask();
                 }
-                if (!isRunning) break;
-
-                await processSingleLcsc(lcsc);
-
-                cursor = lcsc;
-                GM_setValue("crawler_cursor", cursor);
-                updateCursorDisplay(cursor);
-
-                await sleep(delayMs);
+                return null;
             }
-
-            // Refresh global stats after each batch
-            await checkBackendConnection();
         }
 
-        logMessage("Harvester loop stopped", "info");
-        updateHarvesterStatus("Idle");
+        // Pop next task
+        const nextTask = taskQueue.shift();
+        batchIndex++;
+        GM_setValue("crawler_task_queue", taskQueue);
+        GM_setValue("crawler_batch_index", batchIndex);
+
+        currentTask = nextTask;
+        GM_setValue("crawler_current_task", currentTask);
+
+        cursor = nextTask.lcsc;
+        GM_setValue("crawler_cursor", cursor);
+        updateCursorDisplay(cursor);
+
+        updateProgressBar();
+        return nextTask;
+    }
+
+    async function scheduleNextJump() {
+        if (!isCrawlerActive) return;
+
+        const nextTask = await advanceToNextTask();
+        if (!nextTask || !isCrawlerActive) return;
+
+        const targetId = nextTask.website_component_id || nextTask.lcsc;
+        const targetUrl = `https://item.szlcsc.com/${targetId}.html`;
+
+        logMessage(`[NEXT] C${nextTask.lcsc} (ID: ${targetId}). Navigating in ${delayMs}ms...`, "info");
+
+        // Countdown visual display
+        updateCountdownDisplay(delayMs);
+
+        jumpTimeoutId = setTimeout(() => {
+            if (!isCrawlerActive) return;
+            window.location.href = targetUrl;
+        }, Math.max(500, delayMs));
     }
 
     function startHarvester() {
-        if (isRunning) return;
-        isRunning = true;
-        isPaused = false;
+        isCrawlerActive = true;
+        GM_setValue("crawler_active", true);
         updateHarvesterStatus("Running");
-        document.getElementById("ps-btn-start").disabled = true;
-        document.getElementById("ps-btn-pause").disabled = false;
-        document.getElementById("ps-btn-pause").textContent = "Pause";
-        harvesterLoop();
-    }
 
-    function pauseHarvester() {
-        if (!isRunning) return;
-        isPaused = !isPaused;
+        document.getElementById("ps-btn-start").disabled = true;
         const pauseBtn = document.getElementById("ps-btn-pause");
-        if (isPaused) {
-            updateHarvesterStatus("Paused");
-            pauseBtn.textContent = "Resume";
-            logMessage("Harvester paused", "warn");
+        pauseBtn.disabled = false;
+        pauseBtn.textContent = "Pause";
+
+        logMessage("Harvester activated", "info");
+
+        // If on item page matching currentTask, process it now; otherwise advance and navigate
+        const currentPath = window.location.pathname;
+        const currentWid = currentTask?.website_component_id || currentTask?.lcsc;
+
+        if (currentTask && currentWid && currentPath.includes(String(currentWid))) {
+            processCurrentPage();
         } else {
-            updateHarvesterStatus("Running");
-            pauseBtn.textContent = "Pause";
-            logMessage("Harvester resumed", "info");
+            scheduleNextJump();
         }
     }
 
+    function pauseHarvester() {
+        isCrawlerActive = false;
+        GM_setValue("crawler_active", false);
+
+        if (jumpTimeoutId) {
+            clearTimeout(jumpTimeoutId);
+            jumpTimeoutId = null;
+        }
+
+        updateHarvesterStatus("Paused");
+        document.getElementById("ps-btn-start").disabled = false;
+        const pauseBtn = document.getElementById("ps-btn-pause");
+        pauseBtn.textContent = "Resume";
+
+        logMessage("Harvester paused by user", "warn");
+    }
+
     function stopHarvester() {
-        isRunning = false;
-        isPaused = false;
+        isCrawlerActive = false;
+        GM_setValue("crawler_active", false);
+
+        if (jumpTimeoutId) {
+            clearTimeout(jumpTimeoutId);
+            jumpTimeoutId = null;
+        }
+
         updateHarvesterStatus("Idle");
         document.getElementById("ps-btn-start").disabled = false;
         const pauseBtn = document.getElementById("ps-btn-pause");
         pauseBtn.disabled = true;
         pauseBtn.textContent = "Pause";
+    }
+
+    function saveStats() {
+        GM_setValue("crawler_stats", sessionStats);
+    }
+
+    function resetStats() {
+        sessionStats = {
+            processed: 0,
+            downloaded: 0,
+            noImage: 0,
+            failed: 0,
+        };
+        saveStats();
+        updateStatsDisplay();
+        logMessage("Session statistics reset to 0", "warn");
     }
 
     // ----------------------------------------------------
@@ -371,7 +461,7 @@
             <div id="ps-panel-header">
                 <div class="ps-header-title">
                     <span class="ps-brand">PartShelf</span>
-                    <span class="ps-subtitle">LCSC Image Harvester</span>
+                    <span class="ps-subtitle">Direct Page Harvester</span>
                 </div>
                 <div class="ps-header-actions">
                     <button id="ps-btn-minimize" class="ps-btn-icon" title="Minimize/Maximize">_</button>
@@ -383,13 +473,25 @@
                     <div class="ps-status-row">
                         <span class="ps-label">Backend:</span>
                         <span id="ps-backend-status" class="ps-badge ps-badge-gray">Checking...</span>
-                        <span class="ps-label" style="margin-left: 10px;">Status:</span>
+                        <span class="ps-label" style="margin-left: 10px;">Harvester:</span>
                         <span id="ps-crawler-status" class="ps-badge ps-badge-blue">Idle</span>
                     </div>
                     <div class="ps-status-row" style="margin-top: 6px;">
-                        <span class="ps-label">Current Part:</span>
+                        <span class="ps-label">Current Target:</span>
                         <span id="ps-current-task" class="ps-mono ps-text-cyan">None</span>
                     </div>
+                </div>
+
+                <!-- Progress Bar Section -->
+                <div class="ps-section">
+                    <div class="ps-progress-header">
+                        <span class="ps-label">Batch Progress:</span>
+                        <span id="ps-progress-text" class="ps-mono ps-text-cyan">0 / 0 (0%)</span>
+                    </div>
+                    <div class="ps-progress-track">
+                        <div id="ps-progress-fill" class="ps-progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div id="ps-countdown-row" class="ps-countdown-text">Ready</div>
                 </div>
 
                 <!-- Settings -->
@@ -400,7 +502,7 @@
                     </div>
                     <div class="ps-field-row" style="margin-top: 6px;">
                         <div class="ps-field-col">
-                            <label class="ps-label">Delay (ms):</label>
+                            <label class="ps-label">Jump Delay (ms):</label>
                             <input id="ps-input-delay" class="ps-input ps-mono" type="number" min="500" max="10000" step="100" value="${delayMs}" />
                         </div>
                         <div class="ps-field-col" style="margin-left: 8px;">
@@ -440,7 +542,7 @@
                     <button id="ps-btn-start" class="ps-btn ps-btn-primary">Start</button>
                     <button id="ps-btn-pause" class="ps-btn ps-btn-secondary" disabled>Pause</button>
                     <button id="ps-btn-test" class="ps-btn ps-btn-outline">Test API</button>
-                    <button id="ps-btn-reset-cursor" class="ps-btn ps-btn-outline" title="Reset cursor to 0">Reset Csr</button>
+                    <button id="ps-btn-reset-stats" class="ps-btn ps-btn-outline" title="Reset session stats">Reset</button>
                 </div>
 
                 <!-- Activity Log -->
@@ -454,7 +556,7 @@
             </div>
         `;
 
-        // Inject Styles
+        // Inject Styles (Strictly no flex child line collapse, clean scrollbar and progress bar)
         const style = document.createElement("style");
         style.textContent = `
             #ps-harvester-panel {
@@ -466,7 +568,7 @@
                 color: #f1f5f9;
                 border: 1px solid #334155;
                 border-radius: 8px;
-                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                 font-size: 12px;
                 z-index: 9999999;
@@ -520,7 +622,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
-                max-height: 540px;
+                max-height: 580px;
                 overflow-y: auto;
             }
             .ps-section {
@@ -559,6 +661,36 @@
             .ps-text-red { color: #f87171; }
             .ps-text-blue { color: #60a5fa; }
             .ps-text-cyan { color: #38bdf8; font-weight: 600; margin-left: 6px; }
+
+            /* Progress Bar */
+            .ps-progress-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .ps-progress-track {
+                width: 100%;
+                height: 8px;
+                background: #0f172a;
+                border: 1px solid #334155;
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .ps-progress-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #2563eb, #38bdf8);
+                border-radius: 3px;
+                transition: width 0.3s ease;
+            }
+            .ps-countdown-text {
+                font-size: 10px;
+                color: #94a3b8;
+                margin-top: 4px;
+                text-align: right;
+                font-family: ui-monospace, SFMono-Regular, monospace;
+            }
+
             .ps-field {
                 display: flex;
                 flex-direction: column;
@@ -678,33 +810,56 @@
             .ps-link-btn:hover {
                 text-decoration: underline;
             }
+
+            /* Log Box (Clear display with scrollbar, no line overlap) */
             .ps-log-box {
                 background: #0f172a;
                 border: 1px solid #334155;
                 border-radius: 4px;
-                height: 100px;
-                overflow-y: auto;
+                height: 110px;
+                overflow-y: scroll;
+                overflow-x: hidden;
                 padding: 6px 8px;
-                font-size: 10px;
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
+                font-size: 11px;
+                display: block;
+                box-sizing: border-box;
+                scrollbar-width: thin;
+                scrollbar-color: #475569 #1e293b;
+            }
+            .ps-log-box::-webkit-scrollbar {
+                width: 6px;
+            }
+            .ps-log-box::-webkit-scrollbar-track {
+                background: #1e293b;
+                border-radius: 3px;
+            }
+            .ps-log-box::-webkit-scrollbar-thumb {
+                background: #475569;
+                border-radius: 3px;
+            }
+            .ps-log-box::-webkit-scrollbar-thumb:hover {
+                background: #64748b;
             }
             .ps-log-line {
+                display: block;
+                line-height: 18px;
+                min-height: 18px;
+                height: 18px;
+                margin-bottom: 2px;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+                box-sizing: border-box;
             }
             .ps-log-info { color: #94a3b8; }
-            .ps-log-success { color: #34d399; }
+            .ps-log-success { color: #34d399; font-weight: 600; }
             .ps-log-warn { color: #facc15; }
-            .ps-log-error { color: #f87171; }
+            .ps-log-error { color: #f87171; font-weight: 600; }
         `;
 
         document.head.appendChild(style);
         document.body.appendChild(container);
 
-        // Bind Events
         bindUIEvents();
     }
 
@@ -712,7 +867,7 @@
         const btnStart = document.getElementById("ps-btn-start");
         const btnPause = document.getElementById("ps-btn-pause");
         const btnTest = document.getElementById("ps-btn-test");
-        const btnResetCursor = document.getElementById("ps-btn-reset-cursor");
+        const btnResetStats = document.getElementById("ps-btn-reset-stats");
         const btnClearLog = document.getElementById("ps-btn-clear-log");
         const btnMinimize = document.getElementById("ps-btn-minimize");
         const panelBody = document.getElementById("ps-panel-body");
@@ -739,7 +894,10 @@
             cursor = Math.max(0, parseInt(inputCursor.value, 10) || 0);
             inputCursor.value = cursor;
             GM_setValue("crawler_cursor", cursor);
-            logMessage(`Cursor manually set to ${cursor}`, "warn");
+            // Clear current task queue so next fetch starts from new cursor
+            taskQueue = [];
+            GM_setValue("crawler_task_queue", []);
+            logMessage(`Cursor set to ${cursor}. Queue cleared.`, "warn");
         });
 
         btnStart.addEventListener("click", () => {
@@ -760,16 +918,14 @@
             }
         });
 
-        btnResetCursor.addEventListener("click", () => {
-            cursor = 0;
-            inputCursor.value = 0;
-            GM_setValue("crawler_cursor", 0);
-            logMessage("Cursor reset to 0", "warn");
+        btnResetStats.addEventListener("click", () => {
+            resetStats();
         });
 
         btnClearLog.addEventListener("click", () => {
-            const logBox = document.getElementById("ps-crawler-log");
-            if (logBox) logBox.innerHTML = "";
+            activityLogs = [];
+            GM_setValue("crawler_log", []);
+            renderLogs();
         });
 
         let isMinimized = false;
@@ -779,7 +935,7 @@
             btnMinimize.textContent = isMinimized ? "+" : "_";
         });
 
-        // Draggable panel header
+        // Draggable panel
         const header = document.getElementById("ps-panel-header");
         const panel = document.getElementById("ps-harvester-panel");
         let isDragging = false;
@@ -869,17 +1025,55 @@
         el.textContent = `Total: ${total} | With Image: ${withImg} | Remaining: ${remaining}`;
     }
 
+    function updateProgressBar() {
+        const textEl = document.getElementById("ps-progress-text");
+        const fillEl = document.getElementById("ps-progress-fill");
+        if (!textEl || !fillEl) return;
+
+        const total = Math.max(1, batchTotal);
+        const idx = Math.min(total, batchIndex);
+        const pct = Math.round((idx / total) * 100);
+
+        textEl.textContent = `${idx} / ${total} (${pct}%)`;
+        fillEl.style.width = `${pct}%`;
+    }
+
+    function updateCountdownDisplay(ms) {
+        const el = document.getElementById("ps-countdown-row");
+        if (!el) return;
+        const sec = (ms / 1000).toFixed(1);
+        el.textContent = `Redirecting in ${sec}s...`;
+    }
+
     // ----------------------------------------------------
-    // Initialization
+    // Initialization & Lifecycle
     // ----------------------------------------------------
     function init() {
         createUI();
-        logMessage("Harvester initialized. Ready to sync with PartShelf.", "info");
+        renderLogs();
+        updateStatsDisplay();
+        updateProgressBar();
         checkBackendConnection();
 
         if (typeof GM_registerMenuCommand !== "undefined") {
             GM_registerMenuCommand("Start Harvester", startHarvester);
             GM_registerMenuCommand("Pause Harvester", pauseHarvester);
+        }
+
+        // Restore active state
+        if (isCrawlerActive) {
+            updateHarvesterStatus("Running");
+            document.getElementById("ps-btn-start").disabled = true;
+            const pauseBtn = document.getElementById("ps-btn-pause");
+            pauseBtn.disabled = false;
+            pauseBtn.textContent = "Pause";
+
+            // Process current page after a short stabilization delay
+            setTimeout(() => {
+                processCurrentPage();
+            }, 600);
+        } else {
+            updateHarvesterStatus("Idle");
         }
     }
 
