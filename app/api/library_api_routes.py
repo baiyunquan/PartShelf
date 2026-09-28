@@ -6,6 +6,7 @@ from db.database import get_db
 from app.services import external_library_service as lib_svc
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory import PartToInventoryAdd
+from app.i18n.category_i18n import category_i18n
 
 router = APIRouter()
 
@@ -14,6 +15,12 @@ router = APIRouter()
 def get_libraries_status():
     """Get current status, availability, and record counts for all 3 external libraries."""
     return lib_svc.get_libraries_status()
+
+
+@router.get("/category-translations")
+def get_category_translations(lang: str = Query("zh")):
+    """Get all category and subcategory translation mappings for i18n."""
+    return category_i18n.get_flat_translations(lang)
 
 
 @router.get("/search")

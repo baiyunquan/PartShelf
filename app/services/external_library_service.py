@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from app.i18n.category_i18n import category_i18n
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
 SCRIPTS_DIR = BASE_DIR / "scripts"
@@ -231,6 +233,7 @@ def search_altium(
     conn.close()
 
     for r in rows:
+        r["category_localized"] = category_i18n.translate_altium(r.get("category") or "")
         if r.get("parameters_json"):
             try:
                 r["parameters"] = json.loads(r["parameters_json"])
@@ -260,6 +263,7 @@ def get_altium_component(comp_id: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         item = dict(row)
+        item["category_localized"] = category_i18n.translate_altium(item.get("category") or "")
         if item.get("parameters_json"):
             try:
                 item["parameters"] = json.loads(item["parameters_json"])
@@ -414,9 +418,17 @@ def get_jlcparts_categories() -> List[Dict[str, Any]]:
             subcat = r["subcategory"]
             cnt = r["cnt"]
             if cat not in result:
-                result[cat] = {"category": cat, "subcategories": []}
+                result[cat] = {
+                    "category": cat,
+                    "category_localized": category_i18n.translate_primary(cat),
+                    "subcategories": []
+                }
             if subcat:
-                result[cat]["subcategories"].append({"subcategory": subcat, "count": cnt})
+                result[cat]["subcategories"].append({
+                    "subcategory": subcat,
+                    "subcategory_localized": category_i18n.translate_secondary(subcat),
+                    "count": cnt
+                })
         return list(result.values())
     finally:
         conn.close()
@@ -517,6 +529,8 @@ def search_jlcparts(
     conn.close()
 
     for r in rows:
+        r["category_localized"] = category_i18n.translate_primary(r.get("category") or "")
+        r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "")
         # Build image URLs
         if r.get("image"):
             r["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{r['image']}"
@@ -564,6 +578,8 @@ def get_jlcparts_component(lcsc: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         item = dict(row)
+        item["category_localized"] = category_i18n.translate_primary(item.get("category") or "")
+        item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "")
 
         if item.get("image"):
             item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{item['image']}"
@@ -647,7 +663,10 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
             summary["name"] = comp.get("lib_reference") or comp.get("mfr_part_number") or f"Altium #{comp_id}"
             summary["manufacturer"] = comp.get("manufacturer") or "Generic"
             summary["package"] = comp.get("package") or "Standard"
-            summary["part_type"] = comp.get("category") or "General"
+            raw_cat = comp.get("category") or "General"
+            summary["part_type"] = category_i18n.translate_altium(raw_cat) or raw_cat
+            summary["part_type_localized"] = summary["part_type"]
+            summary["part_type_en"] = raw_cat
             summary["description"] = comp.get("description") or ""
             summary["datasheet_url"] = comp.get("datasheet_url") or None
 
@@ -659,6 +678,8 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
             summary["manufacturer"] = sym.get("properties", {}).get("Manufacturer") or "Generic"
             summary["package"] = sym.get("footprint") or "Symbol"
             summary["part_type"] = sym.get("library") or "General"
+            summary["part_type_localized"] = summary["part_type"]
+            summary["part_type_en"] = summary["part_type"]
             summary["description"] = sym.get("description") or sym.get("keywords") or ""
             summary["datasheet_url"] = sym.get("datasheet") if sym.get("datasheet") != "~" else None
 
@@ -670,9 +691,15 @@ def resolve_part_summary(library_source: str, external_part_id: str) -> Dict[str
             summary["manufacturer"] = jlc.get("manufacturer") or "Unknown"
             summary["package"] = jlc.get("package") or "Standard"
             cat_str = jlc.get("category") or ""
-            if jlc.get("subcategory"):
-                cat_str = f"{cat_str} / {jlc.get('subcategory')}"
-            summary["part_type"] = cat_str or "General"
+            sub_str = jlc.get("subcategory") or ""
+            cat_trans = category_i18n.translate_primary(cat_str)
+            sub_trans = category_i18n.translate_secondary(sub_str) if sub_str else ""
+            if cat_trans and sub_trans:
+                summary["part_type"] = f"{cat_trans} / {sub_trans}"
+            else:
+                summary["part_type"] = cat_trans or sub_trans or cat_str or "General"
+            summary["part_type_localized"] = summary["part_type"]
+            summary["part_type_en"] = f"{cat_str} / {sub_str}" if (cat_str and sub_str) else (cat_str or "General")
             summary["description"] = jlc.get("description") or ""
             summary["image_url"] = jlc.get("image_url_small") or None
             summary["datasheet_url"] = jlc.get("datasheet") or None

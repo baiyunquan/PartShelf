@@ -154,7 +154,7 @@ function renderExternalSpecs(source, extDetails, summary) {
               <div class="row g-2 small">
                 <div class="col-6 text-muted">Library Reference:</div><div class="col-6 fw-bold">${escapeHtml(extDetails.lib_reference || '-')}</div>
                 <div class="col-6 text-muted">LCSC Part #:</div><div class="col-6">${extDetails.lcsc_part ? `<span class="badge bg-light text-dark border">${escapeHtml(extDetails.lcsc_part)}</span>` : '-'}</div>
-                <div class="col-6 text-muted">Category:</div><div class="col-6">${escapeHtml(extDetails.category || '-')}</div>
+                <div class="col-6 text-muted">Category:</div><div class="col-6">${escapeHtml(extDetails.category_localized || extDetails.category || '-')}</div>
                 <div class="col-6 text-muted">Package:</div><div class="col-6"><code>${escapeHtml(extDetails.package || '-')}</code></div>
                 <div class="col-6 text-muted">Manufacturer:</div><div class="col-6">${escapeHtml(extDetails.manufacturer || '-')}</div>
                 <div class="col-6 text-muted">Part Type:</div><div class="col-6">${typeBadge}</div>

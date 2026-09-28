@@ -112,11 +112,18 @@
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script id="category-translations" type="application/json">{{ category_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      const catTranslations = JSON.parse(document.getElementById('category-translations')?.textContent || '{}');
       let currentPage = 1;
       let categoriesTree = [];
+
+      function translateCategory(name) {
+        if (!name) return '';
+        return catTranslations[name] || name;
+      }
 
       async function loadCategories() {
         try {
@@ -126,7 +133,7 @@
           categoriesTree.forEach(c => {
             const opt = document.createElement('option');
             opt.value = c.category;
-            opt.textContent = c.category;
+            opt.textContent = c.category_localized || catTranslations[c.category] || c.category;
             select.appendChild(opt);
           });
         } catch (e) {
@@ -146,7 +153,8 @@
           item.subcategories.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.subcategory;
-            opt.textContent = `${s.subcategory} (${s.count})`;
+            const subText = s.subcategory_localized || catTranslations[s.subcategory] || s.subcategory;
+            opt.textContent = `${subText} (${s.count})`;
             subSelect.appendChild(opt);
           });
           subSelect.disabled = false;
@@ -233,8 +241,8 @@
               <div class="d-flex gap-1 mt-1">${typeBadge}</div>
             </td>
             <td>
-              <small class="d-block fw-bold text-dark">${escapeHtml(item.category || '-')}</small>
-              <small class="text-secondary">${escapeHtml(item.subcategory || '-')}</small>
+              <small class="d-block fw-bold text-dark" title="${escapeHtml(item.category || '')}">${escapeHtml(item.category_localized || catTranslations[item.category] || item.category || '-')}</small>
+              <small class="text-secondary" title="${escapeHtml(item.subcategory || '')}">${escapeHtml(item.subcategory_localized || catTranslations[item.subcategory] || item.subcategory || '-')}</small>
             </td>
             <td><code>${escapeHtml(item.package || '-')}</code></td>
             <td><span class="${stockClass}">${stockText}</span></td>

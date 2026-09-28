@@ -101,10 +101,17 @@
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script id="category-translations" type="application/json">{{ category_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      const catTranslations = JSON.parse(document.getElementById('category-translations')?.textContent || '{}');
       let currentPage = 1;
+
+      function translateCategory(name) {
+        if (!name) return '';
+        return catTranslations[name] || name;
+      }
 
       async function loadCategories() {
         try {
@@ -112,9 +119,11 @@
           const cats = await res.json();
           const select = document.getElementById('categoryFilter');
           cats.forEach(c => {
+            const raw = typeof c === 'string' ? c : c.category;
+            const localized = catTranslations[raw] || (typeof c === 'object' ? c.category_localized : null) || raw;
             const opt = document.createElement('option');
-            opt.value = c;
-            opt.textContent = c;
+            opt.value = raw;
+            opt.textContent = localized;
             select.appendChild(opt);
           });
         } catch (e) {
@@ -189,7 +198,7 @@
             <td>
               ${item.lcsc_part ? `<span class="badge bg-light text-dark border">${escapeHtml(item.lcsc_part)}</span>` : '-'}
             </td>
-            <td><small class="text-secondary">${escapeHtml(item.category || '-')}</small></td>
+            <td><small class="text-secondary" title="${escapeHtml(item.category || '')}">${escapeHtml(item.category_localized || catTranslations[item.category] || item.category || '-')}</small></td>
             <td><code>${escapeHtml(item.package || '-')}</code></td>
             <td><small>${escapeHtml(item.manufacturer || '-')}</small></td>
             <td><small class="text-dark">${escapeHtml(formatSpecs(item))}</small></td>

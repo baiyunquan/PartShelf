@@ -198,10 +198,12 @@
     {% include 'partials/footer.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script id="category-translations" type="application/json">{{ category_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script>
       const lcscNum = {{ lcsc }};
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      const catTranslations = JSON.parse(document.getElementById('category-translations')?.textContent || '{}');
 
       async function loadComponentDetails() {
         try {
@@ -277,8 +279,10 @@
         document.getElementById('propLcsc').textContent = `C${data.lcsc}`;
         document.getElementById('propMfr').textContent = data.mfr || '-';
         document.getElementById('propManufacturer').textContent = data.manufacturer || '-';
-        document.getElementById('propCategory').textContent = data.category || '-';
-        document.getElementById('propSubcategory').textContent = data.subcategory || '-';
+        const catLocalized = data.category_localized || catTranslations[data.category] || data.category;
+        const subcatLocalized = data.subcategory_localized || catTranslations[data.subcategory] || data.subcategory;
+        document.getElementById('propCategory').textContent = data.category ? (catLocalized && catLocalized !== data.category ? `${catLocalized} (${data.category})` : (catLocalized || data.category)) : '-';
+        document.getElementById('propSubcategory').textContent = data.subcategory ? (subcatLocalized && subcatLocalized !== data.subcategory ? `${subcatLocalized} (${data.subcategory})` : (subcatLocalized || data.subcategory)) : '-';
         document.getElementById('propPackage').textContent = data.package || '-';
         document.getElementById('propJoints').textContent = data.joints || '-';
         document.getElementById('propStock').innerHTML = data.stock > 0 ?
