@@ -1,5 +1,6 @@
 import pytest
 import re
+import shutil
 from fastapi.testclient import TestClient
 from app.main import app
 from app.services import external_library_service as lib_svc
@@ -43,6 +44,156 @@ def test_fasteners_query():
     res_iso = lib_svc.query_fasteners(page=1, page_size=20, authority="ISO")
     assert res_iso["total"] >= 40
     assert all(item["authority"] == "ISO" for item in res_iso["items"])
+
+
+def test_chinese_heat_insert_alias_returns_localized_name_and_source_description():
+    result = lib_svc.query_fasteners(query="热熔螺母", page_size=20, domain="fasteners")
+    combined = lib_svc.query_fasteners(query="M3 规格 热熔螺母", page_size=20, domain="fasteners")
+
+    item = next((row for row in result["items"] if row["standard_code"] == "IUTHeatInsert"), None)
+    assert item is not None
+    assert any(row["standard_code"] == "IUTHeatInsert" for row in combined["items"])
+    assert item["standard_name_localized"] == "热熔螺母（热熔嵌件）"
+    assert "热熔铜螺母" in item["search_aliases"]
+    assert item["description"] == "IUT[A/B/C] Heat Staked Metric Insert"
+
+
+def test_flat_head_alias_returns_countersunk_standards_without_nuts():
+    result = lib_svc.query_fasteners(query="平头螺丝", page_size=100, domain="fasteners")
+    codes = {row["standard_code"] for row in result["items"]}
+
+    assert {"ISO10642", "ISO2009", "ISO7046"}.issubset(codes)
+    assert not any("Nut" in row["description"] for row in result["items"])
+
+
+def test_append_custom_heat_insert_spec_is_idempotent_and_keeps_source_row(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    original = lib_svc.get_fastener_detail("IUTHeatInsert")
+    source_m3 = next(row for row in original["param_rows"] if row["nominal"] == "M3")
+    dimensions = {"Length": 4, "ExtDia": 5.5}
+
+    first = lib_svc.append_fastener_spec("IUTHeatInsert", "M3", dimensions)
+    second = lib_svc.append_fastener_spec("IUTHeatInsert", "m3", dimensions)
+
+    assert first["row_key"].startswith("user:M3:")
+    assert second["row_key"] == first["row_key"]
+    detail = lib_svc.get_fastener_detail("IUTHeatInsert")
+    custom_rows = [row for row in detail["param_rows"] if row.get("is_custom")]
+    assert len(custom_rows) == 1
+    custom = custom_rows[0]
+    assert custom["row_key"] == first["row_key"]
+    assert custom["nominal"] == "M3"
+    assert custom["values"] == [None, 4.0, 5.5, None, None, None]
+    assert next(row for row in detail["param_rows"] if row["nominal"] == "M3")["values"] == source_m3["values"]
+
+
+def test_custom_rows_allow_distinct_geometries_for_same_nominal(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    first = lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.5})
+    second = lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.6})
+
+    assert first["row_key"] != second["row_key"]
+    detail = lib_svc.get_fastener_detail("IUTHeatInsert")
+    custom = [row for row in detail["param_rows"] if row.get("is_custom") and row["nominal"] == "M3"]
+    assert len(custom) == 2
+
+
+def test_custom_length_is_appended_to_existing_length_table(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    result = lib_svc.append_fastener_spec("ISO10642", "M3", {"P": 0.5}, length="4.5")
+    detail = lib_svc.get_fastener_detail("ISO10642")
+
+    assert result["length_added"] is True
+    assert any(row.get("custom_length") == "4.5" and row["is_custom"] for row in detail["length_rows"])
+
+
+def test_custom_imperial_length_is_normalized_and_stored_in_millimeters(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    result = lib_svc.append_fastener_spec(
+        "ASMEB18.2.1.6", "1/4in", {"P": 20}, length="1 7/8"
+    )
+    detail = lib_svc.get_fastener_detail("ASMEB18.2.1.6")
+    custom_length = next(row for row in detail["length_rows"] if row["row_key"] == result["length_row_key"])
+
+    assert result["length"] == "1.875in"
+    assert detail["standard"]["length_unit"] == "in"
+    assert custom_length["lengths"] == ["47.625", "47.625"]
+
+
+@pytest.mark.parametrize("dimensions", [
+    {"Length": 4, "ExtDia": 5.5, "SQL": "DROP TABLE fastener_tables"},
+    {"Length": 4, "ExtDia": float("inf")},
+    {"Length": 0, "ExtDia": 5.5},
+    {"Length": None, "ExtDia": 5.5},
+])
+def test_append_custom_fastener_spec_rejects_unknown_or_invalid_dimensions(tmp_path, monkeypatch, dimensions):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    with pytest.raises(ValueError):
+        lib_svc.append_fastener_spec("IUTHeatInsert", "M3", dimensions)
+
+
+def test_append_custom_fastener_spec_rejects_unknown_standard(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    with pytest.raises(ValueError, match="standard"):
+        lib_svc.append_fastener_spec("does-not-exist", "M3", {"D": 3})
+
+
+def test_custom_fastener_spec_post_api(tmp_path, monkeypatch):
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+
+    response = client.post("/api/libraries/fasteners/IUTHeatInsert/specs", json={
+        "nominal": "M3",
+        "dimensions": {"Length": 4, "ExtDia": 5.5},
+    })
+    assert response.status_code == 200
+    assert response.json()["is_custom"] is True
+    assert response.json()["row_key"].startswith("user:M3:")
+
+    with_length = client.post("/api/libraries/fasteners/ISO10642/specs", json={
+        "nominal": "M3", "dimensions": {"P": 0.5}, "length": 4.5,
+    })
+    assert with_length.status_code == 200
+    assert with_length.json()["length"] == "4.5"
+
+    invalid = client.post("/api/libraries/fasteners/IUTHeatInsert/specs", json={
+        "nominal": "M3",
+        "dimensions": {"Length": 4, "ExtDia": 5.5, "table_name": "fastener_standards"},
+    })
+    assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("language", "expected_label"),
+    [("zh", "添加自定义规格"), ("en", "Add Custom Specification")],
+)
+def test_fastener_details_page_has_localized_custom_spec_form(language, expected_label):
+    response = client.get(f"/libraries/fasteners/IUTHeatInsert?lang={language}")
+
+    assert response.status_code == 200
+    assert 'id="customFastenerSpecForm"' in response.text
+    assert expected_label in response.text
+    assert "/static/js/libraries_fasteners_details.js" in response.text
+    assert "custom_spec_heading" in response.text
 
 
 def test_fasteners_detail_iso4762():

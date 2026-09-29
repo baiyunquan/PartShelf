@@ -106,12 +106,12 @@ def quick_search(
     ]
 
     # 5. Fasteners
-    fasteners_res = lib_svc.query_fasteners(page=1, page_size=4, query=query)
+    fasteners_res = lib_svc.query_fasteners(page=1, page_size=4, query=query, lang=lang)
     fasteners_total = fasteners_res.get("total", 0)
     fasteners_items = [
         {
             "id": item["id"],
-            "name": item.get("standard_name") or item.get("standard_code"),
+            "name": item.get("standard_name_localized") or item.get("standard_name") or item.get("standard_code"),
             "category": item.get("category_group_zh") or item.get("category_group"),
             "authority": item.get("authority"),
             "url": f"/libraries/fasteners/{item['standard_code']}"
@@ -183,7 +183,7 @@ def aggregate_search(
         kicad_total = kicad_res.get("total", 0)
 
         # Fasteners preview
-        fasteners_res = lib_svc.query_fasteners(page=1, page_size=5, query=query) if query else {"total": 0, "items": []}
+        fasteners_res = lib_svc.query_fasteners(page=1, page_size=5, query=query, lang=lang) if query else {"total": 0, "items": []}
         fasteners_total = fasteners_res.get("total", 0)
 
         total_matches = inv_total + jlc_total + altium_total + kicad_total + fasteners_total
@@ -282,7 +282,8 @@ def aggregate_search(
         res = lib_svc.query_fasteners(
             query=query,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            lang=lang,
         )
         res["query"] = query
         res["tab"] = "fasteners"

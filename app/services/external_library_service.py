@@ -14,10 +14,18 @@ import math
 import sqlite3
 import json
 import re
+import hashlib
+from decimal import Decimal, InvalidOperation
+from urllib.parse import quote, unquote
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from app.i18n.category_i18n import category_i18n
+from app.i18n.fastener_aliases import (
+    aliases_for_standard,
+    expand_fastener_query,
+    localized_standard_name,
+)
 from app.services import component_search_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -29,6 +37,52 @@ ALTIUM_DB_PATH = DATA_DIR / "altium_library.db"
 KICAD_DB_PATH = DATA_DIR / "kicad_symbols.db"
 FASTENERS_DB_PATH = DATA_DIR / "fasteners.db"
 STATIC_PARTS_DIR = BASE_DIR / "static" / "images" / "parts"
+
+
+def _custom_row_key(nominal: str, payload: Dict[str, Any]) -> str:
+    encoded_nominal = quote(nominal.strip(), safe="")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+    return f"user:{encoded_nominal}:{digest}"
+
+
+def _custom_nominal_from_row_key(row_key: str) -> str:
+    if not str(row_key).startswith("user:"):
+        return str(row_key)
+    parts = str(row_key).split(":", 2)
+    encoded = unquote(parts[1]) if len(parts) == 3 else str(row_key)
+    return encoded.rsplit("@", 1)[0] if "@" in encoded else encoded
+
+
+def _normalize_custom_nominal(value: str) -> str:
+    text = " ".join(str(value or "").strip().split())
+    metric = re.fullmatch(r"M\s*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if metric:
+        try:
+            size = format(Decimal(metric.group(1)).normalize(), "f")
+            return f"M{size}"
+        except InvalidOperation:
+            return text
+    mixed_inch = re.fullmatch(r"(\d+)\s+(\d+\s*/\s*\d+)(?:\s*(?:in|inch|\"))?", text, re.IGNORECASE)
+    if mixed_inch:
+        fraction = re.sub(r"\s+", "", mixed_inch.group(2))
+        return f"{mixed_inch.group(1)} {fraction}in"
+    fraction_inch = re.fullmatch(r"(\d+\s*/\s*\d+)(?:\s*(?:in|inch|\"))?", text, re.IGNORECASE)
+    if fraction_inch:
+        normalized_fraction = re.sub(r"\s+", "", fraction_inch.group(1))
+        return f"{normalized_fraction}in"
+    inch = re.fullmatch(r"(\d+(?:\.\d+)?)(?:\s*(?:in|inch|\"))", text, re.IGNORECASE)
+    if inch:
+        return f"{inch.group(1)}in"
+    return text
+
+
+def _custom_length_from_row_key(row_key: str) -> Optional[str]:
+    if not str(row_key).startswith("user:"):
+        return None
+    parts = str(row_key).split(":", 2)
+    encoded = unquote(parts[1]) if len(parts) == 3 else ""
+    return encoded.rsplit("@", 1)[1] if "@" in encoded else None
 
 
 def ensure_libraries_on_startup() -> Dict[str, Any]:
@@ -1188,7 +1242,8 @@ def query_fasteners(
     query: Optional[str] = None,
     category: Optional[str] = None,
     authority: Optional[str] = None,
-    domain: Optional[str] = None
+    domain: Optional[str] = None,
+    lang: str = "zh"
 ) -> Dict[str, Any]:
     """
     Search and page fastener / mechanical standards from fasteners.db.
@@ -1210,14 +1265,19 @@ def query_fasteners(
         if query:
             q_clean = query.strip()
             q_param = f"%{q_clean}%"
+            alias_codes = expand_fastener_query(q_clean)
+            alias_sql = ""
+            if alias_codes:
+                alias_sql = " OR standard_code IN (" + ", ".join("?" for _ in alias_codes) + ")"
             where_clauses.append("""(
                 standard_code LIKE ?
                 OR standard_name LIKE ?
                 OR description LIKE ?
                 OR category_group_zh LIKE ?
                 OR param_table_name IN (SELECT DISTINCT table_name FROM fastener_tables WHERE row_key = ? OR row_key LIKE ?)
-            )""")
+            """ + alias_sql + ")")
             params.extend([q_param, q_param, q_param, q_param, q_clean, q_param])
+            params.extend(alias_codes)
 
         if category and category != "all":
             where_clauses.append("(category_group = ? OR category_group_zh = ?)")
@@ -1246,7 +1306,14 @@ def query_fasteners(
             LIMIT ? OFFSET ?
         """, params + [page_size, offset])
 
-        items = [dict(row) for row in cur.fetchall()]
+        items = []
+        for row in cur.fetchall():
+            item = dict(row)
+            item["standard_name_localized"] = localized_standard_name(
+                item.get("standard_code"), item.get("standard_name"), lang
+            )
+            item["search_aliases"] = aliases_for_standard(item.get("standard_code"))
+            items.append(item)
 
         return {
             "items": items,
@@ -1259,7 +1326,7 @@ def query_fasteners(
         conn.close()
 
 
-def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
+def get_fastener_detail(standard_code: str, lang: str = "zh") -> Optional[Dict[str, Any]]:
     """
     Returns complete metadata, dimensional parameter matrix, valid length matrix,
     hole drill references, and torque/wrench assembly guidelines for a standard.
@@ -1280,6 +1347,10 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
             return None
 
         standard = dict(std_row)
+        standard["standard_name_localized"] = localized_standard_name(
+            standard.get("standard_code"), standard.get("standard_name"), lang
+        )
+        standard["search_aliases"] = aliases_for_standard(standard.get("standard_code"))
         param_table = standard.get("param_table_name")
         length_table = standard.get("length_table_name")
 
@@ -1295,14 +1366,19 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
                 except Exception:
                     param_titles = []
 
-            cur.execute("SELECT row_key, data_json FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (param_table,))
+            cur.execute("SELECT row_key, data_json, source_file FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (param_table,))
             for r in cur.fetchall():
                 try:
                     vals = json.loads(r["data_json"])
                 except Exception:
                     vals = []
+                row_key = r["row_key"]
                 param_rows.append({
-                    "nominal": r["row_key"],
+                    "nominal": _custom_nominal_from_row_key(row_key),
+                    "row_key": row_key,
+                    "source_file": r["source_file"],
+                    "is_custom": r["source_file"] == "user",
+                    "custom_length": _custom_length_from_row_key(row_key),
                     "values": vals
                 })
 
@@ -1318,7 +1394,7 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
                 except Exception:
                     length_titles = []
 
-            cur.execute("SELECT row_key, data_json FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (length_table,))
+            cur.execute("SELECT row_key, data_json, source_file FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (length_table,))
             for r in cur.fetchall():
                 try:
                     vals = json.loads(r["data_json"])
@@ -1326,8 +1402,16 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
                     vals = []
                 length_rows.append({
                     "key": r["row_key"],
+                    "row_key": r["row_key"],
+                    "source_file": r["source_file"],
+                    "is_custom": r["source_file"] == "user",
+                    "nominal": _custom_nominal_from_row_key(r["row_key"]),
+                    "custom_length": _custom_length_from_row_key(r["row_key"]),
                     "lengths": [str(x) for x in vals if str(x).strip()]
                 })
+        standard["length_unit"] = "in" if any(
+            str(row.get("key", "")).casefold().endswith("in") for row in length_rows
+        ) else "mm"
 
         # 3. Fetch hole chart matching standard if metric
         cur.execute("SELECT nominal_dia, hole_diameter FROM fastener_hole_charts WHERE chart_type = 'metric_tap_hole'")
@@ -1359,6 +1443,240 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
             "tap_holes": tap_holes,
             "assembly_guides": assembly_guides
         }
+    finally:
+        conn.close()
+
+
+def _parse_positive_number(value: Any, field_name: str, *, allow_fraction: bool = False) -> float:
+    raw = str(value).strip()
+    try:
+        if allow_fraction and re.fullmatch(r"\d+\s*/\s*\d+", raw):
+            numerator, denominator = (int(part.strip()) for part in raw.split("/", 1))
+            if denominator == 0:
+                raise ValueError
+            number = numerator / denominator
+        else:
+            number = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        raise ValueError(f"{field_name} must be a finite positive number")
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError(f"{field_name} must be a finite positive number")
+    return number
+
+
+def _parse_custom_length(value: Any, default_unit: str) -> tuple[str, float]:
+    raw = str(value or "").strip().lower().replace("\u00a0", " ")
+    explicit_mm = bool(re.search(r"mm$", raw))
+    explicit_in = bool(re.search(r"(?:in|inch|\")$", raw))
+    cleaned = re.sub(r"(?:mm|inch|in|\")$", "", raw).strip()
+    mixed = re.fullmatch(r"(\d+)\s+(\d+)\s*/\s*(\d+)", cleaned)
+    fraction = re.fullmatch(r"(\d+)\s*/\s*(\d+)", cleaned)
+    try:
+        if mixed:
+            whole, numerator, denominator = (int(part) for part in mixed.groups())
+            if denominator == 0:
+                raise ValueError
+            number = whole + numerator / denominator
+        elif fraction:
+            numerator, denominator = (int(part) for part in fraction.groups())
+            if denominator == 0:
+                raise ValueError
+            number = numerator / denominator
+        else:
+            number = float(cleaned)
+    except (TypeError, ValueError, ZeroDivisionError):
+        raise ValueError("length must be a finite positive number")
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError("length must be a finite positive number")
+
+    is_inch = explicit_in or (not explicit_mm and default_unit == "in")
+    if is_inch:
+        if fraction and not mixed:
+            length_key = f"{fraction.group(1)}/{fraction.group(2)}in"
+        else:
+            length_key = f"{format(number, '.12g')}in"
+        return length_key, number * 25.4
+    return format(number, ".12g"), number
+
+
+def append_fastener_spec(
+    standard_code: str,
+    nominal: str,
+    dimensions: Dict[str, Any],
+    length: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Append a validated user specification to the selected standard's existing tables."""
+    if not isinstance(dimensions, dict):
+        raise ValueError("dimensions must be an object")
+    nominal = str(nominal or "").strip()
+    if not nominal or nominal.startswith("user:"):
+        raise ValueError("nominal is required")
+    nominal = _normalize_custom_nominal(nominal)
+
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        raise ValueError("fasteners database is unavailable")
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT standard_code, param_table_name, length_table_name FROM fastener_standards "
+            "WHERE standard_code = ? OR lower(standard_code) = lower(?) LIMIT 1",
+            (standard_code, standard_code),
+        )
+        standard = cur.fetchone()
+        if not standard:
+            raise ValueError("unknown fastener standard")
+        if (str(standard["standard_code"]).casefold() == "iutheatinsert"
+                and not re.fullmatch(r"M\d+(?:\.\d+)?", nominal, re.IGNORECASE)):
+            raise ValueError("heat-set insert nominal must be a metric thread size such as M3")
+        param_table = standard["param_table_name"]
+        if not param_table:
+            raise ValueError("standard has no parameter table")
+        length_table = standard["length_table_name"]
+
+        cur.execute("SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (param_table,))
+        title_row = cur.fetchone()
+        if not title_row:
+            raise ValueError("parameter table schema is unavailable")
+        titles = json.loads(title_row["titles_json"])
+        if not isinstance(titles, list) or not titles:
+            raise ValueError("parameter table schema is invalid")
+
+        title_lookup = {str(title).strip().casefold(): str(title) for title in titles}
+        supplied = {}
+        for key, value in dimensions.items():
+            canonical = title_lookup.get(str(key).strip().casefold())
+            if canonical is None:
+                raise ValueError(f"unknown dimension field: {key}")
+            supplied[canonical] = value
+
+        critical_by_standard = {
+            "iutheatinsert": ("Length", "ExtDia"),
+        }
+        critical = critical_by_standard.get(str(standard["standard_code"]).casefold(), ())
+        for title in critical:
+            if title not in title_lookup.values() or title not in supplied:
+                raise ValueError(f"required dimension is missing: {title}")
+
+        values = []
+        for title in titles:
+            value = supplied.get(str(title))
+            if value is None or (isinstance(value, str) and not value.strip()):
+                values.append(None)
+                continue
+            number = _parse_positive_number(value, str(title))
+            values.append(number)
+
+        for title in critical:
+            critical_value = values[titles.index(title)]
+            if critical_value is None or critical_value <= 0:
+                raise ValueError(f"{title} must be positive")
+        if not any(value is not None for value in values):
+            raise ValueError("at least one dimension is required")
+
+        parsed_length = None
+        length_key = None
+        if length is not None and str(length).strip():
+            if not length_table:
+                raise ValueError("standard has no separate length table")
+            cur.execute("SELECT row_key FROM fastener_tables WHERE table_name = ?", (length_table,))
+            known_lengths = [str(row["row_key"]).casefold() for row in cur.fetchall()]
+            default_length_unit = "in" if any(key.endswith("in") for key in known_lengths) else "mm"
+            length_key, parsed_length = _parse_custom_length(length, default_length_unit)
+        custom_nominal_key = nominal
+        if parsed_length is not None:
+            custom_nominal_key = f"{nominal}@{length_key}"
+        payload = {
+            "standard_code": standard["standard_code"],
+            "nominal": custom_nominal_key,
+            "values": values,
+            "length": parsed_length,
+            "length_key": length_key,
+        }
+        row_key = _custom_row_key(custom_nominal_key, payload)
+        data_json = json.dumps(values, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+        conn.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            "SELECT data_json, source_file FROM fastener_tables WHERE table_name = ? AND row_key = ?",
+            (param_table, row_key),
+        )
+        existing = cur.fetchone()
+        if existing:
+            if existing["source_file"] != "user" or json.loads(existing["data_json"]) != values:
+                raise ValueError("custom row key conflicts with existing dimensions")
+        else:
+            cur.execute(
+                "INSERT INTO fastener_tables (table_name, row_key, data_json, source_file) VALUES (?, ?, ?, 'user')",
+                (param_table, row_key, data_json),
+            )
+
+        length_row_key = None
+        length_added = False
+        if parsed_length is not None:
+            cur.execute("SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (length_table,))
+            length_title_row = cur.fetchone()
+            if not length_title_row:
+                raise ValueError("length table schema is unavailable")
+            length_titles = json.loads(length_title_row["titles_json"])
+            simple_key = length_key
+            cur.execute(
+                "SELECT row_key, data_json FROM fastener_tables WHERE table_name = ? AND row_key = ?",
+                (length_table, simple_key),
+            )
+            existing_length = cur.fetchone()
+            if existing_length:
+                old_values = json.loads(existing_length["data_json"])
+                low = float(old_values[0]) if old_values else parsed_length
+                high = float(old_values[1]) if len(old_values) > 1 else low
+                if min(low, high) <= parsed_length <= max(low, high):
+                    length_row_key = existing_length["row_key"]
+                else:
+                    length_row_key = row_key
+            else:
+                length_row_key = row_key
+
+            if not existing_length or length_row_key != existing_length["row_key"]:
+                length_values = []
+                for title in length_titles:
+                    title_lower = str(title).casefold()
+                    if "min" in title_lower:
+                        length_values.append(parsed_length)
+                    elif "max" in title_lower:
+                        length_values.append(parsed_length)
+                    else:
+                        length_values.append(parsed_length)
+                length_json = json.dumps(length_values, separators=(",", ":"), allow_nan=False)
+                cur.execute(
+                    "SELECT data_json, source_file FROM fastener_tables WHERE table_name = ? AND row_key = ?",
+                    (length_table, length_row_key),
+                )
+                custom_length_row = cur.fetchone()
+                if custom_length_row:
+                    if custom_length_row["source_file"] != "user" or json.loads(custom_length_row["data_json"]) != length_values:
+                        raise ValueError("custom length row key conflicts with existing length")
+                else:
+                    cur.execute(
+                        "INSERT INTO fastener_tables (table_name, row_key, data_json, source_file) VALUES (?, ?, ?, 'user')",
+                        (length_table, length_row_key, length_json),
+                    )
+                    length_added = True
+
+        conn.commit()
+        return {
+            "standard_code": standard["standard_code"],
+            "nominal": nominal,
+            "row_key": row_key,
+            "source_file": "user",
+            "is_custom": True,
+            "values": values,
+            "length": length_key,
+            "length_row_key": length_row_key,
+            "length_added": length_added,
+        }
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

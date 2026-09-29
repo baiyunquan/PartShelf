@@ -37,4 +37,13 @@
     const lengthKey = normalizeLength(length) || "-";
     return `fastener:v1/${encode(code)}/${encode(size)}/${encode(lengthKey)}`;
   };
+
+  window.buildCustomFastenerVariantId = function (standardCode, rowKey) {
+    const code = String(standardCode || '').trim();
+    const key = String(rowKey || '').trim();
+    if (!code || !key.startsWith('user:')) {
+      throw new Error('A custom fastener parameter row is required');
+    }
+    return `fastener:v2/${encode(code)}/${encode(key)}`;
+  };
 })();

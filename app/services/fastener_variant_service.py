@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 
 FASTENER_VARIANT_PREFIX = "fastener:v1/"
+FASTENER_CUSTOM_VARIANT_PREFIX = "fastener:v2/"
 _NO_LENGTH = "-"
 
 
@@ -73,34 +74,71 @@ def parse_fastener_variant_id(external_part_id: str) -> Optional[Dict[str, Optio
     }
 
 
+def build_custom_fastener_variant_id(standard_code: str, row_key: str) -> str:
+    code = str(standard_code or "").strip()
+    key = str(row_key or "").strip()
+    if not code or not key.startswith("user:"):
+        raise ValueError("standard_code and a custom parameter row key are required")
+    return FASTENER_CUSTOM_VARIANT_PREFIX + "/".join(
+        quote(part, safe="") for part in (code, key)
+    )
+
+
+def parse_custom_fastener_variant_id(external_part_id: str) -> Optional[Dict[str, str]]:
+    value = str(external_part_id or "")
+    if not value.startswith(FASTENER_CUSTOM_VARIANT_PREFIX):
+        return None
+    parts = value[len(FASTENER_CUSTOM_VARIANT_PREFIX):].split("/")
+    if len(parts) != 2:
+        return None
+    standard_code, row_key = (unquote(part) for part in parts)
+    if not standard_code or not row_key.startswith("user:"):
+        return None
+    return {"standard_code": standard_code, "row_key": row_key}
+
+
 def get_fastener_variant(external_part_id: str) -> Optional[Dict[str, Any]]:
     """Hydrate and validate one standard row and optional listed length."""
+    custom_identity = parse_custom_fastener_variant_id(external_part_id)
     identity = parse_fastener_variant_id(external_part_id)
-    if not identity:
+    if not custom_identity and not identity:
         return None
 
     from app.services.external_library_service import get_fastener_detail
 
-    detail = get_fastener_detail(identity["standard_code"] or "")
+    standard_code = (custom_identity or identity)["standard_code"] or ""
+    detail = get_fastener_detail(standard_code)
     if not detail:
         return None
     standard = detail["standard"]
-    nominal = identity["nominal"] or ""
-    param = next((
-        row for row in detail["param_rows"]
-        if normalize_nominal(row.get("nominal")) == nominal
-    ), None)
+    if custom_identity:
+        param = next((row for row in detail["param_rows"]
+                      if row.get("row_key") == custom_identity["row_key"] and row.get("is_custom")), None)
+        if not param:
+            return None
+        nominal = normalize_nominal(param.get("nominal"))
+        selected_length = normalize_length(param.get("custom_length")) if param.get("custom_length") else None
+    else:
+        nominal = identity["nominal"] or ""
+        source_rows = [row for row in detail["param_rows"]
+                       if normalize_nominal(row.get("nominal")) == nominal]
+        param = next((row for row in source_rows if not row.get("is_custom")), None)
+        if param is None:
+            param = source_rows[0] if source_rows else None
+        selected_length = identity["length"]
     if not param:
         return None
 
-    length = identity["length"]
+    length = selected_length
     length_row = None
     if standard.get("has_length"):
         if not length:
             return None
         length_row = next((
             row for row in detail["length_rows"]
-            if normalize_length(row.get("key")) == length
+            if (row.get("row_key") == param.get("row_key") and custom_identity)
+            or normalize_length(row.get("custom_length")) == length
+            or normalize_length(row.get("key")) == length
         ), None)
         if not length_row:
             return None
@@ -108,18 +146,27 @@ def get_fastener_variant(external_part_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     dimensions = dict(zip(detail["param_titles"], param.get("values") or []))
+    length_value = (length_row.get("custom_length") or length_row["key"]) if length_row else None
     selected_variant = {
         "standard_code": standard["standard_code"],
         "nominal": param["nominal"],
-        "length": length_row["key"] if length_row else None,
+        "length": length_value,
         "length_bounds_mm": length_row["lengths"] if length_row else [],
+        "row_key": param.get("row_key"),
+        "is_custom": bool(param.get("is_custom")),
         "dimensions": dimensions,
     }
     size_label = param["nominal"]
     if length_row:
-        size_label += f" × {length_row['key']}"
+        size_label += f" × {length_value}"
     if "in" not in size_label.lower() and length_row:
         size_label += " mm"
+    if param.get("is_custom"):
+        custom_dimensions = ", ".join(
+            f"{title}={value}" for title, value in dimensions.items() if value is not None
+        )
+        if custom_dimensions:
+            size_label += f" [{custom_dimensions}]"
 
     return {
         "standard": standard,

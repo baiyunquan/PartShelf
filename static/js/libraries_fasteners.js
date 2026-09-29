@@ -150,7 +150,9 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
               <td>${domBadge}</td>
               <td>${catBadge}</td>
               <td>
-                <div class="text-dark">${escapeHtml(item.description || item.standard_name || '-')}</div>
+                <div class="text-dark fw-semibold">${escapeHtml(item.standard_name_localized || item.standard_name || item.standard_code)}</div>
+                <small class="text-muted">${escapeHtml(item.standard_name || '')}</small>
+                <div class="text-muted">${escapeHtml(item.description || '')}</div>
                 <small class="text-muted">${escapeHtml(item.param_table_name || '')}</small>
               </td>
               <td class="text-center">${lengthBadge}</td>

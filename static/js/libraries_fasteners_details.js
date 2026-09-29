@@ -1,4 +1,6 @@
 const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      const fastenerI18n = i18n.libraries_fasteners || {};
+      const tr = (key, fallback) => fastenerI18n[key] || i18n[`libraries_fasteners.${key}`] || fallback;
       const standardCode = document.getElementById('detailContainer')?.dataset?.standardCode || decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop());
 
       function escapeHtml(str) {
@@ -6,6 +8,84 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         return String(str).replace(/[&<>"']/g, m => ({
           '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         })[m]);
+      }
+
+      function setupCustomSpecForm(standard, titles) {
+        const toggle = document.getElementById('customFastenerSpecToggle');
+        const panel = document.getElementById('customFastenerSpecPanel');
+        const fields = document.getElementById('customFastenerSpecFields');
+        const form = document.getElementById('customFastenerSpecForm');
+        if (!toggle || !panel || !fields || !form) return;
+
+        toggle.onclick = () => {
+          panel.hidden = !panel.hidden;
+          toggle.setAttribute('aria-expanded', String(!panel.hidden));
+        };
+
+        const requiredForInsert = new Set(['length', 'extdia']);
+        let html = `
+          <div class="col-md-4">
+            <label class="form-label fw-semibold" for="customSpecNominal">${escapeHtml(tr('custom_spec_nominal', 'Nominal Size'))}</label>
+            <input class="form-control" id="customSpecNominal" name="nominal" type="text" maxlength="100" required>
+          </div>`;
+        titles.forEach((title, index) => {
+          const required = standard.standard_code === 'IUTHeatInsert' && requiredForInsert.has(String(title).toLowerCase());
+          const id = `customSpecDimension${index}`;
+          html += `
+            <div class="col-md-4">
+              <label class="form-label fw-semibold" for="${id}">${escapeHtml(String(title))}${required ? '' : ` <span class="text-muted small">(${escapeHtml(tr('custom_spec_optional', 'Optional'))})</span>`}</label>
+              <input class="form-control" id="${id}" type="number" min="0" step="any" data-dimension-title="${escapeHtml(String(title))}"${required ? ' required' : ''}>
+            </div>`;
+        });
+        if (standard.length_table_name) {
+          const lengthUnit = standard.length_unit || 'mm';
+          html += `
+            <div class="col-md-4">
+              <label class="form-label fw-semibold" for="customSpecLength">${escapeHtml(tr('custom_spec_length', 'Custom Length'))} (${escapeHtml(lengthUnit)}) <span class="text-muted small">(${escapeHtml(tr('custom_spec_optional', 'Optional'))})</span></label>
+              <input class="form-control" id="customSpecLength" type="number" min="0" step="any">
+            </div>`;
+        }
+        fields.innerHTML = html;
+
+        if (form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+        form.addEventListener('submit', async event => {
+          event.preventDefault();
+          const status = document.getElementById('customFastenerSpecStatus');
+          const submit = document.getElementById('customFastenerSpecSubmit');
+          if (!form.reportValidity()) {
+            status.textContent = tr('custom_spec_missing', 'Fill in the required dimension fields.');
+            status.className = 'small mt-3 text-danger';
+            return;
+          }
+          const dimensions = {};
+          fields.querySelectorAll('[data-dimension-title]').forEach(input => {
+            dimensions[input.dataset.dimensionTitle] = input.value.trim() === '' ? null : input.value;
+          });
+          const payload = { nominal: document.getElementById('customSpecNominal').value.trim(), dimensions };
+          const lengthInput = document.getElementById('customSpecLength');
+          if (lengthInput && lengthInput.value.trim()) payload.length = lengthInput.value.trim();
+          submit.disabled = true;
+          status.textContent = tr('custom_spec_saving', 'Saving...');
+          status.className = 'small mt-3 text-muted';
+          try {
+            const response = await fetch(`/api/libraries/fasteners/${encodeURIComponent(standard.standard_code)}/specs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || tr('custom_spec_error', 'Could not save the specification.'));
+            status.textContent = tr('custom_spec_saved', 'Specification saved.');
+            status.className = 'small mt-3 text-success';
+            window.setTimeout(() => window.location.reload(), 500);
+          } catch (error) {
+            status.textContent = error.message || tr('custom_spec_error', 'Could not save the specification.');
+            status.className = 'small mt-3 text-danger';
+          } finally {
+            submit.disabled = false;
+          }
+        });
       }
 
       async function loadDetail() {
@@ -30,9 +110,9 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         document.getElementById('badgeAuthority').textContent = std.authority || 'STD';
 
         const DOMAIN_LABELS = {
-          'fasteners': i18n['libraries_fasteners.domain_fasteners'] || '紧固件',
-          'power_transmission': i18n['libraries_fasteners.domain_power_transmission'] || '动力传动',
-          'structural_materials': i18n['libraries_fasteners.domain_structural_materials'] || '结构材料 / 型材'
+          'fasteners': tr('domain_fasteners', 'Fasteners'),
+          'power_transmission': tr('domain_power_transmission', 'Power Transmission'),
+          'structural_materials': tr('domain_structural_materials', 'Structural Materials & Profiles')
         };
         const DOMAIN_BADGES = {
           'fasteners': 'badge bg-secondary fs-6',
@@ -46,8 +126,8 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         }
 
         document.getElementById('badgeCategory').textContent = std.category_group_zh || std.category_group || '-';
-        document.getElementById('stdTitle').textContent = std.standard_name || std.standard_code;
-        document.getElementById('stdDesc').textContent = std.description || '标准构件定义';
+        document.getElementById('stdTitle').textContent = std.standard_name_localized || std.standard_name || std.standard_code;
+        document.getElementById('stdDesc').textContent = [std.standard_name, std.description].filter(Boolean).join(' · ') || '标准构件定义';
         document.getElementById('badgeSourceFile').textContent = std.source_file || 'FsData';
 
         const nominalSelect = document.getElementById('detailFastenerNominal');
@@ -58,28 +138,49 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
           nominalSelect.replaceChildren();
           (data.param_rows || []).forEach(row => {
             const option = document.createElement('option');
-            option.value = row.nominal;
-            option.textContent = row.nominal;
+            option.value = row.row_key || row.nominal;
+            const valuesLabel = row.is_custom ? ` (${(row.values || []).filter(value => value !== null).join(' × ')})` : '';
+            option.textContent = `${row.nominal}${row.is_custom ? ` — ${tr('custom_spec_custom_badge', 'User specification')}${valuesLabel}` : ''}`;
+            option.dataset.custom = row.is_custom ? 'true' : 'false';
+            option.dataset.nominal = row.nominal;
+            option.dataset.customLength = row.custom_length || '';
+            option.dataset.customValues = row.is_custom
+              ? (row.values || []).map((value, index) => value === null || value === undefined
+                ? null
+                : `${titles[index]}=${value}`).filter(Boolean).join(', ')
+              : '';
             nominalSelect.appendChild(option);
           });
           lengthSelect.replaceChildren();
-          (data.length_rows || []).forEach(row => {
+          (data.length_rows || []).filter(row => !row.is_custom).forEach(row => {
             const option = document.createElement('option');
             option.value = row.key;
-            option.textContent = row.key;
+            option.textContent = row.custom_length || row.key;
             lengthSelect.appendChild(option);
           });
           const needsLength = Boolean(std.has_length);
-          lengthGroup.style.display = needsLength ? '' : 'none';
-          addVariantButton.disabled = !nominalSelect.options.length ||
-            (needsLength && !lengthSelect.options.length);
+          const updateVariantAvailability = () => {
+            const selected = nominalSelect.selectedOptions[0];
+            const isCustom = selected?.dataset.custom === 'true';
+            const customLength = selected?.dataset.customLength || '';
+            lengthGroup.style.display = needsLength && !(isCustom && customLength) ? '' : 'none';
+            addVariantButton.disabled = !selected || (needsLength && !(isCustom && customLength) && !lengthSelect.options.length) ||
+              (needsLength && isCustom && !customLength);
+          };
+          updateVariantAvailability();
+          nominalSelect.onchange = updateVariantAvailability;
           addVariantButton.addEventListener('click', () => {
-            const nominal = nominalSelect.value;
-            const length = needsLength ? lengthSelect.value : null;
+            const selected = nominalSelect.selectedOptions[0];
+            const nominal = selected?.dataset.nominal || '';
+            const isCustom = selected?.dataset.custom === 'true';
+            const length = needsLength && !isCustom ? lengthSelect.value : (selected?.dataset.customLength || null);
             if (!nominal || (needsLength && !length)) return;
-            const externalId = window.buildFastenerVariantId(std.standard_code, nominal, length);
+            const externalId = isCustom
+              ? window.buildCustomFastenerVariantId(std.standard_code, nominalSelect.value)
+              : window.buildFastenerVariantId(std.standard_code, nominal, length);
             const size = length ? `${nominal} × ${length}${String(length).toLowerCase().includes('in') ? '' : ' mm'}` : nominal;
-            const name = `${std.standard_code} ${size}`;
+            const customValues = selected?.dataset.customValues ? ` [${selected.dataset.customValues}]` : '';
+            const name = `${std.standard_code} ${size}${customValues}`;
             const meta = `${std.authority || ''} | ${std.category_group_zh || std.category_group || ''}`;
             window.openImportModal('fasteners', externalId, name, meta, 1);
           });
@@ -91,6 +192,7 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         const titles = data.param_titles || [];
         const rows = data.param_rows || [];
         const tapHoles = data.tap_holes || {};
+        setupCustomSpecForm(std, titles);
 
         document.getElementById('paramTableNameDisplay').textContent = std.param_table_name ? `参数表: ${std.param_table_name}` : '';
 
@@ -108,9 +210,9 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
           rows.forEach(r => {
             const nom = r.nominal || '';
             const tapHole = tapHoles[nom] !== undefined ? `${tapHoles[nom]} mm` : '-';
-            tbHtml += `<tr><td class="fw-bold bg-light text-primary text-center">${escapeHtml(nom)}</td>`;
+            tbHtml += `<tr><td class="fw-bold bg-light text-primary text-center">${escapeHtml(nom)}${r.is_custom ? `<br><span class="badge bg-info-subtle text-info-emphasis">${escapeHtml(tr('custom_spec_custom_badge', 'User specification'))}</span>` : ''}</td>`;
             r.values.forEach(v => {
-              tbHtml += `<td class="text-center">${escapeHtml(String(v))}</td>`;
+              tbHtml += `<td class="text-center">${v === null || v === undefined ? '-' : escapeHtml(String(v))}</td>`;
             });
             tbHtml += `<td class="text-center text-success fw-bold">${escapeHtml(tapHole)}</td></tr>`;
           });
@@ -130,7 +232,7 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
             const lengths = lr.lengths || [];
             lHtml += `
               <div class="p-3 bg-light rounded border">
-                <div class="fw-bold mb-2 text-dark">${escapeHtml(key)} 可用公称长度系列：</div>
+                <div class="fw-bold mb-2 text-dark">${escapeHtml(lr.custom_length ? `${lr.nominal} × ${lr.custom_length}` : key)} 可用公称长度系列：</div>
                 <div class="d-flex flex-wrap gap-1">
                   ${lengths.map(len => `<span class="badge bg-white text-dark border px-2 py-1">${escapeHtml(String(len))} mm</span>`).join('')}
                 </div>

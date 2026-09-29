@@ -57,6 +57,205 @@ def test_fastener_dimension_parser_normalizes_metric_and_imperial_notation(text,
     assert parse_fastener_text(text) == expected
 
 
+def test_custom_heat_insert_variants_hydrate_distinct_rows_and_inventory_references(tmp_path, monkeypatch, inventory_db):
+    import shutil
+    from app.services import external_library_service as lib_svc
+    from app.services.fastener_variant_service import build_custom_fastener_variant_id, get_fastener_variant
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    first = lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.5})
+    second = lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.6})
+
+    first_id = build_custom_fastener_variant_id("IUTHeatInsert", first["row_key"])
+    second_id = build_custom_fastener_variant_id("IUTHeatInsert", second["row_key"])
+    assert first_id.startswith("fastener:v2/")
+    assert first_id != second_id
+    first_variant = get_fastener_variant(first_id)
+    second_variant = get_fastener_variant(second_id)
+    assert first_variant["selected_variant"]["dimensions"]["ExtDia"] == 5.5
+    assert second_variant["selected_variant"]["dimensions"]["ExtDia"] == 5.6
+
+    first_part = InventoryService.add_part_to_inventory(inventory_db, PartToInventoryAdd(
+        library_source="fasteners", external_part_id=first_id, quantity=1
+    ))
+    second_part = InventoryService.add_part_to_inventory(inventory_db, PartToInventoryAdd(
+        library_source="fasteners", external_part_id=second_id, quantity=1
+    ))
+    assert first_part.external_part_id == first_id
+    assert second_part.external_part_id == second_id
+    assert first_part.name != second_part.name
+    assert "5.5" in first_part.name
+    assert "5.6" in second_part.name
+
+
+def test_custom_flat_head_variant_carries_custom_length(tmp_path, monkeypatch):
+    import shutil
+    from app.services import external_library_service as lib_svc
+    from app.services.fastener_variant_service import build_custom_fastener_variant_id, get_fastener_variant
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    spec = lib_svc.append_fastener_spec("ISO10642", "M3", {"P": 0.5}, length="4.5")
+
+    variant = get_fastener_variant(build_custom_fastener_variant_id("ISO10642", spec["row_key"]))
+
+    assert variant is not None
+    assert variant["selected_variant"]["nominal"] == "M3"
+    assert variant["selected_variant"]["length"] == "4.5"
+
+
+def test_custom_flat_head_bom_requires_matching_nominal_and_custom_length(tmp_path, monkeypatch):
+    import shutil
+    from app.services import external_library_service as lib_svc
+    from app.services.bom_matcher import BomMatcher
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    lib_svc.append_fastener_spec("ISO10642", "M3", {"P": 0.5}, length="4.5")
+    matcher = BomMatcher()
+    try:
+        matched = matcher.fastener_match(screw_row(
+            value="ISO10642 M3x4.5 countersunk screw",
+            comment="flat head screw M3 x 4.5 mm",
+            footprint="M3 countersunk screw",
+            mechanical_standard="ISO10642",
+        ))
+        mismatch = matcher.fastener_match(screw_row(
+            value="ISO10642 M3x4.6 countersunk screw",
+            comment="flat head screw M3 x 4.6 mm",
+            footprint="M3 countersunk screw",
+            mechanical_standard="ISO10642",
+        ))
+        without_standard = matcher.fastener_match(screw_row(
+            value="M3x4.5 countersunk screw",
+            comment="flat head screw M3 x 4.5 mm",
+            footprint="M3 countersunk screw",
+        ))
+    finally:
+        matcher.close()
+
+    assert matched["reason"] == "dimension_match"
+    assert matched["items"][0]["external_part_id"].startswith("fastener:v2/")
+    assert mismatch["reason"] == "no_dimension_match"
+    assert mismatch["items"] == []
+    from app.i18n.fastener_aliases import aliases_for_standard
+    assert without_standard["items"]
+    assert all("沉头螺钉" in aliases_for_standard(item["standard_code"]) for item in without_standard["items"])
+
+
+def test_heat_insert_parser_extracts_thread_outer_diameter_and_length():
+    from app.services.bom_matcher import parse_heat_insert_text
+
+    assert parse_heat_insert_text("铜土八热熔螺母，规格：M3*5.5*4") == {
+        "nominal": "M3", "outer_diameter": "5.5", "length": "4"
+    }
+
+
+def test_custom_heat_insert_bom_matches_all_three_dimensions(tmp_path, monkeypatch):
+    import shutil
+    from app.services import external_library_service as lib_svc
+    from app.services.bom_matcher import BomMatcher
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.5})
+    row = screw_row(
+        value="M3*5.5*4",
+        comment="热熔铜螺母 规格：M3*5.5*4",
+        footprint="M3 热熔螺母",
+        mechanical_nominal="M3",
+        mechanical_length="4",
+    )
+
+    matcher = BomMatcher()
+    try:
+        result = matcher.fastener_match(row)
+    finally:
+        matcher.close()
+
+    assert result["reason"] == "dimension_match"
+    assert len(result["items"]) == 1
+    assert result["items"][0]["external_part_id"].startswith("fastener:v2/")
+    assert result["items"][0]["dimensions"]["ExtDia"] == 5.5
+
+
+def test_custom_heat_insert_xlsx_preview_and_import_keep_v2_reference(tmp_path, monkeypatch, inventory_db):
+    import shutil
+    from app.services import external_library_service as lib_svc
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.5})
+    row = screw_row(
+        value="M3*5.5*4",
+        comment="热熔铜螺母 规格：M3*5.5*4",
+        footprint="M3 热熔螺母",
+        mechanical_nominal="M3",
+        mechanical_length="4",
+    )
+
+    preview = analyze_bom_matching([row], inventory_db)
+    item = preview["items"][0]
+    assert item["status"] == "matched_library"
+    assert item["selected"] is True
+    assert item["external_part_id"].startswith("fastener:v2/")
+
+    imported = execute_bom_import(
+        db=inventory_db,
+        target_type="new",
+        project_name="Custom fastener BOM",
+        project_description=None,
+        existing_project_id=None,
+        quantity_strategy="add",
+        items=[item],
+    )
+
+    assert imported["imported_parts_count"] == 1
+    part = inventory_db.query(Part).filter(Part.library_source == "fasteners").one()
+    assert part.external_part_id == item["external_part_id"]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_reason", "expected_missing"),
+    [
+        ("M3*5.6*4", "no_dimension_match", []),
+        ("M3*5.5", "incomplete_dimensions", ["length"]),
+    ],
+)
+def test_heat_insert_bom_rejects_conflicting_or_incomplete_dimensions(
+    tmp_path, monkeypatch, value, expected_reason, expected_missing
+):
+    import shutil
+    from app.services import external_library_service as lib_svc
+    from app.services.bom_matcher import BomMatcher
+
+    db_path = tmp_path / "fasteners.db"
+    shutil.copy2(lib_svc.FASTENERS_DB_PATH, db_path)
+    monkeypatch.setattr(lib_svc, "FASTENERS_DB_PATH", db_path)
+    lib_svc.append_fastener_spec("IUTHeatInsert", "M3", {"Length": 4, "ExtDia": 5.5})
+    row = screw_row(
+        value=value, comment="热熔铜螺母", footprint="M3 热熔螺母",
+        mechanical_standard="IUTHeatInsert",
+    )
+
+    matcher = BomMatcher()
+    try:
+        result = matcher.fastener_match(row)
+    finally:
+        matcher.close()
+
+    assert result["reason"] == expected_reason
+    assert result["missing_dimensions"] == expected_missing
+    if expected_reason != "dimension_match":
+        assert result["items"] == []
+
+
 def test_incomplete_m2_screw_has_no_bindable_fastener_candidates(inventory_db):
     item = analyze_bom_matching([screw_row()], inventory_db)["items"][0]
 

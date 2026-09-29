@@ -251,7 +251,9 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               <td><span class="badge bg-secondary">${escapeHtml(item.authority || 'STD')}</span></td>
               <td><span class="badge bg-light text-dark border">${escapeHtml(item.category_group_zh || item.category_group || '-')}</span></td>
               <td>
-                <small class="text-dark">${escapeHtml(item.description || item.standard_name || '-')}</small>
+                <div class="text-dark fw-semibold">${escapeHtml(item.standard_name_localized || item.standard_name || item.standard_code)}</div>
+                <small class="text-muted">${escapeHtml(item.standard_name || '')}</small>
+                <div class="text-muted small">${escapeHtml(item.description || '')}</div>
               </td>
               <td class="text-end">
                 <a href="/libraries/fasteners/${encodeURIComponent(item.standard_code)}" class="btn btn-outline-primary btn-sm">详情</a>
@@ -454,7 +456,9 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               <td><span class="badge bg-secondary">${escapeHtml(item.authority || 'STD')}</span></td>
               <td><span class="badge bg-light text-dark border">${escapeHtml(item.category_group_zh || item.category_group || '-')}</span></td>
               <td>
-                <div class="text-dark">${escapeHtml(item.description || item.standard_name || '-')}</div>
+                <div class="text-dark fw-semibold">${escapeHtml(item.standard_name_localized || item.standard_name || item.standard_code)}</div>
+                <small class="text-muted">${escapeHtml(item.standard_name || '')}</small>
+                <div class="text-muted">${escapeHtml(item.description || '')}</div>
                 <small class="text-muted">${escapeHtml(item.param_table_name || '')}</small>
               </td>
               <td class="text-center">${lengthBadge}</td>

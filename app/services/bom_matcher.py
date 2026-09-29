@@ -4,14 +4,18 @@ import json
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote
 
+from app.i18n.fastener_aliases import aliases_for_standard
 from app.services import external_library_service as libraries
 from app.services import component_search_service
 from app.services.fastener_variant_service import (
     build_fastener_variant_id,
+    build_custom_fastener_variant_id,
     normalize_length,
     normalize_nominal,
     parse_fastener_variant_id,
+    parse_custom_fastener_variant_id,
 )
 
 
@@ -26,6 +30,7 @@ _COLORS = {"green": ("green", "绿"), "red": ("red", "红"),
            "blue": ("blue", "蓝"), "orange": ("orange", "橙"),
            "yellow": ("yellow", "黄"), "white": ("white", "白")}
 _MECHANICAL_FAMILIES = {
+    "heat_insert": ("heat insert", "heat-set insert", "heatset insert", "heat staked insert", "热熔螺母", "热熔铜螺母", "热熔嵌件", "热压嵌件"),
     "screw": ("screw", "螺钉", "螺丝", "顶丝"),
     "bolt": ("bolt", "螺栓"),
     "nut": ("nut", "螺母"),
@@ -127,6 +132,40 @@ def parse_fastener_text(text: Any) -> Dict[str, Optional[str]]:
     return {"nominal": nominal, "length": length}
 
 
+def parse_heat_insert_text(text: Any) -> Dict[str, Optional[str]]:
+    """Extract thread, outside diameter, and insert length from heat-set insert labels."""
+    value = str(text or "").replace("×", "x").replace("✕", "x").upper()
+    match = re.search(
+        r"(?<![A-Z0-9])M\s*(\d+(?:\.\d+)?)\s*[X*]\s*"
+        r"(\d+(?:\.\d+)?)\s*(?:MM)?\s*[X*]\s*"
+        r"(\d+(?:\.\d+)?)\s*(?:MM)?",
+        value,
+    )
+    if match:
+        return {
+            "nominal": normalize_nominal(f"M{match.group(1)}"),
+            "outer_diameter": match.group(2),
+            "length": match.group(3),
+        }
+    partial = re.search(
+        r"(?<![A-Z0-9])M\s*(\d+(?:\.\d+)?)\s*[X*]\s*"
+        r"(\d+(?:\.\d+)?)(?:\s*(?:MM))?(?!\s*[X*])",
+        value,
+    )
+    if partial:
+        return {
+            "nominal": normalize_nominal(f"M{partial.group(1)}"),
+            "outer_diameter": partial.group(2),
+            "length": None,
+        }
+    nominal = re.search(r"(?<![A-Z0-9])M\s*(\d+(?:\.\d+)?)", value)
+    return {
+        "nominal": normalize_nominal(f"M{nominal.group(1)}") if nominal else None,
+        "outer_diameter": None,
+        "length": None,
+    }
+
+
 def measurement(text: Any, kind: Optional[str]) -> Optional[Decimal]:
     if not text or kind not in _ATTRIBUTE:
         return None
@@ -214,6 +253,20 @@ def row_conflicts(row: Dict[str, Any], kind: Optional[str]) -> List[str]:
 
 
 def fastener_spec_conflicts(row: Dict[str, Any]) -> List[str]:
+    if mechanical_family(row) == "heat_insert":
+        specs = [parse_heat_insert_text(row.get(key)) for key in (
+            "value", "comment", "footprint", "manufacturer_part", "mechanical_nominal",
+        )]
+        explicit_length = row.get("mechanical_length")
+        if explicit_length:
+            specs.append({"nominal": None, "outer_diameter": None,
+                          "length": normalize_length(explicit_length)})
+        for key in ("nominal", "outer_diameter", "length"):
+            values = {spec[key] for spec in specs if spec.get(key)}
+            if len(values) > 1:
+                return ["dimensions"]
+        return []
+
     specs = [parse_fastener_text(row.get(key)) for key in (
         "value", "comment", "footprint", "manufacturer_part", "mechanical_nominal",
     )]
@@ -290,12 +343,14 @@ class BomMatcher:
             for row in self.fasteners.execute("SELECT table_name, titles_json FROM fastener_table_titles")
         }
         tables: Dict[str, List[Dict[str, Any]]] = {}
-        for row in self.fasteners.execute("SELECT table_name, row_key, data_json FROM fastener_tables"):
+        for row in self.fasteners.execute("SELECT table_name, row_key, data_json, source_file FROM fastener_tables"):
             try:
                 values = json.loads(row["data_json"] or "[]")
             except (TypeError, ValueError):
                 values = []
-            tables.setdefault(row["table_name"], []).append({"key": row["row_key"], "values": values})
+            tables.setdefault(row["table_name"], []).append({
+                "key": row["row_key"], "values": values, "source_file": row["source_file"]
+            })
 
         standards = self.fasteners.execute("SELECT * FROM fastener_standards").fetchall()
         for raw_standard in standards:
@@ -306,10 +361,28 @@ class BomMatcher:
             param_titles = titles.get(param_table, [])
             length_table = standard.get("length_table_name")
             length_rows = tables.get(length_table, []) if length_table else []
-            length_keys = {normalize_length(row["key"]): row["key"] for row in length_rows}
+            source_length_keys = {
+                normalize_length(row["key"]): row["key"]
+                for row in length_rows if row.get("source_file") != "user"
+            }
             for param in tables.get(param_table, []):
-                nominal = param["key"]
+                row_key = param["key"]
+                custom_length = None
+                if param.get("source_file") == "user" and row_key.startswith("user:"):
+                    key_parts = row_key.split(":", 2)
+                    encoded_nominal = unquote(key_parts[1]) if len(key_parts) == 3 else ""
+                    if "@" in encoded_nominal:
+                        nominal, custom_length = encoded_nominal.rsplit("@", 1)
+                    else:
+                        nominal = encoded_nominal
+                else:
+                    nominal = row_key
                 dimensions = dict(zip(param_titles, param["values"]))
+                if param.get("source_file") == "user":
+                    length_keys = ({normalize_length(custom_length): custom_length}
+                                   if custom_length else {})
+                else:
+                    length_keys = source_length_keys
                 self._fastener_rows.append({
                     "standard": standard,
                     "nominal": nominal,
@@ -317,6 +390,9 @@ class BomMatcher:
                     "dimensions": dimensions,
                     "has_length": bool(standard.get("has_length")),
                     "length_keys": length_keys,
+                    "row_key": row_key,
+                    "is_custom": param.get("source_file") == "user",
+                    "custom_length": custom_length,
                 })
         return self._fastener_rows
 
@@ -347,7 +423,14 @@ class BomMatcher:
     def _fastener_category_matches(family: Optional[str], standard: Dict[str, Any], text: str) -> bool:
         if not family:
             return True
+        if family == "screw" and any(term in text for term in ("flat head", "countersunk", "平头", "沉头")):
+            if "沉头螺钉" not in aliases_for_standard(standard.get("standard_code", "")):
+                return False
+        if family == "heat_insert" and str(standard.get("standard_code", "")).casefold() == "iutheatinsert":
+            return True
         category = f"{standard.get('category_group_zh') or ''} {standard.get('category_group') or ''} {standard.get('description') or ''}".lower()
+        if family == "heat_insert" and ("insert" in category or "嵌件" in category):
+            return True
         terms = _MECHANICAL_FAMILIES.get(family, ())
         if any(term in category for term in terms):
             return True
@@ -355,10 +438,99 @@ class BomMatcher:
             return False
         return family == "screw" and "bolt" in category and any(t in text for t in ("bolt", "螺栓"))
 
+    def _heat_insert_match(
+        self, row: Dict[str, Any], records: List[Dict[str, Any]],
+        standard_code: Optional[str], query: str,
+    ) -> Dict[str, Any]:
+        text = " ".join(str(row.get(key) or "") for key in (
+            "value", "comment", "footprint", "manufacturer_part", "mechanical_nominal",
+        ))
+        parsed = parse_heat_insert_text(text)
+        explicit_nominal = row.get("mechanical_nominal")
+        if explicit_nominal:
+            parsed_nominal = parse_heat_insert_text(explicit_nominal)["nominal"]
+            parsed["nominal"] = parsed_nominal or normalize_nominal(explicit_nominal)
+        explicit_outer = row.get("mechanical_outer_diameter") or row.get("outer_diameter")
+        if explicit_outer:
+            parsed["outer_diameter"] = str(explicit_outer).strip()
+        explicit_length = row.get("mechanical_length")
+        if explicit_length:
+            parsed["length"] = normalize_length(explicit_length)
+
+        missing = [key for key in ("nominal", "outer_diameter", "length") if not parsed.get(key)]
+        if missing:
+            return {"items": [], "missing_dimensions": missing, "reason": "incomplete_dimensions"}
+
+        try:
+            wanted_outer = Decimal(str(parsed["outer_diameter"]))
+            wanted_length = Decimal(str(parsed["length"]))
+        except (InvalidOperation, TypeError, ValueError):
+            return {"items": [], "missing_dimensions": [], "reason": "no_dimension_match"}
+
+        standard_key = re.sub(r"[^a-z0-9]", "", standard_code.lower()) if standard_code else None
+        candidates = []
+        text_lower = text.lower()
+        for record in records:
+            standard = record["standard"]
+            if record["nominal_key"] != normalize_nominal(parsed["nominal"]):
+                continue
+            if not self._fastener_category_matches("heat_insert", standard, text_lower):
+                continue
+            if standard_key and re.sub(r"[^a-z0-9]", "", standard["standard_code"].lower()) != standard_key:
+                continue
+            dimensions = record["dimensions"]
+            normalized_titles = {str(key).casefold(): value for key, value in dimensions.items()}
+            try:
+                candidate_outer = Decimal(str(normalized_titles.get("extdia")))
+                candidate_length = Decimal(str(normalized_titles.get("length")))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if candidate_outer != wanted_outer or candidate_length != wanted_length:
+                continue
+
+            external_id = (build_custom_fastener_variant_id(standard["standard_code"], record["row_key"])
+                           if record["is_custom"] else
+                           build_fastener_variant_id(standard["standard_code"], record["nominal"]))
+            size = f"{record['nominal']} × {normalized_titles['extdia']} × {normalized_titles['length']} mm"
+            name = f"{standard.get('standard_name') or standard['standard_code']} {size}"
+            candidates.append({
+                "library_source": "fasteners",
+                "external_part_id": external_id,
+                "name": name,
+                "manufacturer": standard.get("authority") or "",
+                "authority": standard.get("authority") or "",
+                "package": standard.get("category_group_zh") or standard.get("category_group") or "",
+                "value": size,
+                "stock": 0,
+                "standard_code": standard["standard_code"],
+                "nominal": record["nominal"],
+                "length": str(normalized_titles["length"]),
+                "dimensions": dimensions,
+                "match_reason": "dimension_match",
+                "conflicts": [],
+            })
+
+        if query:
+            query_key = re.sub(r"\s+", "", query.lower().replace("×", "x").replace("*", "x"))
+            candidates = [candidate for candidate in candidates if query_key in re.sub(
+                r"\s+", "", f"{candidate['standard_code']} {candidate['name']} {candidate['package']}".lower().replace("×", "x")
+            )]
+        ordered = list({candidate["external_part_id"]: candidate for candidate in candidates}.values())
+        ordered.sort(key=lambda candidate: (candidate["standard_code"], candidate["external_part_id"]))
+        reason = "dimension_match" if len(ordered) == 1 else ("ambiguous_dimensions" if ordered else "no_dimension_match")
+        return {"items": ordered[:10], "missing_dimensions": [], "reason": reason}
+
     def fastener_match(self, row: Dict[str, Any], query: str = "") -> Dict[str, Any]:
         """Return dimension-compatible mechanical variants; incomplete rows never bind."""
         if fastener_spec_conflicts(row):
             return {"items": [], "missing_dimensions": [], "reason": "conflict"}
+        standard_code = self._fastener_standard_code(row)
+        family = mechanical_family(row)
+        text = self._fastener_text(row)
+        records = self._load_fastener_rows()
+        if family == "heat_insert":
+            return self._heat_insert_match(row, records, standard_code, query)
+
         data = parse_fastener_text(" ".join(str(row.get(key) or "") for key in (
             "value", "comment", "footprint", "manufacturer_part", "mechanical_nominal", "mechanical_length",
         )))
@@ -369,11 +541,6 @@ class BomMatcher:
         explicit_length = row.get("mechanical_length")
         if explicit_length:
             data["length"] = normalize_length(explicit_length)
-        standard_code = self._fastener_standard_code(row)
-        family = mechanical_family(row)
-        text = self._fastener_text(row)
-        records = self._load_fastener_rows()
-
         if not data["nominal"]:
             return {"items": [], "missing_dimensions": ["nominal"], "reason": "incomplete_dimensions"}
 
@@ -397,6 +564,8 @@ class BomMatcher:
         matched_records = []
         for record in nominal_matches:
             if record["has_length"]:
+                if record.get("is_custom") and not record.get("custom_length"):
+                    continue
                 requested_length = data["length"]
                 actual_length = record["length_keys"].get(requested_length)
                 if actual_length is None and requested_length and requested_length.isdecimal():
@@ -430,7 +599,10 @@ class BomMatcher:
         candidates = []
         for record, record_length in matched_records:
             standard = record["standard"]
-            external_id = build_fastener_variant_id(standard["standard_code"], record["nominal"], record_length)
+            if record.get("is_custom"):
+                external_id = build_custom_fastener_variant_id(standard["standard_code"], record["row_key"])
+            else:
+                external_id = build_fastener_variant_id(standard["standard_code"], record["nominal"], record_length)
             size = record["nominal"]
             if record_length:
                 size += f" × {record_length}"
@@ -473,7 +645,7 @@ class BomMatcher:
         return {"items": ordered[:10], "missing_dimensions": missing, "reason": reason}
 
     def validate_fastener_match(self, row: Dict[str, Any], external_part_id: str) -> bool:
-        identity = parse_fastener_variant_id(external_part_id)
+        identity = parse_fastener_variant_id(external_part_id) or parse_custom_fastener_variant_id(external_part_id)
         if not identity:
             return False
         result = self.fastener_match(row)

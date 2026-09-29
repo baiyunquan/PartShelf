@@ -6,6 +6,7 @@ from db.database import get_db
 from app.services import external_library_service as lib_svc
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory import PartToInventoryAdd
+from app.schemas.fastener import FastenerSpecCreate
 from app.i18n.category_i18n import category_i18n
 from app.i18n import get_current_language
 
@@ -42,10 +43,10 @@ def search_libraries(
     elif target == "kicad":
         return {"kicad": lib_svc.search_kicad(q, page_size=limit)}
     elif target == "fasteners":
-        return {"fasteners": lib_svc.query_fasteners(query=q, page_size=limit)}
+        return {"fasteners": lib_svc.query_fasteners(query=q, page_size=limit, lang=get_current_language(request))}
     else:
         results = lib_svc.search_all_libraries(q, limit_each=limit, lang=get_current_language(request))
-        results["fasteners"] = lib_svc.query_fasteners(query=q, page_size=limit)
+        results["fasteners"] = lib_svc.query_fasteners(query=q, page_size=limit, lang=get_current_language(request))
         return results
 
 
@@ -206,6 +207,7 @@ def get_fastener_assembly_guide(nominal: Optional[str] = Query(None)):
 
 @router.get("/fasteners")
 def search_fasteners(
+    request: Request,
     q: Optional[str] = Query("", description="Keyword or standard code"),
     category: Optional[str] = Query(None),
     authority: Optional[str] = Query(None),
@@ -220,17 +222,32 @@ def search_fasteners(
         query=q or "",
         category=category,
         authority=authority,
-        domain=domain
+        domain=domain,
+        lang=get_current_language(request),
     )
 
 
 @router.get("/fasteners/{standard_code}")
-def get_fastener_detail(standard_code: str):
+def get_fastener_detail(request: Request, standard_code: str):
     """Get full details of a specific standard including parameter, length tables, and assembly guides."""
-    detail = lib_svc.get_fastener_detail(standard_code)
+    detail = lib_svc.get_fastener_detail(standard_code, lang=get_current_language(request))
     if not detail:
         raise HTTPException(status_code=404, detail="Mechanical standard not found")
     return detail
+
+
+@router.post("/fasteners/{standard_code}/specs")
+def create_fastener_spec(standard_code: str, payload: FastenerSpecCreate):
+    """Append a validated user-defined size to the standard's existing parameter tables."""
+    try:
+        return lib_svc.append_fastener_spec(
+            standard_code=standard_code,
+            nominal=payload.nominal,
+            dimensions=payload.dimensions,
+            length=payload.length,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/fasteners/hole-charts/{chart_type}")

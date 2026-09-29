@@ -15,6 +15,7 @@ import json
 import sqlite3
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
@@ -514,7 +515,7 @@ def import_whole_spec_components(cursor: sqlite3.Cursor, whole_spec_db: Path) ->
     return imported_specs, imported_rows
 
 
-def import_fasteners(
+def _build_fasteners_database(
     source_dir: Path = DEFAULT_SOURCE_DIR,
     output_db: Path = DEFAULT_OUTPUT_DB,
     whole_spec_db: Path = DEFAULT_WHOLE_SPEC_DB
@@ -683,6 +684,116 @@ def import_fasteners(
     print(f"  - Hole Chart Entries:      {result['hole_charts']}")
 
     return result
+
+
+def _migrate_user_rows(old_db: Path, staged_db: Path) -> int:
+    """Copy user-owned rows into a newly built database without changing upstream rows."""
+    if not old_db.exists():
+        return 0
+    old_conn = sqlite3.connect(old_db)
+    staged_conn = sqlite3.connect(staged_db)
+    try:
+        old_conn.row_factory = sqlite3.Row
+        staged_conn.row_factory = sqlite3.Row
+        old_tables = {row[0] for row in old_conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        staged_tables = {row[0] for row in staged_conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {"fastener_tables", "fastener_table_titles"}.issubset(old_tables):
+            return 0
+        if not {"fastener_tables", "fastener_table_titles", "fastener_standards"}.issubset(staged_tables):
+            raise ValueError("staged fastener database schema is incomplete")
+
+        user_rows = old_conn.execute(
+            "SELECT table_name, row_key, data_json FROM fastener_tables WHERE source_file = 'user' ORDER BY id"
+        ).fetchall()
+        staged_conn.execute("BEGIN IMMEDIATE")
+        copied = 0
+        for row in user_rows:
+            table_name, row_key = row["table_name"], row["row_key"]
+            old_title = old_conn.execute(
+                "SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (table_name,)
+            ).fetchone()
+            target_title = staged_conn.execute(
+                "SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (table_name,)
+            ).fetchone()
+            if not old_title or not target_title:
+                raise ValueError(f"user fastener table is missing after import: {table_name}")
+            old_titles = json.loads(old_title["titles_json"])
+            target_titles = json.loads(target_title["titles_json"])
+            if old_titles != target_titles:
+                raise ValueError(f"user fastener table schema changed: {table_name}")
+            values = json.loads(row["data_json"])
+            if not isinstance(values, list) or len(values) != len(target_titles):
+                raise ValueError(f"user fastener row has an invalid value count: {table_name}/{row_key}")
+            standard_exists = staged_conn.execute(
+                "SELECT 1 FROM fastener_standards WHERE param_table_name = ? OR length_table_name = ? LIMIT 1",
+                (table_name, table_name),
+            ).fetchone()
+            if not standard_exists:
+                raise ValueError(f"user fastener table is no longer referenced by a standard: {table_name}")
+            existing = staged_conn.execute(
+                "SELECT data_json, source_file FROM fastener_tables WHERE table_name = ? AND row_key = ? ORDER BY id LIMIT 1",
+                (table_name, row_key),
+            ).fetchone()
+            if existing:
+                if existing["source_file"] != "user" or json.loads(existing["data_json"]) != values:
+                    raise ValueError(f"user fastener row conflicts with imported data: {table_name}/{row_key}")
+                continue
+            staged_conn.execute(
+                "INSERT INTO fastener_tables (table_name, row_key, data_json, source_file) VALUES (?, ?, ?, 'user')",
+                (table_name, row_key, row["data_json"]),
+            )
+            copied += 1
+        staged_conn.commit()
+        integrity = staged_conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise ValueError(f"staged fastener database integrity check failed: {integrity}")
+        return copied
+    except Exception:
+        staged_conn.rollback()
+        raise
+    finally:
+        staged_conn.close()
+        old_conn.close()
+
+
+def _validate_staged_database(staged_db: Path) -> None:
+    conn = sqlite3.connect(staged_db)
+    try:
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        required = {"fastener_standards", "fastener_tables", "fastener_table_titles", "fastener_hole_charts"}
+        if not required.issubset(tables):
+            raise ValueError("staged fastener database is missing required tables")
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise ValueError(f"staged fastener database integrity check failed: {integrity}")
+    finally:
+        conn.close()
+
+
+def import_fasteners(
+    source_dir: Path = DEFAULT_SOURCE_DIR,
+    output_db: Path = DEFAULT_OUTPUT_DB,
+    whole_spec_db: Path = DEFAULT_WHOLE_SPEC_DB,
+) -> Dict[str, int]:
+    """Build a temporary database, migrate user rows, then atomically publish it."""
+    output_db = Path(output_db)
+    output_db.parent.mkdir(parents=True, exist_ok=True)
+    staged_db = output_db.with_name(f".{output_db.stem}.{uuid.uuid4().hex}.tmp{output_db.suffix}")
+    try:
+        result = _build_fasteners_database(
+            source_dir=source_dir,
+            output_db=staged_db,
+            whole_spec_db=whole_spec_db,
+        )
+        migrated = _migrate_user_rows(output_db, staged_db)
+        _validate_staged_database(staged_db)
+        os.replace(staged_db, output_db)
+        result["migrated_user_rows"] = migrated
+        print(f"Published mechanical database atomically: {output_db} ({migrated} user rows preserved)")
+        return result
+    finally:
+        if staged_db.exists():
+            staged_db.unlink()
 
 
 if __name__ == "__main__":
