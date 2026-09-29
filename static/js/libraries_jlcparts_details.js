@@ -32,7 +32,9 @@ const lcscNum = document.getElementById('detailContainer')?.dataset?.lcsc || win
         // Badges
         const badges = document.getElementById('headerBadges');
         badges.innerHTML = '';
-        if (data.library_type === 'base') {
+        if (data.source === 'lcsc_dynamic') {
+          badges.innerHTML += '<span class="badge bg-warning text-dark">' + (i18n.badge_lcsc_dynamic || 'LCSC Dynamic') + '</span>';
+        } else if (data.library_type === 'base') {
           badges.innerHTML += `<span class="badge bg-success">${i18n.badge_basic || 'Basic Part'}</span>`;
         } else if (data.preferred === 1) {
           badges.innerHTML += `<span class="badge bg-info text-dark">${i18n.badge_preferred || 'Preferred'}</span>`;
@@ -89,7 +91,10 @@ const lcscNum = document.getElementById('detailContainer')?.dataset?.lcsc || win
           `<span class="text-muted">${i18n.stock_unknown || '-'}</span>` : data.stock > 0 ?
             `<span class="text-success fw-bold">${data.stock.toLocaleString()}</span>` :
             `<span class="text-muted">0</span>`;
-        document.getElementById('propLibraryType').textContent = data.library_type || '-';
+        document.getElementById('propLibraryType').textContent =
+          data.source === 'lcsc_dynamic'
+            ? (i18n.badge_lcsc_dynamic || 'LCSC Dynamic')
+            : (data.library_type || '-');
 
         // Manufacturing
         document.getElementById('propRohs').innerHTML = data.rohs === 1 ?

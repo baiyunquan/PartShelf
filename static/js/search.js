@@ -163,6 +163,12 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
                 </div>
               </td>
             `;
+            if (item.source === 'lcsc_dynamic') {
+              const sourceBadge = document.createElement('span');
+              sourceBadge.className = 'badge bg-warning text-dark';
+              sourceBadge.textContent = I18N.badge_lcsc_dynamic || 'LCSC Dynamic';
+              tr.querySelector('td:nth-child(4)').appendChild(sourceBadge);
+            }
             jlcBody.appendChild(tr);
           });
         }
@@ -349,6 +355,12 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
                 </div>
               </td>
             `;
+            if (item.source === 'lcsc_dynamic') {
+              const sourceBadge = document.createElement('span');
+              sourceBadge.className = 'badge bg-warning text-dark';
+              sourceBadge.textContent = I18N.badge_lcsc_dynamic || 'LCSC Dynamic';
+              tr.querySelector('td:nth-child(4)').appendChild(sourceBadge);
+            }
             tbody.appendChild(tr);
           });
         } else if (activeTab === 'altium') {

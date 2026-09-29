@@ -381,7 +381,8 @@
     "prop_datasheet": "规格书 (Datasheet)",
     "prop_lcsc_link": "前往立创商城官网详情页",
     "th_qty_range": "采购起订量区间",
-    "th_unit_price": "阶梯单价"
+    "th_unit_price": "阶梯单价",
+    "badge_lcsc_dynamic": "LCSC 动态"
   },
   "search": {
     "title": "全局聚合搜索 - PartShelf",

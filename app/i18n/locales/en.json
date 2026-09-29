@@ -381,7 +381,8 @@
     "prop_datasheet": "Datasheet",
     "prop_lcsc_link": "View on LCSC Official Website",
     "th_qty_range": "Quantity Range",
-    "th_unit_price": "Unit Price"
+    "th_unit_price": "Unit Price",
+    "badge_lcsc_dynamic": "LCSC Dynamic"
   },
   "search": {
     "title": "Global Search - PartShelf",

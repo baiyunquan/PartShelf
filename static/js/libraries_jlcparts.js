@@ -89,7 +89,9 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
           const isBasic = item.library_type === 'base';
           const isPreferred = !isBasic && item.preferred === 1;
           let typeBadge;
-          if (isBasic) {
+          if (item.source === 'lcsc_dynamic') {
+            typeBadge = '<span class="badge bg-warning text-dark">' + (i18n.badge_lcsc_dynamic || 'LCSC Dynamic') + '</span>';
+          } else if (isBasic) {
             typeBadge = `<span class="badge bg-success">${i18n.badge_basic || 'Basic'}</span>`;
           } else if (isPreferred) {
             typeBadge = `<span class="badge bg-info text-dark">${i18n.badge_preferred || 'Preferred'}</span>`;

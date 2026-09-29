@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from app.i18n.category_i18n import category_i18n
+from app.services import lcsc_dynamic_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
@@ -95,9 +96,11 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
 
 
 def get_connection(db_path: Path) -> Optional[sqlite3.Connection]:
+    """Open an installed component library with read/write access."""
     if not db_path.exists():
         return None
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -571,23 +574,26 @@ def search_jlcparts(
     limit: Optional[int] = None,
     lang: str = "zh"
 ) -> Dict[str, Any]:
-    conn = get_connection(JLCPARTS_DB_PATH)
-    if not conn:
-        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
-
     if limit is not None:
         page_size = limit
 
     page = max(1, page)
     page_size = max(1, min(200, page_size))
     offset = (page - 1) * page_size
+    q = (query or "").strip()
+
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if not conn:
+        return _search_dynamic_lcsc_only(
+            q, category, subcategory, package, library_type, in_stock_only,
+            page, page_size, lang
+        )
 
     cur = conn.cursor()
     conditions = []
     params = {}
     code_query = False
 
-    q = (query or "").strip()
     capacitance = None
     capacitance_sql = (
         "CASE WHEN j.attributes LIKE :capacitance_hint AND json_valid(j.attributes) THEN "
@@ -721,9 +727,33 @@ def search_jlcparts(
             count_prefix = f"WITH {hits_sql}" if code_query else ""
             cur.execute(f"{count_prefix} SELECT count(*) {candidate_from}{where_sql}", params)
             total = cur.fetchone()[0]
+    exact_lcsc = lcsc_dynamic_service.is_exact_lcsc_code(q)
+    should_try_dynamic_lcsc = False
+    if exact_lcsc is not None:
+        cur.execute("SELECT * FROM jlc_components WHERE lcsc = ?", (exact_lcsc,))
+        exact_row = cur.fetchone()
+        should_try_dynamic_lcsc = (
+            exact_row is None
+            or (
+                exact_row["library_type"] == "lcsc_dynamic"
+                and lcsc_dynamic_service.is_component_stale(
+                    exact_row["fetched_at"] if "fetched_at" in exact_row.keys() else None
+                )
+            )
+        )
     conn.close()
 
+    if should_try_dynamic_lcsc:
+        dynamic_item = lcsc_dynamic_service.get_or_fetch_component(exact_lcsc)
+        if dynamic_item and _dynamic_component_matches_filters(
+            dynamic_item, category, subcategory, package, library_type, in_stock_only
+        ):
+            total = 1
+            rows = [dynamic_item] if page == 1 else []
+
     for r in rows:
+        if r.get("library_type") == "lcsc_dynamic":
+            r["source"] = "lcsc_dynamic"
         r["category_localized"] = category_i18n.translate_primary(r.get("category") or "", lang)
         r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "", lang)
         # Build image URLs
@@ -768,72 +798,165 @@ def search_jlcparts(
     }
 
 
-def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, Any]]:
-    conn = get_connection(JLCPARTS_DB_PATH)
-    if not conn:
-        return None
-    try:
-        cur = conn.cursor()
-        sql = """
-        SELECT j.*, l.image, l.url_slug
-        FROM jlc_components j
-        LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
-        WHERE j.lcsc = ?
-        """
-        cur.execute(sql, (lcsc,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        item = dict(row)
-        item["category_localized"] = category_i18n.translate_primary(item.get("category") or "", lang)
-        item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "", lang)
+def _dynamic_component_matches_filters(
+    item: Dict[str, Any],
+    category: Optional[str],
+    subcategory: Optional[str],
+    package: Optional[str],
+    library_type: Optional[str],
+    in_stock_only: bool,
+) -> bool:
+    if category and item.get("category") != category:
+        return False
+    if subcategory and item.get("subcategory") != subcategory:
+        return False
+    if package and item.get("package") != package:
+        return False
+    if in_stock_only and item.get("stock", -1) <= 0:
+        return False
+    if library_type:
+        if library_type == "no_fee":
+            return False
+        if library_type not in ("lcsc_dynamic",):
+            return False
+    return True
 
-        if item.get("image"):
-            img_file = item["image"]
-            if (STATIC_PARTS_DIR / img_file).exists():
-                item["image_url_small"] = f"/static/images/parts/{img_file}"
-                item["image_url_medium"] = f"/static/images/parts/{img_file}"
-            else:
-                item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{img_file}"
-                item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{img_file}"
-            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{img_file}"
+
+def _search_dynamic_lcsc_only(
+    query: str,
+    category: Optional[str],
+    subcategory: Optional[str],
+    package: Optional[str],
+    library_type: Optional[str],
+    in_stock_only: bool,
+    page: int,
+    page_size: int,
+    lang: str,
+) -> Dict[str, Any]:
+    lcsc = lcsc_dynamic_service.is_exact_lcsc_code(query)
+    item = lcsc_dynamic_service.get_or_fetch_component(lcsc) if lcsc is not None else None
+    if item and _dynamic_component_matches_filters(
+        item, category, subcategory, package, library_type, in_stock_only
+    ):
+        item["category_localized"] = category_i18n.translate_primary(
+            item.get("category") or "", lang
+        )
+        item["subcategory_localized"] = category_i18n.translate_secondary(
+            item.get("subcategory") or "", lang
+        )
+        image = item.get("image")
+        if image:
+            item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{image}"
+            item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{image}"
+            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{image}"
         else:
             item["image_url_small"] = None
             item["image_url_medium"] = None
             item["image_url_large"] = None
-
-        if item.get("attributes"):
-            try:
-                item["attributes_dict"] = json.loads(item["attributes"])
-            except Exception:
-                item["attributes_dict"] = {}
-        else:
+        try:
+            item["attributes_dict"] = json.loads(item.get("attributes") or "{}")
+        except (TypeError, json.JSONDecodeError):
             item["attributes_dict"] = {}
-
-        if item.get("attrition"):
-            try:
-                item["attrition_dict"] = json.loads(item["attrition"])
-            except Exception:
-                item["attrition_dict"] = {}
-        else:
-            item["attrition_dict"] = {}
-
         item["specs"] = extract_jlcparts_specs(
             item.get("category") or "",
             item.get("subcategory") or "",
-            item.get("attributes_dict") or {},
-            item.get("description")
+            item["attributes_dict"],
+            item.get("description"),
         )
-
         item["price_breaks"] = parse_jlcparts_prices(item.get("price"))
+        items = [item] if page == 1 else []
+        total = 1
+    else:
+        items = []
+        total = 0
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": math.ceil(total / page_size) if total > 0 else 0,
+    }
+
+
+def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, Any]]:
+    conn = get_connection(JLCPARTS_DB_PATH)
+    item = None
+    if conn:
+        try:
+            cur = conn.cursor()
+            sql = """
+            SELECT j.*, l.image, l.url_slug
+            FROM jlc_components j
+            LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+            WHERE j.lcsc = ?
+            """
+            cur.execute(sql, (lcsc,))
+            row = cur.fetchone()
+            if row:
+                item = dict(row)
+        finally:
+            conn.close()
+
+    if item is None:
+        item = lcsc_dynamic_service.get_or_fetch_component(lcsc)
+    elif (
+        item.get("library_type") == "lcsc_dynamic"
+        and lcsc_dynamic_service.is_component_stale(item.get("fetched_at"))
+    ):
+        item = lcsc_dynamic_service.get_or_fetch_component(lcsc) or item
+    if item is None:
+        return None
+    if item.get("library_type") == "lcsc_dynamic":
+        item["source"] = "lcsc_dynamic"
+
+    item["category_localized"] = category_i18n.translate_primary(item.get("category") or "", lang)
+    item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "", lang)
+
+    if item.get("image"):
+        img_file = item["image"]
+        if (STATIC_PARTS_DIR / img_file).exists():
+            item["image_url_small"] = f"/static/images/parts/{img_file}"
+            item["image_url_medium"] = f"/static/images/parts/{img_file}"
+        else:
+            item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{img_file}"
+            item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{img_file}"
+        item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{img_file}"
+    else:
+        item["image_url_small"] = None
+        item["image_url_medium"] = None
+        item["image_url_large"] = None
+
+    if item.get("attributes"):
+        try:
+            item["attributes_dict"] = json.loads(item["attributes"])
+        except Exception:
+            item["attributes_dict"] = {}
+    else:
+        item["attributes_dict"] = {}
+
+    if item.get("attrition"):
+        try:
+            item["attrition_dict"] = json.loads(item["attrition"])
+        except Exception:
+            item["attrition_dict"] = {}
+    else:
+        item["attrition_dict"] = {}
+
+    item["specs"] = extract_jlcparts_specs(
+        item.get("category") or "",
+        item.get("subcategory") or "",
+        item.get("attributes_dict") or {},
+        item.get("description")
+    )
+
+    item["price_breaks"] = parse_jlcparts_prices(item.get("price"))
+    if not item.get("lcsc_url"):
         if item.get("url_slug"):
             item["lcsc_url"] = f"https://www.lcsc.com/product-detail/{item['url_slug']}_C{item['lcsc']}.html"
         else:
             item["lcsc_url"] = f"https://www.lcsc.com/search?q=C{item['lcsc']}"
 
-        return item
-    finally:
-        conn.close()
+    return item
 
 
 def search_all_libraries(query: str, limit_each: int = 20, lang: str = "zh") -> Dict[str, Any]:
