@@ -1,0 +1,18 @@
+.search-card-header {
+        border-left: 4px solid #0d6efd;
+      }
+      .nav-tabs .nav-link {
+        color: #495057;
+        font-weight: 500;
+      }
+      .nav-tabs .nav-link.active {
+        font-weight: bold;
+        color: #0d6efd;
+        border-bottom: 2px solid #0d6efd;
+      }
+      .part-thumb {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+        background: #fff;
+      }
