@@ -3,9 +3,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
-load_dotenv()
+from pathlib import Path
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./partshelf.db")
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+raw_db_url = os.getenv("DATABASE_URL", "sqlite:///./partshelf.db")
+if raw_db_url.startswith("sqlite:///./"):
+    rel_file = raw_db_url[len("sqlite:///./"):]
+    SQLALCHEMY_DATABASE_URL = f"sqlite:///{(BASE_DIR / rel_file).resolve().as_posix()}"
+elif raw_db_url == "sqlite:///partshelf.db":
+    SQLALCHEMY_DATABASE_URL = f"sqlite:///{(BASE_DIR / 'partshelf.db').resolve().as_posix()}"
+else:
+    SQLALCHEMY_DATABASE_URL = raw_db_url
 
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args, echo=True) 

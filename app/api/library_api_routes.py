@@ -173,6 +173,55 @@ def get_jlcparts_component_detail(lcsc: int, request: Request):
 
 
 # ==========================================
+# Fasteners Endpoints
+# ==========================================
+
+@router.get("/fasteners/categories")
+def get_fastener_categories():
+    """Get distinct fastener categories and counts."""
+    return lib_svc.get_fastener_categories()
+
+
+@router.get("/fasteners/authorities")
+def get_fastener_authorities():
+    """Get standard authorities (ISO, DIN, ASME, etc.)."""
+    return lib_svc.get_fastener_authorities()
+
+
+@router.get("/fasteners")
+def search_fasteners(
+    q: Optional[str] = Query("", description="Keyword or standard code"),
+    category: Optional[str] = Query(None),
+    authority: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100)
+):
+    """Search or list mechanical fasteners with pagination and filtering."""
+    return lib_svc.query_fasteners(
+        page=page,
+        page_size=page_size,
+        query=q or "",
+        category=category,
+        authority=authority
+    )
+
+
+@router.get("/fasteners/{standard_code}")
+def get_fastener_detail(standard_code: str):
+    """Get full details of a specific fastener standard including parameter and length tables."""
+    detail = lib_svc.get_fastener_detail(standard_code)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Fastener standard not found")
+    return detail
+
+
+@router.get("/fasteners/hole-charts/{chart_type}")
+def get_fastener_hole_chart(chart_type: str):
+    """Get hole reference charts (metric_tap_hole, inch_tap_hole, etc.)."""
+    return lib_svc.get_fastener_hole_charts(chart_type)
+
+
+# ==========================================
 # Import to Inventory (Backend hook)
 # ==========================================
 

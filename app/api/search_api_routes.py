@@ -105,7 +105,21 @@ def quick_search(
         for item in kicad_res.get("items", [])[:4]
     ]
 
-    total_matches = inv_total + jlc_total + altium_total + kicad_total
+    # 5. Fasteners
+    fasteners_res = lib_svc.query_fasteners(page=1, page_size=4, query=query)
+    fasteners_total = fasteners_res.get("total", 0)
+    fasteners_items = [
+        {
+            "id": item["id"],
+            "name": item.get("standard_name") or item.get("standard_code"),
+            "category": item.get("category_group_zh") or item.get("category_group"),
+            "authority": item.get("authority"),
+            "url": f"/libraries/fasteners/{item['standard_code']}"
+        }
+        for item in fasteners_res.get("items", [])[:4]
+    ]
+
+    total_matches = inv_total + jlc_total + altium_total + kicad_total + fasteners_total
 
     return {
         "query": query,
@@ -114,6 +128,7 @@ def quick_search(
         "jlcparts": {"total": jlc_total, "items": jlc_items},
         "altium": {"total": altium_total, "items": altium_items},
         "kicad": {"total": kicad_total, "items": kicad_items},
+        "fasteners": {"total": fasteners_total, "items": fasteners_items},
     }
 
 
@@ -121,7 +136,7 @@ def quick_search(
 def aggregate_search(
     request: Request,
     q: Optional[str] = Query("", description="Keyword, model or LCSC part number"),
-    tab: str = Query("all", description="Target tab: 'all', 'inventory', 'jlcparts', 'altium', 'kicad'"),
+    tab: str = Query("all", description="Target tab: 'all', 'inventory', 'jlcparts', 'altium', 'kicad', 'fasteners'"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -134,7 +149,7 @@ def aggregate_search(
     tab = (tab or "all").lower()
     lang = get_current_language(request)
 
-    # Tab 1: All (Overview of all 4 libraries)
+    # Tab 1: All (Overview of all libraries)
     if tab == "all":
         # Inventory preview
         inv_all = InventoryService.search(query, db, lang=lang) if query else []
@@ -167,7 +182,11 @@ def aggregate_search(
         kicad_res = lib_svc.search_kicad(query, page=1, page_size=5) if query else {"total": 0, "items": []}
         kicad_total = kicad_res.get("total", 0)
 
-        total_matches = inv_total + jlc_total + altium_total + kicad_total
+        # Fasteners preview
+        fasteners_res = lib_svc.query_fasteners(page=1, page_size=5, query=query) if query else {"total": 0, "items": []}
+        fasteners_total = fasteners_res.get("total", 0)
+
+        total_matches = inv_total + jlc_total + altium_total + kicad_total + fasteners_total
 
         return {
             "query": query,
@@ -178,11 +197,13 @@ def aggregate_search(
                 "jlcparts": jlc_total,
                 "altium": altium_total,
                 "kicad": kicad_total,
+                "fasteners": fasteners_total,
             },
             "inventory": {"total": inv_total, "items": inv_preview},
             "jlcparts": {"total": jlc_total, "items": jlc_res.get("items", [])},
             "altium": {"total": altium_total, "items": altium_res.get("items", [])},
             "kicad": {"total": kicad_total, "items": kicad_res.get("items", [])},
+            "fasteners": {"total": fasteners_total, "items": fasteners_res.get("items", [])},
         }
 
     # Tab 2: Inventory
@@ -256,5 +277,17 @@ def aggregate_search(
         res["tab"] = "kicad"
         return res
 
+    # Tab 6: Fasteners
+    elif tab == "fasteners":
+        res = lib_svc.query_fasteners(
+            query=query,
+            page=page,
+            page_size=page_size
+        )
+        res["query"] = query
+        res["tab"] = "fasteners"
+        return res
+
     else:
         return {"query": query, "tab": tab, "items": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 1}
+

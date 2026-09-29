@@ -25,6 +25,7 @@ SCRIPTS_DIR = BASE_DIR / "scripts"
 JLCPARTS_DB_PATH = DATA_DIR / "jlcparts.db"
 ALTIUM_DB_PATH = DATA_DIR / "altium_library.db"
 KICAD_DB_PATH = DATA_DIR / "kicad_symbols.db"
+FASTENERS_DB_PATH = DATA_DIR / "fasteners.db"
 
 
 def ensure_libraries_on_startup() -> Dict[str, Any]:
@@ -75,6 +76,19 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
     else:
         status["kicad"] = {"imported": False, "exists": True}
 
+    # 4. Fasteners
+    if not FASTENERS_DB_PATH.exists():
+        print("[Startup] Fasteners database not found. Running import_fasteners...")
+        try:
+            from scripts.import_fasteners import import_fasteners
+            res = import_fasteners(output_db=FASTENERS_DB_PATH)
+            status["fasteners"] = {"imported": True, "count": res["standards"]}
+        except Exception as e:
+            print(f"[Startup] Error auto-importing Fasteners: {e}")
+            status["fasteners"] = {"imported": False, "error": str(e)}
+    else:
+        status["fasteners"] = {"imported": False, "exists": True}
+
     return status
 
 
@@ -87,11 +101,12 @@ def get_connection(db_path: Path) -> Optional[sqlite3.Connection]:
 
 
 def get_libraries_status() -> Dict[str, Any]:
-    """Returns availability and statistics for all three libraries."""
+    """Returns availability and statistics for all four libraries."""
     result = {
         "jlcparts": {"available": False, "count": 0, "lcsc_count": 0},
         "altium": {"available": False, "count": 0},
-        "kicad": {"available": False, "count": 0}
+        "kicad": {"available": False, "count": 0},
+        "fasteners": {"available": False, "count": 0, "tables_count": 0}
     }
 
     # JLCParts
@@ -133,6 +148,22 @@ def get_libraries_status() -> Dict[str, Any]:
             result["kicad"]["count"] = cur.fetchone()[0]
             result["kicad"]["available"] = True
             result["kicad"]["size_bytes"] = KICAD_DB_PATH.stat().st_size
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+    # Fasteners
+    conn = get_connection(FASTENERS_DB_PATH)
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM fastener_standards")
+            result["fasteners"]["count"] = cur.fetchone()[0]
+            cur.execute("SELECT count(DISTINCT table_name) FROM fastener_tables")
+            result["fasteners"]["tables_count"] = cur.fetchone()[0]
+            result["fasteners"]["available"] = True
+            result["fasteners"]["size_bytes"] = FASTENERS_DB_PATH.stat().st_size
         except Exception:
             pass
         finally:
@@ -864,3 +895,235 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
         "summary": summary,
         "external_details": external_details
     }
+
+
+# ==========================================
+# 4. FreeCAD FastenersWB Mechanical Library
+# ==========================================
+
+def get_fastener_categories() -> List[Dict[str, Any]]:
+    """Returns all category groups with counts from fasteners.db."""
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT category_group, category_group_zh, count(*) as count
+            FROM fastener_standards
+            GROUP BY category_group, category_group_zh
+            ORDER BY count DESC
+        """)
+        return [
+            {
+                "group": row["category_group"],
+                "group_zh": row["category_group_zh"],
+                "count": row["count"]
+            }
+            for row in cur.fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def get_fastener_authorities() -> List[Dict[str, Any]]:
+    """Returns all standard authorities (ISO, DIN, ASME, etc.) with counts."""
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT authority, count(*) as count
+            FROM fastener_standards
+            GROUP BY authority
+            ORDER BY count DESC
+        """)
+        return [
+            {
+                "authority": row["authority"],
+                "count": row["count"]
+            }
+            for row in cur.fetchall()
+        ]
+    finally:
+        conn.close()
+
+
+def query_fasteners(
+    page: int = 1,
+    page_size: int = 25,
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    authority: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Search and page fastener standards from fasteners.db.
+    """
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    try:
+        cur = conn.cursor()
+        where_clauses = []
+        params = []
+
+        if query:
+            q_clean = query.strip()
+            q_param = f"%{q_clean}%"
+            where_clauses.append("""(
+                standard_code LIKE ?
+                OR standard_name LIKE ?
+                OR description LIKE ?
+                OR category_group_zh LIKE ?
+                OR param_table_name IN (SELECT DISTINCT table_name FROM fastener_tables WHERE row_key = ? OR row_key LIKE ?)
+            )""")
+            params.extend([q_param, q_param, q_param, q_param, q_clean, q_param])
+
+        if category and category != "all":
+            where_clauses.append("(category_group = ? OR category_group_zh = ?)")
+            params.extend([category, category])
+
+        if authority and authority != "all":
+            where_clauses.append("authority = ?")
+            params.append(authority)
+
+        where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        # Total count
+        cur.execute(f"SELECT count(*) FROM fastener_standards{where_sql}", params)
+        total = cur.fetchone()[0]
+
+        total_pages = math.ceil(total / page_size) if total > 0 else 1
+        page = max(1, min(page, total_pages)) if total > 0 else 1
+        offset = (page - 1) * page_size
+
+        cur.execute(f"""
+            SELECT id, standard_code, standard_name, authority, category_group, category_group_zh,
+                   description, param_table_name, length_table_name, has_length, source_file
+            FROM fastener_standards
+            {where_sql}
+            ORDER BY authority ASC, standard_code ASC
+            LIMIT ? OFFSET ?
+        """, params + [page_size, offset])
+
+        items = [dict(row) for row in cur.fetchall()]
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    finally:
+        conn.close()
+
+
+def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
+    """
+    Returns complete metadata, dimensional parameter matrix, valid length matrix,
+    and hole drill references for a fastener standard.
+    """
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return None
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM fastener_standards
+            WHERE standard_code = ? OR lower(standard_code) = lower(?)
+            LIMIT 1
+        """, (standard_code, standard_code))
+        std_row = cur.fetchone()
+        if not std_row:
+            return None
+
+        standard = dict(std_row)
+        param_table = standard.get("param_table_name")
+        length_table = standard.get("length_table_name")
+
+        # 1. Fetch param table titles and data
+        param_titles = []
+        param_rows = []
+        if param_table:
+            cur.execute("SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (param_table,))
+            t_row = cur.fetchone()
+            if t_row:
+                try:
+                    param_titles = json.loads(t_row[0])
+                except Exception:
+                    param_titles = []
+
+            cur.execute("SELECT row_key, data_json FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (param_table,))
+            for r in cur.fetchall():
+                try:
+                    vals = json.loads(r["data_json"])
+                except Exception:
+                    vals = []
+                param_rows.append({
+                    "nominal": r["row_key"],
+                    "values": vals
+                })
+
+        # 2. Fetch length table titles and data
+        length_titles = []
+        length_rows = []
+        if length_table:
+            cur.execute("SELECT titles_json FROM fastener_table_titles WHERE table_name = ?", (length_table,))
+            lt_row = cur.fetchone()
+            if lt_row:
+                try:
+                    length_titles = json.loads(lt_row[0])
+                except Exception:
+                    length_titles = []
+
+            cur.execute("SELECT row_key, data_json FROM fastener_tables WHERE table_name = ? ORDER BY id ASC", (length_table,))
+            for r in cur.fetchall():
+                try:
+                    vals = json.loads(r["data_json"])
+                except Exception:
+                    vals = []
+                length_rows.append({
+                    "key": r["row_key"],
+                    "lengths": [str(x) for x in vals if str(x).strip()]
+                })
+
+        # 3. Fetch hole chart matching standard if metric
+        cur.execute("SELECT nominal_dia, hole_diameter FROM fastener_hole_charts WHERE chart_type = 'metric_tap_hole'")
+        tap_holes = {r[0]: r[1] for r in cur.fetchall()}
+
+        return {
+            "standard": standard,
+            "param_titles": param_titles,
+            "param_rows": param_rows,
+            "length_titles": length_titles,
+            "length_rows": length_rows,
+            "tap_holes": tap_holes
+        }
+    finally:
+        conn.close()
+
+
+def get_fastener_hole_charts(chart_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Returns drill hole reference chart rows."""
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        if chart_type:
+            cur.execute(
+                "SELECT chart_type, nominal_dia, hole_diameter FROM fastener_hole_charts WHERE chart_type = ? ORDER BY hole_diameter ASC",
+                (chart_type,)
+            )
+        else:
+            cur.execute(
+                "SELECT chart_type, nominal_dia, hole_diameter FROM fastener_hole_charts ORDER BY chart_type ASC, hole_diameter ASC"
+            )
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+

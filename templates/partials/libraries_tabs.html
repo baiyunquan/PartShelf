@@ -11,9 +11,14 @@
           {{ t('libraries_common.tab_altium') }}
         </a>
       </li>
-      <li class="nav-item">
+      <li class="nav-item me-2">
         <a class="nav-link {% if active_lib == 'kicad' %}active fw-bold{% else %}text-secondary{% endif %}" href="/libraries/kicad">
           {{ t('libraries_common.tab_kicad') }}
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_lib == 'fasteners' %}active fw-bold{% else %}text-secondary{% endif %}" href="/libraries/fasteners">
+          {{ t('libraries_common.tab_fasteners') }}
         </a>
       </li>
     </ul>

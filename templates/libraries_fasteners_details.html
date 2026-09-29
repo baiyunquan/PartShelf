@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ standard_code }} - {{ t('libraries_fasteners.details_title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    {% set active_page = 'lib_fasteners_details' %}
+    {% include 'partials/navbar.html' %}
+
+    <div class="container mt-5 pt-5 pb-5">
+      <!-- Breadcrumb & Back button -->
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none">{{ t('app.nav_home') }}</a></li>
+            <li class="breadcrumb-item"><a href="/libraries/fasteners" class="text-decoration-none">{{ t('app.nav_lib_fasteners') }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page" id="breadcrumbCurrent">{{ standard_code }}</li>
+          </ol>
+        </nav>
+        <a href="/libraries/fasteners" class="btn btn-outline-secondary btn-sm">
+          &larr; {{ t('libraries_common.back_to_list') }}
+        </a>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loadingContainer" class="card shadow-sm border-0 p-5 text-center text-muted">
+        <div class="spinner-border text-primary mx-auto mb-3" role="status"></div>
+        <div>{{ t('libraries_common.loading') }}</div>
+      </div>
+
+      <!-- Main Detail Content (Hidden while loading) -->
+      <div id="detailContainer" style="display: none;">
+        <!-- Header Info Card -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-body p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+              <div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge bg-secondary fs-6" id="badgeAuthority">STD</span>
+                  <span class="badge bg-light text-dark border fs-6" id="badgeCategory">-</span>
+                </div>
+                <h2 class="fw-bold mb-1" id="stdTitle">{{ standard_code }}</h2>
+                <p class="text-muted mb-0 fs-6" id="stdDesc">-</p>
+              </div>
+              <div class="text-end">
+                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" id="badgeSourceFile">FsData CSV</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. Dimensional Parameters Matrix -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">{{ t('libraries_fasteners.card_params') }}</h5>
+            <small class="text-muted" id="paramTableNameDisplay"></small>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle mb-0 text-center" style="font-size: 0.9rem;">
+              <thead class="table-dark" id="paramTableHead">
+                <tr>
+                  <th>{{ t('libraries_fasteners.th_nominal') }}</th>
+                </tr>
+              </thead>
+              <tbody id="paramTableBody">
+              </tbody>
+            </table>
+          </div>
+          <div class="card-footer bg-light py-2 text-muted small">
+            注：表中尺寸单位为毫米 (mm)。P 为标准螺距，建议攻丝底孔根据公制标准内螺纹孔径自动匹配推荐。
+          </div>
+        </div>
+
+        <!-- 2. Standard Lengths Matrix (If available) -->
+        <div class="card shadow-sm border-0 mb-4" id="lengthCard" style="display: none;">
+          <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">{{ t('libraries_fasteners.card_lengths') }}</h5>
+            <small class="text-muted" id="lengthTableNameDisplay"></small>
+          </div>
+          <div class="card-body">
+            <div id="lengthListContainer" class="d-flex flex-column gap-3"></div>
+          </div>
+        </div>
+
+        <!-- 3. FreeCAD Procedural CAD Generation Reference -->
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="fw-bold mb-0 text-dark">CAD 建模与装配参考</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="p-3 bg-light rounded border h-100">
+                  <h6 class="fw-bold mb-2">FreeCAD 紧固件工作台自动吸附与装配</h6>
+                  <p class="text-muted small mb-0">
+                    在 FreeCAD 中，选中零件表面圆孔边缘后点击该标准件，系统将通过圆弧中点与法线方向自动计算对齐姿态，并根据孔径智能推断最接近的公称直径规格（M2, M2.5, M3 等）。
+                  </p>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="p-3 bg-light rounded border h-100">
+                  <h6 class="fw-bold mb-2">轻量化装配与真螺纹切换</h6>
+                  <p class="text-muted small mb-0">
+                    默认模式下紧固件螺纹生成为光滑圆柱面，保障包含数百个紧固件的大型装配体轻量流畅；需要工程出图或 3D 打印时可将 Thread 参数设为 True 生成高精度真螺纹。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {% include 'partials/footer.html' %}
+
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script>
+      const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
+      const standardCode = {{ standard_code | tojson }};
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+      }
+
+      async function loadDetail() {
+        try {
+          const res = await fetch(`/api/libraries/fasteners/${encodeURIComponent(standardCode)}`);
+          if (!res.ok) throw new Error('Fastener standard not found');
+          const data = await res.json();
+          renderDetail(data);
+        } catch (err) {
+          document.getElementById('loadingContainer').innerHTML = `
+            <div class="text-danger py-4">
+              <h5>无法加载紧固件标准数据</h5>
+              <p class="small text-muted">${escapeHtml(err.message)}</p>
+              <a href="/libraries/fasteners" class="btn btn-outline-secondary btn-sm mt-2">返回标准列表</a>
+            </div>
+          `;
+        }
+      }
+
+      function renderDetail(data) {
+        const std = data.standard || {};
+        document.getElementById('badgeAuthority').textContent = std.authority || 'STD';
+        document.getElementById('badgeCategory').textContent = std.category_group_zh || std.category_group || '-';
+        document.getElementById('stdTitle').textContent = std.standard_name || std.standard_code;
+        document.getElementById('stdDesc').textContent = std.description || '标准紧固件定义';
+        document.getElementById('badgeSourceFile').textContent = std.source_file || 'FsData';
+
+        // 1. Render Param Matrix
+        const thead = document.getElementById('paramTableHead');
+        const tbody = document.getElementById('paramTableBody');
+        const titles = data.param_titles || [];
+        const rows = data.param_rows || [];
+        const tapHoles = data.tap_holes || {};
+
+        document.getElementById('paramTableNameDisplay').textContent = std.param_table_name ? `参数表: ${std.param_table_name}` : '';
+
+        let thHtml = '<tr><th class="bg-dark text-white text-center" style="min-width: 90px;">公称直径</th>';
+        titles.forEach(t => {
+          thHtml += `<th class="bg-dark text-white text-center">${escapeHtml(String(t))}</th>`;
+        });
+        thHtml += '<th class="bg-secondary text-white text-center" style="min-width: 120px;">建议攻丝底孔</th></tr>';
+        thead.innerHTML = thHtml;
+
+        if (rows.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="${titles.length + 2}" class="text-center py-4 text-muted">暂无尺寸参数表记录</td></tr>`;
+        } else {
+          let tbHtml = '';
+          rows.forEach(r => {
+            const nom = r.nominal || '';
+            const tapHole = tapHoles[nom] !== undefined ? `${tapHoles[nom]} mm` : '-';
+            tbHtml += `<tr><td class="fw-bold bg-light text-primary text-center">${escapeHtml(nom)}</td>`;
+            r.values.forEach(v => {
+              tbHtml += `<td class="text-center">${escapeHtml(String(v))}</td>`;
+            });
+            tbHtml += `<td class="text-center text-success fw-bold">${escapeHtml(tapHole)}</td></tr>`;
+          });
+          tbody.innerHTML = tbHtml;
+        }
+
+        // 2. Render Length Series
+        const lengthRows = data.length_rows || [];
+        if (lengthRows.length > 0) {
+          const lCard = document.getElementById('lengthCard');
+          const lContainer = document.getElementById('lengthListContainer');
+          document.getElementById('lengthTableNameDisplay').textContent = std.length_table_name ? `长度表: ${std.length_table_name}` : '';
+
+          let lHtml = '';
+          lengthRows.forEach(lr => {
+            const key = lr.key || '';
+            const lengths = lr.lengths || [];
+            lHtml += `
+              <div class="p-3 bg-light rounded border">
+                <div class="fw-bold mb-2 text-dark">${escapeHtml(key)} 可用公称长度系列：</div>
+                <div class="d-flex flex-wrap gap-1">
+                  ${lengths.map(len => `<span class="badge bg-white text-dark border px-2 py-1">${escapeHtml(String(len))} mm</span>`).join('')}
+                </div>
+              </div>
+            `;
+          });
+          lContainer.innerHTML = lHtml;
+          lCard.style.display = 'block';
+        }
+
+        document.getElementById('loadingContainer').style.display = 'none';
+        document.getElementById('detailContainer').style.display = 'block';
+      }
+
+      document.addEventListener('DOMContentLoaded', loadDetail);
+    </script>
+  </body>
+</html>

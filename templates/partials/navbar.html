@@ -73,6 +73,11 @@
               {{ t('app.nav_lib_kicad') }}
             </a>
           </li>
+          <li class="nav-item mb-1 ps-2">
+            <a class="nav-link {% if active_page == 'lib_fasteners' or active_page == 'lib_fasteners_details' %}active{% endif %}" {% if active_page == 'lib_fasteners' %}aria-current="page"{% endif %} href="/libraries/fasteners">
+              {{ t('app.nav_lib_fasteners') }}
+            </a>
+          </li>
         </ul>
       </div>
     </div>
@@ -219,6 +224,27 @@
               <small class="text-muted ms-1">${escapeHtml(item.library || '')}</small>
             </div>
             <code class="small text-muted text-truncate" style="max-width: 120px;">${escapeHtml(item.footprint || '-')}</code>
+          </a>
+        `;
+      });
+    }
+
+    // 5. Fasteners Matches
+    if (data.fasteners && data.fasteners.items && data.fasteners.items.length > 0) {
+      html += `
+        <div class="px-3 py-1 bg-light text-uppercase fw-bold text-secondary border-bottom" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+          {{ t('app.nav_lib_fasteners') }} (${data.fasteners.total})
+        </div>
+      `;
+      data.fasteners.items.forEach(item => {
+        html += `
+          <a href="${item.url}" class="dropdown-item py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+            <div class="text-truncate me-2">
+              <span class="badge bg-info text-dark me-1">${escapeHtml(item.authority || 'STD')}</span>
+              <strong class="text-dark">${escapeHtml(item.name)}</strong>
+              <small class="text-muted ms-1">${escapeHtml(item.category || '')}</small>
+            </div>
+            <code class="small text-muted text-truncate" style="max-width: 120px;">${escapeHtml(item.authority || '')}</code>
           </a>
         `;
       });

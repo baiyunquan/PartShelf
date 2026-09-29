@@ -1,10 +1,13 @@
+from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.i18n import i18n, DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, get_current_language
 
-templates = Jinja2Templates(directory="templates")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 router = APIRouter()
 
@@ -34,6 +37,8 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "libraries_altium_details.html": "libraries_altium",
         "libraries_kicad.html": "libraries_kicad",
         "libraries_kicad_details.html": "libraries_kicad",
+        "libraries_fasteners.html": "libraries_fasteners",
+        "libraries_fasteners_details.html": "libraries_fasteners",
         "search.html": "search",
     }
     if name in sections:
@@ -47,6 +52,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
                 **i18n.get_section("libraries_jlcparts", lang),
                 **i18n.get_section("libraries_altium", lang),
                 **i18n.get_section("libraries_kicad", lang),
+                **i18n.get_section("libraries_fasteners", lang),
                 **page_dict,
             }
         elif name in ("projects.html", "project_details.html"):
@@ -160,3 +166,20 @@ def get_kicad_details_template(request: Request, sym_id: int):
         name="libraries_kicad_details.html",
         context={"active_page": "lib_kicad_details", "active_lib": "kicad", "sym_id": sym_id}
     )
+
+@router.get("/libraries/fasteners", response_class=HTMLResponse)
+def get_fasteners_library_template(request: Request):
+    return render_template(
+        request=request,
+        name="libraries_fasteners.html",
+        context={"active_page": "lib_fasteners", "active_lib": "fasteners"}
+    )
+
+@router.get("/libraries/fasteners/{standard_code}", response_class=HTMLResponse)
+def get_fasteners_details_template(request: Request, standard_code: str):
+    return render_template(
+        request=request,
+        name="libraries_fasteners_details.html",
+        context={"active_page": "lib_fasteners_details", "active_lib": "fasteners", "standard_code": standard_code}
+    )
+
