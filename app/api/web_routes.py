@@ -28,12 +28,12 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "projects.html": "projects",
         "project_details.html": "project_details",
         "procurement.html": "procurement",
+        "libraries_jlcparts.html": "libraries_jlcparts",
+        "libraries_jlcparts_details.html": "libraries_jlcparts",
         "libraries_altium.html": "libraries_altium",
         "libraries_altium_details.html": "libraries_altium",
         "libraries_kicad.html": "libraries_kicad",
         "libraries_kicad_details.html": "libraries_kicad",
-        "libraries_jlcparts.html": "libraries_jlcparts",
-        "libraries_jlcparts_details.html": "libraries_jlcparts",
         "search.html": "search",
     }
     if name in sections:
@@ -43,8 +43,8 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
             context["page_translations"] = {
                 **common_dict,
                 **i18n.get_section("inventory", lang),
-                **i18n.get_section("libraries_altium", lang),
                 **i18n.get_section("libraries_jlcparts", lang),
+                **i18n.get_section("libraries_altium", lang),
                 **i18n.get_section("libraries_kicad", lang),
                 **page_dict,
             }
@@ -110,6 +110,22 @@ def get_search_template(request: Request, q: str = ""):
 # Component Libraries Routes
 # ==========================================
 
+@router.get("/libraries/jlcparts", response_class=HTMLResponse)
+def get_jlcparts_library_template(request: Request):
+    return render_template(
+        request=request,
+        name="libraries_jlcparts.html",
+        context={"active_page": "lib_jlcparts", "active_lib": "jlcparts"}
+    )
+
+@router.get("/libraries/jlcparts/{lcsc}", response_class=HTMLResponse)
+def get_jlcparts_details_template(request: Request, lcsc: int):
+    return render_template(
+        request=request,
+        name="libraries_jlcparts_details.html",
+        context={"active_page": "lib_jlcparts_details", "active_lib": "jlcparts", "lcsc": lcsc}
+    )
+
 @router.get("/libraries/altium", response_class=HTMLResponse)
 def get_altium_library_template(request: Request):
     return render_template(
@@ -140,20 +156,4 @@ def get_kicad_details_template(request: Request, sym_id: int):
         request=request,
         name="libraries_kicad_details.html",
         context={"active_page": "lib_kicad_details", "active_lib": "kicad", "sym_id": sym_id}
-    )
-
-@router.get("/libraries/jlcparts", response_class=HTMLResponse)
-def get_jlcparts_library_template(request: Request):
-    return render_template(
-        request=request,
-        name="libraries_jlcparts.html",
-        context={"active_page": "lib_jlcparts", "active_lib": "jlcparts"}
-    )
-
-@router.get("/libraries/jlcparts/{lcsc}", response_class=HTMLResponse)
-def get_jlcparts_details_template(request: Request, lcsc: int):
-    return render_template(
-        request=request,
-        name="libraries_jlcparts_details.html",
-        context={"active_page": "lib_jlcparts_details", "active_lib": "jlcparts", "lcsc": lcsc}
     )

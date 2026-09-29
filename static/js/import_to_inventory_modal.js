@@ -36,15 +36,15 @@ window.openImportModal = async function(source, extId, name, metaText, defaultQt
   if (noteEl) noteEl.value = '';
 
   const s = (source || '').toLowerCase();
-  if (s === 'altium') {
+  if (s === 'jlcparts') {
+    badgeEl.className = 'badge bg-primary';
+    badgeEl.textContent = 'JLCPCB';
+  } else if (s === 'altium') {
     badgeEl.className = 'badge bg-dark';
     badgeEl.textContent = 'Altium';
   } else if (s === 'kicad') {
     badgeEl.className = 'badge bg-secondary';
     badgeEl.textContent = 'KiCad';
-  } else if (s === 'jlcparts') {
-    badgeEl.className = 'badge bg-primary';
-    badgeEl.textContent = 'JLCPCB';
   } else {
     badgeEl.className = 'badge bg-secondary';
     badgeEl.textContent = source;

@@ -7,9 +7,9 @@
     "nav_projects": "My Projects",
     "nav_procurement": "Procurement List",
     "nav_libraries_section": "Component Libraries",
+    "nav_lib_jlcparts": "JLCPCB Parts",
     "nav_lib_altium": "Altium Libraries",
     "nav_lib_kicad": "KiCad Symbols",
-    "nav_lib_jlcparts": "JLCPCB Parts",
     "search_placeholder": "Search part...",
     "search_btn": "Search",
     "language": "Language",
@@ -203,9 +203,9 @@
     "alert_fetch_failed": "Failed to fetch procurement list"
   },
   "libraries_common": {
+    "tab_jlcparts": "JLCPCB Parts",
     "tab_altium": "Altium Libraries",
     "tab_kicad": "KiCad Symbols",
-    "tab_jlcparts": "JLCPCB Parts",
     "btn_search": "Search",
     "btn_reset": "Reset",
     "loading": "Loading data...",

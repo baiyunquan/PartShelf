@@ -31,10 +31,10 @@ class InventoryService:
             )
 
         src = (part.library_source or "").lower()
-        if src not in ("altium", "kicad", "jlcparts"):
+        if src not in ("jlcparts", "altium", "kicad"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid library_source: '{part.library_source}'. Must be 'altium', 'kicad', or 'jlcparts'."
+                detail=f"Invalid library_source: '{part.library_source}'. Must be 'jlcparts', 'altium', or 'kicad'."
             )
 
         ext_id = str(part.external_part_id).strip()

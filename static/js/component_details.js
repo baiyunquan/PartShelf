@@ -19,15 +19,15 @@ function renderExternalSpecs(source, extDetails, summary) {
   const extBadge = document.getElementById("external-source-name");
   
   const src = (source || '').toLowerCase();
-  if (src === 'altium') {
+  if (src === 'jlcparts') {
+    extBadge.className = 'badge bg-primary';
+    extBadge.textContent = 'JLCParts Database';
+  } else if (src === 'altium') {
     extBadge.className = 'badge bg-dark';
     extBadge.textContent = 'Altium JLCPCB Library';
   } else if (src === 'kicad') {
     extBadge.className = 'badge bg-secondary';
     extBadge.textContent = 'KiCad Symbol Library';
-  } else if (src === 'jlcparts') {
-    extBadge.className = 'badge bg-primary';
-    extBadge.textContent = 'JLCParts Database';
   } else {
     extBadge.className = 'badge bg-secondary';
     extBadge.textContent = source || 'Unknown';

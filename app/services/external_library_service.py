@@ -1,9 +1,9 @@
 """
 External Library Service for PartShelf.
 Connects to the three independent external component databases:
+- JLCParts Database (jlcparts.db)
 - Altium JLCPCB Libraries (altium_library.db)
 - KiCad Symbols (kicad_symbols.db)
-- JLCParts Database (jlcparts.db)
 
 Ensures databases are available upon startup, handles auto-import if missing,
 and provides unified, zero-data-loss querying capabilities.
@@ -22,9 +22,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 
+JLCPARTS_DB_PATH = DATA_DIR / "jlcparts.db"
 ALTIUM_DB_PATH = DATA_DIR / "altium_library.db"
 KICAD_DB_PATH = DATA_DIR / "kicad_symbols.db"
-JLCPARTS_DB_PATH = DATA_DIR / "jlcparts.db"
 
 
 def ensure_libraries_on_startup() -> Dict[str, Any]:
@@ -36,7 +36,20 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     status = {}
 
-    # 1. Altium
+    # 1. JLCParts
+    if not JLCPARTS_DB_PATH.exists():
+        print("[Startup] JLCParts database not found. Running import_jlcparts...")
+        try:
+            from scripts.import_jlcparts import import_jlcparts
+            count = import_jlcparts(output_db=JLCPARTS_DB_PATH)
+            status["jlcparts"] = {"imported": True, "count": count}
+        except Exception as e:
+            print(f"[Startup] Error auto-importing JLCParts: {e}")
+            status["jlcparts"] = {"imported": False, "error": str(e)}
+    else:
+        status["jlcparts"] = {"imported": False, "exists": True}
+
+    # 2. Altium
     if not ALTIUM_DB_PATH.exists():
         print("[Startup] Altium database not found. Running convert_altium...")
         try:
@@ -49,7 +62,7 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
     else:
         status["altium"] = {"imported": False, "exists": True}
 
-    # 2. KiCad
+    # 3. KiCad
     if not KICAD_DB_PATH.exists():
         print("[Startup] KiCad database not found. Running convert_kicad...")
         try:
@@ -61,19 +74,6 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
             status["kicad"] = {"imported": False, "error": str(e)}
     else:
         status["kicad"] = {"imported": False, "exists": True}
-
-    # 3. JLCParts
-    if not JLCPARTS_DB_PATH.exists():
-        print("[Startup] JLCParts database not found. Running import_jlcparts...")
-        try:
-            from scripts.import_jlcparts import import_jlcparts
-            count = import_jlcparts(output_db=JLCPARTS_DB_PATH)
-            status["jlcparts"] = {"imported": True, "count": count}
-        except Exception as e:
-            print(f"[Startup] Error auto-importing JLCParts: {e}")
-            status["jlcparts"] = {"imported": False, "error": str(e)}
-    else:
-        status["jlcparts"] = {"imported": False, "exists": True}
 
     return status
 
@@ -89,10 +89,26 @@ def get_connection(db_path: Path) -> Optional[sqlite3.Connection]:
 def get_libraries_status() -> Dict[str, Any]:
     """Returns availability and statistics for all three libraries."""
     result = {
+        "jlcparts": {"available": False, "count": 0, "lcsc_count": 0},
         "altium": {"available": False, "count": 0},
-        "kicad": {"available": False, "count": 0},
-        "jlcparts": {"available": False, "count": 0, "lcsc_count": 0}
+        "kicad": {"available": False, "count": 0}
     }
+
+    # JLCParts
+    conn = get_connection(JLCPARTS_DB_PATH)
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM jlc_components")
+            result["jlcparts"]["count"] = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM lcsc_components")
+            result["jlcparts"]["lcsc_count"] = cur.fetchone()[0]
+            result["jlcparts"]["available"] = True
+            result["jlcparts"]["size_bytes"] = JLCPARTS_DB_PATH.stat().st_size
+        except Exception:
+            pass
+        finally:
+            conn.close()
 
     # Altium
     conn = get_connection(ALTIUM_DB_PATH)
@@ -117,22 +133,6 @@ def get_libraries_status() -> Dict[str, Any]:
             result["kicad"]["count"] = cur.fetchone()[0]
             result["kicad"]["available"] = True
             result["kicad"]["size_bytes"] = KICAD_DB_PATH.stat().st_size
-        except Exception:
-            pass
-        finally:
-            conn.close()
-
-    # JLCParts
-    conn = get_connection(JLCPARTS_DB_PATH)
-    if conn:
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT count(*) FROM jlc_components")
-            result["jlcparts"]["count"] = cur.fetchone()[0]
-            cur.execute("SELECT count(*) FROM lcsc_components")
-            result["jlcparts"]["lcsc_count"] = cur.fetchone()[0]
-            result["jlcparts"]["available"] = True
-            result["jlcparts"]["size_bytes"] = JLCPARTS_DB_PATH.stat().st_size
         except Exception:
             pass
         finally:
@@ -712,12 +712,12 @@ def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, An
 
 
 def search_all_libraries(query: str, limit_each: int = 20, lang: str = "zh") -> Dict[str, Any]:
-    """Unified cross-library search across Altium, KiCad, and JLCParts."""
+    """Unified cross-library search across JLCParts, Altium, and KiCad."""
     return {
         "query": query,
+        "jlcparts": search_jlcparts(query, page_size=limit_each, lang=lang).get("items", []),
         "altium": search_altium(query, page_size=limit_each, lang=lang).get("items", []),
         "kicad": search_kicad(query, page_size=limit_each).get("items", []),
-        "jlcparts": search_jlcparts(query, page_size=limit_each, lang=lang).get("items", []),
     }
 
 
@@ -750,7 +750,28 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
     src = (library_source or "").lower()
     pid_str = str(external_part_id)
 
-    if src == "altium":
+    if src == "jlcparts":
+        lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
+        jlc = get_jlcparts_component(lcsc_num, lang)
+        if jlc:
+            summary["name"] = jlc.get("mfr") or f"C{jlc.get('lcsc')}"
+            summary["manufacturer"] = jlc.get("manufacturer") or "Unknown"
+            summary["package"] = jlc.get("package") or "Standard"
+            cat_str = jlc.get("category") or ""
+            sub_str = jlc.get("subcategory") or ""
+            cat_trans = jlc.get("category_localized") or cat_str
+            sub_trans = jlc.get("subcategory_localized") or sub_str
+            if cat_trans and sub_trans:
+                summary["part_type"] = f"{cat_trans} / {sub_trans}"
+            else:
+                summary["part_type"] = cat_trans or sub_trans or cat_str or "General"
+            summary["part_type_localized"] = summary["part_type"]
+            summary["part_type_en"] = f"{cat_str} / {sub_str}" if (cat_str and sub_str) else (cat_str or "General")
+            summary["description"] = jlc.get("description") or ""
+            summary["image_url"] = jlc.get("image_url_small") or None
+            summary["datasheet_url"] = jlc.get("datasheet") or None
+
+    elif src == "altium":
         comp_id = int(pid_str) if pid_str.isdigit() else 0
         comp = get_altium_component(comp_id, lang)
         if comp:
@@ -777,27 +798,6 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
             summary["description"] = sym.get("description") or sym.get("keywords") or ""
             summary["datasheet_url"] = sym.get("datasheet") if sym.get("datasheet") != "~" else None
 
-    elif src == "jlcparts":
-        lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
-        jlc = get_jlcparts_component(lcsc_num, lang)
-        if jlc:
-            summary["name"] = jlc.get("mfr") or f"C{jlc.get('lcsc')}"
-            summary["manufacturer"] = jlc.get("manufacturer") or "Unknown"
-            summary["package"] = jlc.get("package") or "Standard"
-            cat_str = jlc.get("category") or ""
-            sub_str = jlc.get("subcategory") or ""
-            cat_trans = jlc.get("category_localized") or cat_str
-            sub_trans = jlc.get("subcategory_localized") or sub_str
-            if cat_trans and sub_trans:
-                summary["part_type"] = f"{cat_trans} / {sub_trans}"
-            else:
-                summary["part_type"] = cat_trans or sub_trans or cat_str or "General"
-            summary["part_type_localized"] = summary["part_type"]
-            summary["part_type_en"] = f"{cat_str} / {sub_str}" if (cat_str and sub_str) else (cat_str or "General")
-            summary["description"] = jlc.get("description") or ""
-            summary["image_url"] = jlc.get("image_url_small") or None
-            summary["datasheet_url"] = jlc.get("datasheet") or None
-
     _PART_SUMMARY_CACHE[cache_key] = summary
     return summary
 
@@ -813,15 +813,15 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
     src = (library_source or "").lower()
     pid_str = str(external_part_id)
 
-    if src == "altium":
+    if src == "jlcparts":
+        lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
+        external_details = get_jlcparts_component(lcsc_num, lang)
+    elif src == "altium":
         comp_id = int(pid_str) if pid_str.isdigit() else 0
         external_details = get_altium_component(comp_id, lang)
     elif src == "kicad":
         sym_id = int(pid_str) if pid_str.isdigit() else 0
         external_details = get_kicad_symbol(sym_id)
-    elif src == "jlcparts":
-        lcsc_num = int(pid_str.replace("C", "")) if pid_str.replace("C", "").isdigit() else 0
-        external_details = get_jlcparts_component(lcsc_num, lang)
 
     return {
         "summary": summary,

@@ -28,19 +28,19 @@ def get_category_translations(request: Request):
 def search_libraries(
     request: Request,
     q: str = Query(..., min_length=1, description="Search query keyword or part number"),
-    target: str = Query("all", description="Target library: 'all', 'altium', 'kicad', or 'jlcparts'"),
+    target: str = Query("all", description="Target library: 'all', 'jlcparts', 'altium', or 'kicad'"),
     limit: int = Query(20, ge=1, le=100)
 ):
     """
-    Search across external component libraries (Altium, KiCad, JLCParts).
+    Search across external component libraries (JLCPCB, Altium, KiCad).
     """
     target = target.lower()
-    if target == "altium":
+    if target == "jlcparts":
+        return {"jlcparts": lib_svc.search_jlcparts(q, page_size=limit, lang=get_current_language(request))}
+    elif target == "altium":
         return {"altium": lib_svc.search_altium(q, page_size=limit, lang=get_current_language(request))}
     elif target == "kicad":
         return {"kicad": lib_svc.search_kicad(q, page_size=limit)}
-    elif target == "jlcparts":
-        return {"jlcparts": lib_svc.search_jlcparts(q, page_size=limit, lang=get_current_language(request))}
     else:
         return lib_svc.search_all_libraries(q, limit_each=limit, lang=get_current_language(request))
 
@@ -178,7 +178,7 @@ def get_jlcparts_component_detail(lcsc: int, request: Request):
 
 @router.post("/import_to_inventory")
 def import_external_to_inventory(
-    source: str = Query(..., description="'altium', 'kicad', or 'jlcparts'"),
+    source: str = Query(..., description="'jlcparts', 'altium', or 'kicad'"),
     part_id: str = Query(..., description="Component identifier or LCSC part number"),
     quantity: int = Query(1, ge=0),
     storage_location: Optional[str] = Query(None),

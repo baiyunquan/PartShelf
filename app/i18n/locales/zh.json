@@ -7,9 +7,9 @@
     "nav_projects": "我的项目",
     "nav_procurement": "采购清单",
     "nav_libraries_section": "元件库参考",
+    "nav_lib_jlcparts": "JLCPCB 现货库",
     "nav_lib_altium": "Altium 贴片库",
     "nav_lib_kicad": "KiCad 符号库",
-    "nav_lib_jlcparts": "JLCPCB 现货库",
     "search_placeholder": "搜索器件型号...",
     "search_btn": "搜索",
     "language": "语言",
@@ -203,9 +203,9 @@
     "alert_fetch_failed": "获取采购清单失败"
   },
   "libraries_common": {
+    "tab_jlcparts": "JLCPCB 现货库",
     "tab_altium": "Altium 贴片库",
     "tab_kicad": "KiCad 符号库",
-    "tab_jlcparts": "JLCPCB 现货库",
     "btn_search": "检索",
     "btn_reset": "重置",
     "loading": "正在加载数据...",
