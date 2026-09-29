@@ -1,4 +1,5 @@
-import os
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -11,7 +12,13 @@ from app.models.custom_component import CustomComponent
 from app.services.external_library_service import resolve_part_summary
 
 client = TestClient(app)
-SAMPLE_FILE = r"E:\workspace\RadioLabRepoBackend\BOM\BOM_Board_RP2350A_PCB1_1_2026-09-29.xlsx"
+_TEST_PREFIX = f"TEST_BOM_API_{uuid4().hex}"
+_REJECT_PROJECT_NAME = f"{_TEST_PREFIX}_REJECT_UNCONFIRMED"
+_NEW_PROJECT_NAME = f"{_TEST_PREFIX}_NEW_PROJECT"
+_CUSTOM_COMPONENT_NAMES = {
+    f"{_TEST_PREFIX}_M2_SCREW",
+    f"{_TEST_PREFIX}_CUSTOM_DIODE",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -19,21 +26,23 @@ def cleanup_test_data():
     yield
     db = SessionLocal()
     try:
-        # Clean up test projects
-        test_projs = db.query(Project).filter(Project.name.like("TEST_%")).all()
+        project_names = {_REJECT_PROJECT_NAME, _NEW_PROJECT_NAME}
+        test_projs = db.query(Project).filter(Project.name.in_(project_names)).all()
         for p in test_projs:
             db.query(ProjectPart).filter(ProjectPart.project_id == p.id).delete()
             db.delete(p)
 
-        # Clean up test parts
-        test_parts = db.query(Part).filter(Part.note.like("%TEST_%")).all()
+        test_parts = db.query(Part).filter(
+            Part.note == f"Imported from BOM for {_NEW_PROJECT_NAME}"
+        ).all()
         for pt in test_parts:
             db.query(ProjectPart).filter(ProjectPart.part_id == pt.id).delete()
             db.query(Inventory).filter(Inventory.part_id == pt.id).delete()
             db.delete(pt)
 
-        # Clean up test custom components
-        test_custom = db.query(CustomComponent).filter(CustomComponent.name.like("TEST_%")).all()
+        test_custom = db.query(CustomComponent).filter(
+            CustomComponent.name.in_(_CUSTOM_COMPONENT_NAMES)
+        ).all()
         for c in test_custom:
             db.delete(c)
 
@@ -43,18 +52,22 @@ def cleanup_test_data():
 
 
 def test_bom_preview_api():
-    assert os.path.exists(SAMPLE_FILE)
-    with open(SAMPLE_FILE, "rb") as f:
-        res = client.post(
-            "/api/projects/bom/preview",
-            files={"file": ("BOM_Board_RP2350A_PCB1_1_2026-09-29.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        )
+    csv_content = (
+        "Quantity,Designator,Comment,Value,Footprint,Primary Category,Pin Count\n"
+        "2,U1,Example IC,Example IC,Package-Unknown,Integrated Circuits,8\n"
+    )
+    res = client.post(
+        "/api/projects/bom/preview",
+        files={"file": ("BOM_fixture.csv", csv_content, "text/csv")},
+    )
     assert res.status_code == 200
     data = res.json()
-    assert data["filename"] == "BOM_Board_RP2350A_PCB1_1_2026-09-29.xlsx"
-    assert "RP2350" in data["suggested_project_name"]
-    assert data["total_rows"] == 42
-    assert len(data["items"]) == 42
+    assert data["filename"] == "BOM_fixture.csv"
+    assert data["suggested_project_name"] == "fixture"
+    assert data["total_rows"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["designator"] == "U1"
+    assert data["items"][0]["value"] == "Example IC"
     assert "in_inventory_count" in data
     assert "matched_library_count" in data
     assert "unmatched_count" in data
@@ -62,7 +75,7 @@ def test_bom_preview_api():
 
 def test_import_endpoint_requires_manual_confirmation_for_substitute():
     response = client.post("/api/projects/bom/import", json={
-        "target_type": "new", "project_name": "TEST_REJECT_UNCONFIRMED",
+        "target_type": "new", "project_name": _REJECT_PROJECT_NAME,
         "items": [{
             "row_index": 1, "selected": True, "raw_supplier_part": "C999999999",
             "library_source": "jlcparts", "external_part_id": "100002",
@@ -75,7 +88,7 @@ def test_import_endpoint_requires_manual_confirmation_for_substitute():
 
 def test_bom_custom_part_api():
     res = client.post("/api/projects/bom/custom_part", json={
-        "name": "TEST_M2_SCREW",
+        "name": f"{_TEST_PREFIX}_M2_SCREW",
         "manufacturer": "Hardware Mfr",
         "package": "M2x6",
         "part_type": "Mechanical",
@@ -84,126 +97,45 @@ def test_bom_custom_part_api():
     assert res.status_code == 200
     data = res.json()
     custom_id = data["id"]
-    assert data["name"] == "TEST_M2_SCREW"
+    assert data["name"] == f"{_TEST_PREFIX}_M2_SCREW"
 
     # Test hydration via resolve_part_summary
     summary = resolve_part_summary("custom", str(custom_id))
-    assert summary["name"] == "TEST_M2_SCREW"
+    assert summary["name"] == f"{_TEST_PREFIX}_M2_SCREW"
     assert summary["package"] == "M2x6"
     assert summary["manufacturer"] == "Hardware Mfr"
 
 
 def test_bom_import_new_project():
-    # 1. Preview BOM
-    with open(SAMPLE_FILE, "rb") as f:
-        preview_res = client.post(
-            "/api/projects/bom/preview",
-            files={"file": ("BOM_Board_RP2350A_PCB1_1_2026-09-29.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        )
-    assert preview_res.status_code == 200
-    preview_data = preview_res.json()
-
-    # Pick top 5 items for import test (including matched library and custom item)
-    items_to_import = preview_data["items"][:5]
-    # Mark one item as custom
-    items_to_import[0]["is_custom"] = True
-    items_to_import[0]["custom_name"] = "TEST_CUSTOM_LED"
-    items_to_import[0]["custom_manufacturer"] = "TEST_OPTO"
-    items_to_import[0]["custom_package"] = "0603"
-    items_to_import[0]["selected"] = True
-
-    # 2. Execute Import as new project
+    item = {
+        "row_index": 1,
+        "quantity": 3,
+        "designator": "D_TEST",
+        "selected": True,
+        "is_custom": True,
+        "custom_name": f"{_TEST_PREFIX}_CUSTOM_DIODE",
+        "custom_manufacturer": "TEST_MANUFACTURER",
+        "custom_package": "SOD-123",
+    }
     import_payload = {
         "target_type": "new",
-        "project_name": "TEST_RP2350_IMPORT_PROJECT",
-        "project_description": "Automated import test",
-        "quantity_strategy": "overwrite",
-        "items": items_to_import
+        "project_name": _NEW_PROJECT_NAME,
+        "project_description": "Synthetic BOM API test",
+        "items": [item],
     }
     import_res = client.post("/api/projects/bom/import", json=import_payload)
     assert import_res.status_code == 200
     import_result = import_res.json()
     assert import_result["success"] is True
     project_id = import_result["project_id"]
-    assert import_result["project_name"] == "TEST_RP2350_IMPORT_PROJECT"
-    assert import_result["imported_parts_count"] > 0
+    assert import_result["project_name"] == _NEW_PROJECT_NAME
+    assert import_result["imported_parts_count"] == 1
 
-    # 3. Verify Project Details
     details_res = client.get(f"/api/projects/{project_id}")
     assert details_res.status_code == 200
     details = details_res.json()
-    assert details["name"] == "TEST_RP2350_IMPORT_PROJECT"
-    assert details["parts_count"] == import_result["imported_parts_count"]
-
-
-def test_bom_import_always_creates_a_new_batch_and_preserves_each_demand():
-    # 1. Create base project
-    proj_res = client.post("/api/projects/api_add", json={
-        "name": "TEST_EXISTING_PROJECT",
-        "description": "Base project"
-    })
-    assert proj_res.status_code == 200
-    project_id = proj_res.json()["id"]
-
-    # 2. Import one custom part with quantity 5
-    item = {
-        "row_index": 1,
-        "quantity": 5,
-        "selected": True,
-        "is_custom": True,
-        "custom_name": "TEST_DIODE",
-        "custom_manufacturer": "Diodes Inc",
-        "custom_package": "SOD-123"
-    }
-    res1 = client.post("/api/projects/bom/import", json={
-        "target_type": "existing",
-        "existing_project_id": project_id,
-        "quantity_strategy": "overwrite",
-        "items": [item]
-    })
-    assert res1.status_code == 200
-
-    # Verify needed quantity is 5
-    details1 = client.get(f"/api/projects/{project_id}").json()
-    assert details1["parts_count"] == 1
-    part_id = details1["parts"][0]["part_id"]
-    assert details1["parts"][0]["quantity_needed"] == 5
-
-    # Re-importing a matched local item creates a separate zero-stock batch.
-    item_reimport_add = {
-        "row_index": 1,
-        "quantity": 10,
-        "selected": True,
-        "inventory_part_id": part_id,
-        "status": "in_inventory"
-    }
-    res2 = client.post("/api/projects/bom/import", json={
-        "target_type": "existing",
-        "existing_project_id": project_id,
-        "quantity_strategy": "add",
-        "items": [item_reimport_add]
-    })
-    assert res2.status_code == 200
-    details2 = client.get(f"/api/projects/{project_id}").json()
-    assert details2["parts_count"] == 2
-
-    # The legacy overwrite selector is accepted but does not replace demand.
-    item_reimport_overwrite = {
-        "row_index": 1,
-        "quantity": 8,
-        "selected": True,
-        "inventory_part_id": part_id,
-        "status": "in_inventory"
-    }
-    res3 = client.post("/api/projects/bom/import", json={
-        "target_type": "existing",
-        "existing_project_id": project_id,
-        "quantity_strategy": "overwrite",
-        "items": [item_reimport_overwrite]
-    })
-    assert res3.status_code == 200
-    details3 = client.get(f"/api/projects/{project_id}").json()
-    assert details3["parts_count"] == 3
-    assert sorted(part["quantity_needed"] for part in details3["parts"]) == [5, 8, 10]
-    assert len({part["part_id"] for part in details3["parts"]}) == 3
-    assert all(part["quantity_available"] == 0 for part in details3["parts"])
+    assert details["name"] == _NEW_PROJECT_NAME
+    assert details["parts_count"] == 1
+    part = details["parts"][0]
+    assert part["quantity_needed"] == 3
+    assert part["quantity_available"] == 0

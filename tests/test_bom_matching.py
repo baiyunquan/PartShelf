@@ -1,5 +1,4 @@
 import json
-import os
 import sqlite3
 import threading
 import time
@@ -14,7 +13,6 @@ from app.services import lcsc_dynamic_service as dynamic
 from app.services.bom_service import analyze_bom_matching, execute_bom_import, parse_bom_file
 from app.services.bom_matcher import candidate_conflicts, measurement
 from db.database import Base
-from db.database import SessionLocal
 from app.models.project import Project
 from app.models.part import Part
 from app.models.inventory import Inventory
@@ -601,22 +599,3 @@ def test_bom_manual_search_and_library_search_share_dynamic_code_result(
     assert global_search.status_code == 200
     assert global_search.json()["items"][0]["source"] == "lcsc_dynamic"
     assert calls == [999997]
-
-
-def test_supplied_workbook_regression():
-    if os.getenv("PARTSHELF_TEST_LOCAL_BOM") != "1":
-        pytest.skip("Local BOM regression requires PARTSHELF_TEST_LOCAL_BOM=1")
-    path = Path(r"E:\workspace\RadioLabRepoBackend\BOM\BOM__v0.6_0603_PCB1_3_2026-09-29.xlsx")
-    if not path.is_file() or not libraries.JLCPARTS_DB_PATH.is_file() or not libraries.ALTIUM_DB_PATH.is_file():
-        pytest.skip("Local BOM workbook or external libraries are unavailable")
-    rows = parse_bom_file(path.read_bytes(), path.name)
-    with SessionLocal() as db:
-        items = analyze_bom_matching(rows, db)["items"]
-    assert len(items) == 40
-    exact_altium = [item for item in items if item["library_source"] == "altium" and item["match_reason"] == "exact_supplier_code"]
-    exact_altium += [item for item in items if any(candidate["library_source"] == "altium" and candidate["match_reason"] == "exact_supplier_code" for candidate in item["suggestions"])]
-    assert len(exact_altium) == 16
-    assert "package" in items[1]["conflicts"]
-    assert "value" in items[5]["conflicts"]
-    assert items[13]["suggestions"][0]["value"] == "1.5uH"
-    assert items[39]["suggestions"][0]["value"] == "24MHz"

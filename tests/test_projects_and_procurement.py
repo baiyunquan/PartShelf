@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -6,29 +8,20 @@ from app.models.part import Part
 from app.models.project import Project
 from app.models.project_part import ProjectPart
 from app.models.inventory import Inventory
-from app.models.manufacturer import Manufacturer
-from app.models.package import Package
-from app.models.type import Type
 from app.models.custom_component import CustomComponent
 
 client = TestClient(app)
+_TEST_PREFIX = f"TEST_PROJECTS_{uuid4().hex}"
+_PROJECT_NAME = f"{_TEST_PREFIX}_RF_TRANSCEIVER_BOARD"
+_PART_NOTE = f"{_TEST_PREFIX}_PROJECT_CRUD_PART"
+_CUSTOM_PART_NAME = f"{_TEST_PREFIX}_PROJECT_PART"
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    db = SessionLocal()
-    try:
-        projects = db.query(Project).filter(Project.name == "TEST_RF_TRANSCEIVER_BOARD").all()
-        project_ids = [project.id for project in projects]
-        if project_ids:
-            db.query(ProjectPart).filter(ProjectPart.project_id.in_(project_ids)).delete(synchronize_session=False)
-            db.query(Project).filter(Project.id.in_(project_ids)).delete(synchronize_session=False)
-        db.commit()
-    finally:
-        db.close()
     yield
     db = SessionLocal()
     try:
-        parts = db.query(Part).filter(Part.note == "TEST_PROJECT_CRUD_PART").all()
+        parts = db.query(Part).filter(Part.note == _PART_NOTE).all()
         custom_ids = [int(part.external_part_id) for part in parts if part.library_source == "custom"]
         part_ids = [part.id for part in parts]
         if part_ids:
@@ -37,7 +30,7 @@ def clean_db():
             db.query(Part).filter(Part.id.in_(part_ids)).delete(synchronize_session=False)
         if custom_ids:
             db.query(CustomComponent).filter(CustomComponent.id.in_(custom_ids)).delete(synchronize_session=False)
-        projects = db.query(Project).filter(Project.name == "TEST_RF_TRANSCEIVER_BOARD").all()
+        projects = db.query(Project).filter(Project.name == _PROJECT_NAME).all()
         project_ids = [project.id for project in projects]
         if project_ids:
             db.query(ProjectPart).filter(ProjectPart.project_id.in_(project_ids)).delete(synchronize_session=False)
@@ -49,12 +42,12 @@ def clean_db():
 def test_project_crud_and_procurement():
     db = SessionLocal()
     component = CustomComponent(
-        name="TEST_PROJECT_PART", manufacturer="Test", package="0603", part_type="Capacitor"
+        name=_CUSTOM_PART_NAME, manufacturer="Test", package="0603", part_type="Capacitor"
     )
     db.add(component)
     db.flush()
     test_part = Part(
-        library_source="custom", external_part_id=str(component.id), note="TEST_PROJECT_CRUD_PART"
+        library_source="custom", external_part_id=str(component.id), note=_PART_NOTE
     )
     db.add(test_part)
     db.flush()
@@ -65,13 +58,13 @@ def test_project_crud_and_procurement():
 
     # 1. Create a project
     res = client.post("/api/projects/api_add", json={
-        "name": "TEST_RF_TRANSCEIVER_BOARD",
+        "name": _PROJECT_NAME,
         "description": "2.4GHz transceivers"
     })
     assert res.status_code == 200
     proj_data = res.json()
     project_id = proj_data["id"]
-    assert proj_data["name"] == "TEST_RF_TRANSCEIVER_BOARD"
+    assert proj_data["name"] == _PROJECT_NAME
 
     # 2. Get all projects
     res = client.get("/api/projects/")

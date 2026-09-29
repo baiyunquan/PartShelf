@@ -1,9 +1,8 @@
-import os
-import glob
-import pytest
-from app.services.bom_service import parse_bom_file, normalize_header, extract_c_code
+from io import BytesIO
 
-SAMPLE_BOM_DIR = r"E:\workspace\RadioLabRepoBackend\BOM"
+from openpyxl import Workbook
+
+from app.services.bom_service import parse_bom_file, normalize_header, extract_c_code
 
 
 def test_normalize_header():
@@ -31,23 +30,29 @@ def test_extract_c_code():
     assert extract_c_code(None) is None
 
 
-def test_parse_sample_xlsx_files():
-    sample_files = glob.glob(os.path.join(SAMPLE_BOM_DIR, "*.xlsx"))
-    assert len(sample_files) >= 5, f"Expected at least 5 sample BOM files in {SAMPLE_BOM_DIR}"
+def test_parse_xlsx_file():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append([
+        "Quantity", "Comment", "Value", "Primary Category", "Secondary Category",
+        "Pin Count", "Designator", "Footprint", "LCSC Part #",
+    ])
+    sheet.append([2, "27 pF", "27pF", "Capacitors", "MLCC", 2, "C1", "C0603", "C131250"])
+    content = BytesIO()
+    workbook.save(content)
 
-    for path in sample_files:
-        fn = os.path.basename(path)
-        with open(path, "rb") as f:
-            content = f.read()
-        rows = parse_bom_file(content, fn)
-        assert len(rows) > 0, f"Expected non-empty rows for {fn}"
-        for r in rows:
-            assert "quantity" in r
-            assert isinstance(r["quantity"], int)
-            assert r["quantity"] >= 1
-            assert "comment" in r
-            assert "designator" in r
-            assert "footprint" in r
+    rows = parse_bom_file(content.getvalue(), "fixture.xlsx")
+
+    assert len(rows) == 1
+    assert rows[0]["quantity"] == 2
+    assert rows[0]["comment"] == "27 pF"
+    assert rows[0]["value"] == "27pF"
+    assert rows[0]["primary_category"] == "Capacitors"
+    assert rows[0]["secondary_category"] == "MLCC"
+    assert rows[0]["pin_count"] == "2"
+    assert rows[0]["designator"] == "C1"
+    assert rows[0]["footprint"] == "C0603"
+    assert rows[0]["supplier_part"] == "C131250"
 
 
 def test_parse_csv_file_encodings():

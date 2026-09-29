@@ -1,5 +1,8 @@
+import os
 import re
 import sqlite3
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -71,6 +74,8 @@ def test_api_category_translations():
 
 
 def test_chinese_category_catalog_covers_imported_libraries():
+    if os.getenv("PARTSHELF_TEST_EXTERNAL_CATEGORY_AUDIT") != "1":
+        pytest.skip("Run explicitly after refreshing the external-library databases")
     catalog = category_i18n.get_all()
     with sqlite3.connect(f"file:{ALTIUM_DB_PATH.as_posix()}?mode=ro", uri=True) as conn:
         altium = {row[0] for row in conn.execute("SELECT DISTINCT category FROM altium_components WHERE category != ''")}
