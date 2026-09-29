@@ -39,6 +39,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
     if name in sections:
         page_dict = i18n.get_section(sections[name], lang)
         common_dict = i18n.get_section("libraries_common", lang)
+        bom_dict = i18n.get_section("bom_import", lang)
         if name == "search.html":
             context["page_translations"] = {
                 **common_dict,
@@ -48,6 +49,8 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
                 **i18n.get_section("libraries_kicad", lang),
                 **page_dict,
             }
+        elif name in ("projects.html", "project_details.html"):
+            context["page_translations"] = {**common_dict, **page_dict, **bom_dict}
         else:
             context["page_translations"] = {**common_dict, **page_dict}
     

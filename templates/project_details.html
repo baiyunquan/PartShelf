@@ -19,9 +19,14 @@
         <a href="/projects" class="btn btn-outline-secondary btn-sm">
           ← {{ t('project_details.back_to_projects') }}
         </a>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPartModal">
-          <span class="me-1">+</span>{{ t('project_details.add_part_btn') }}
-        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary" type="button" onclick="openBomImportModal(projectId)">
+            {{ t('bom_import.btn_import_bom') }}
+          </button>
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPartModal">
+            <span class="me-1">+</span>{{ t('project_details.add_part_btn') }}
+          </button>
+        </div>
       </div>
 
       <!-- Project Info Card -->
@@ -126,10 +131,12 @@
 
     </div>
 
+    {% include 'partials/bom_import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <!-- Translations & Script -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/bom_import.js"></script>
     <script>
       const I18N = JSON.parse(document.getElementById('page-translations').textContent);
       const urlParams = new URLSearchParams(window.location.search);

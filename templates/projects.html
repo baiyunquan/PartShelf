@@ -19,7 +19,10 @@
           <h2 class="fw-bold mb-1">{{ t('projects.heading') }}</h2>
           <p class="text-muted mb-0">{{ t('projects.subtitle') }}</p>
         </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <div class="col-md-4 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2">
+          <button class="btn btn-outline-primary" type="button" onclick="openBomImportModal()">
+            {{ t('bom_import.btn_import_bom') }}
+          </button>
           <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProjectModal">
             <span class="me-1">+</span>{{ t('projects.add_project_btn') }}
           </button>
@@ -73,10 +76,12 @@
       </div>
     </div>
 
+    {% include 'partials/bom_import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <!-- Translations & Script -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/bom_import.js"></script>
     <script>
       const I18N = JSON.parse(document.getElementById('page-translations').textContent);
       const tbody = document.getElementById("projects-table-body");

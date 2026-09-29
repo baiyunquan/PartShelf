@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.api import inventory_api_routes, project_api_routes, web_routes, library_api_routes, search_api_routes
+from app.api import inventory_api_routes, project_api_routes, web_routes, library_api_routes, search_api_routes, bom_api_routes
 from app.services.external_library_service import ensure_libraries_on_startup
 from db.database import engine, Base
 import app.models
@@ -22,5 +22,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(web_routes.router, tags=["Web Pages"])
 app.include_router(inventory_api_routes.router, prefix="/api/inventory")
 app.include_router(project_api_routes.router, prefix="/api/projects")
+app.include_router(bom_api_routes.router, prefix="/api/projects/bom", tags=["BOM Import"])
 app.include_router(library_api_routes.router, prefix="/api/libraries", tags=["External Libraries"])
 app.include_router(search_api_routes.router, prefix="/api/search", tags=["Global Search"])

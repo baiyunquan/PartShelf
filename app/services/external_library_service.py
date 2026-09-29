@@ -798,6 +798,24 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
             summary["description"] = sym.get("description") or sym.get("keywords") or ""
             summary["datasheet_url"] = sym.get("datasheet") if sym.get("datasheet") != "~" else None
 
+    elif src == "custom":
+        custom_id = int(pid_str) if pid_str.isdigit() else 0
+        from db.database import SessionLocal
+        from app.models.custom_component import CustomComponent
+        db = SessionLocal()
+        try:
+            custom = db.query(CustomComponent).filter(CustomComponent.id == custom_id).first()
+            if custom:
+                summary["name"] = custom.name or f"Custom #{custom_id}"
+                summary["manufacturer"] = custom.manufacturer or "Custom"
+                summary["package"] = custom.package or "Custom"
+                summary["part_type"] = custom.part_type or "Custom"
+                summary["part_type_localized"] = summary["part_type"]
+                summary["part_type_en"] = summary["part_type"]
+                summary["description"] = custom.description or ""
+        finally:
+            db.close()
+
     _PART_SUMMARY_CACHE[cache_key] = summary
     return summary
 
@@ -822,6 +840,25 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
     elif src == "kicad":
         sym_id = int(pid_str) if pid_str.isdigit() else 0
         external_details = get_kicad_symbol(sym_id)
+    elif src == "custom":
+        custom_id = int(pid_str) if pid_str.isdigit() else 0
+        from db.database import SessionLocal
+        from app.models.custom_component import CustomComponent
+        db = SessionLocal()
+        try:
+            custom = db.query(CustomComponent).filter(CustomComponent.id == custom_id).first()
+            if custom:
+                external_details = {
+                    "id": custom.id,
+                    "name": custom.name,
+                    "manufacturer": custom.manufacturer,
+                    "package": custom.package,
+                    "part_type": custom.part_type,
+                    "description": custom.description,
+                    "created_at": str(custom.created_at) if custom.created_at else None,
+                }
+        finally:
+            db.close()
 
     return {
         "summary": summary,

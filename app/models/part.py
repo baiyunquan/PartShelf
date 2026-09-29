@@ -7,7 +7,7 @@ class Part(Base):
     __tablename__ = "parts"
 
     id = Column(Integer, primary_key=True, index=True)
-    library_source = Column(String(32), nullable=False, index=True)  # 'jlcparts', 'altium', 'kicad'
+    library_source = Column(String(32), nullable=False, index=True)  # 'jlcparts', 'altium', 'kicad', 'custom'
     external_part_id = Column(String(64), nullable=False, index=True)
     storage_location = Column(String(128), nullable=True)
     note = Column(String(500), nullable=True)

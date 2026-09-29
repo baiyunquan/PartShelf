@@ -6,6 +6,7 @@ from app.models.inventory import Inventory
 from app.models.file_template import FileTemplate
 from app.models.project import Project
 from app.models.project_part import ProjectPart
+from app.models.custom_component import CustomComponent
 
 __all__ = [
     "Manufacturer",
@@ -16,4 +17,5 @@ __all__ = [
     "FileTemplate",
     "Project",
     "ProjectPart",
+    "CustomComponent",
 ]
