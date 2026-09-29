@@ -110,24 +110,28 @@ def _write_cached_component(item: Dict[str, Any]) -> bool:
             ON CONFLICT(lcsc) DO UPDATE SET
                 fetched_at = excluded.fetched_at,
                 present = excluded.present,
+                sync_seen = excluded.sync_seen,
                 category = excluded.category,
                 subcategory = excluded.subcategory,
                 mfr = excluded.mfr,
                 package = excluded.package,
                 joints = excluded.joints,
                 manufacturer = excluded.manufacturer,
-                last_on_stock = CASE
-                    WHEN excluded.stock > 0 THEN excluded.last_on_stock
-                    ELSE jlc_components.last_on_stock
-                END,
+                library_type = excluded.library_type,
+                preferred = excluded.preferred,
+                last_on_stock = excluded.last_on_stock,
                 description = excluded.description,
                 datasheet = excluded.datasheet,
                 stock = excluded.stock,
                 price = excluded.price,
                 attributes = excluded.attributes,
                 rohs = excluded.rohs,
-                eccn = excluded.eccn
-            WHERE jlc_components.library_type = 'lcsc_dynamic'
+                eccn = excluded.eccn,
+                assembly = excluded.assembly,
+                assembly_process = excluded.assembly_process,
+                assembly_mode = excluded.assembly_mode,
+                website_component_id = excluded.website_component_id,
+                attrition = excluded.attrition
             """,
             (
                 item["lcsc"], now, item.get("category") or "",
@@ -150,11 +154,10 @@ def _write_cached_component(item: Dict[str, Any]) -> bool:
             ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(lcsc) DO UPDATE SET
                 fetched_at = excluded.fetched_at,
-                manufacturer = COALESCE(NULLIF(excluded.manufacturer, ''), lcsc_components.manufacturer),
-                attributes = CASE WHEN excluded.attributes != '{}'
-                                  THEN excluded.attributes ELSE lcsc_components.attributes END,
-                image = COALESCE(NULLIF(excluded.image, ''), lcsc_components.image),
-                url_slug = COALESCE(NULLIF(excluded.url_slug, ''), lcsc_components.url_slug)
+                manufacturer = excluded.manufacturer,
+                attributes = excluded.attributes,
+                image = excluded.image,
+                url_slug = excluded.url_slug
             """,
             (
                 item["lcsc"], now, item.get("manufacturer") or "",
@@ -295,7 +298,7 @@ def get_or_fetch_component(lcsc: int) -> Optional[Dict[str, Any]]:
         try:
             if _write_cached_component(item):
                 return item
-            # A regular catalog row appeared during the remote request; leave it untouched.
+            # A database trigger may have prevented the cache write.
             return None
         except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
             LOGGER.warning("Could not cache LCSC component C%s: %s", lcsc, exc)

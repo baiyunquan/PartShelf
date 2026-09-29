@@ -1,6 +1,8 @@
 import json
 import os
 import sqlite3
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.services import external_library_service as libraries
+from app.services import lcsc_dynamic_service as dynamic
 from app.services.bom_service import analyze_bom_matching, execute_bom_import, parse_bom_file
 from app.services.bom_matcher import candidate_conflicts, measurement
 from db.database import Base
@@ -22,20 +25,31 @@ from app.main import app
 
 @pytest.fixture
 def matching_databases(tmp_path, monkeypatch):
+    # Keep unmatched-code tests offline and deterministic. Tests for dynamic
+    # lookup replace this fetcher with their own simulated LCSC response.
+    monkeypatch.setattr(dynamic, "fetch_lcsc_product", lambda _code: None)
     jlc_path = tmp_path / "jlcparts.db"
     altium_path = tmp_path / "altium_library.db"
     with sqlite3.connect(jlc_path) as conn:
         conn.executescript("""
             CREATE TABLE jlc_components (
-                lcsc INTEGER PRIMARY KEY, mfr TEXT, category TEXT, subcategory TEXT,
-                package TEXT, manufacturer TEXT, stock INTEGER, attributes TEXT,
-                description TEXT
+                lcsc INTEGER PRIMARY KEY, fetched_at INTEGER, present INTEGER,
+                sync_seen INTEGER DEFAULT 0, category TEXT, subcategory TEXT,
+                mfr TEXT, package TEXT, joints INTEGER, manufacturer TEXT,
+                library_type TEXT, preferred INTEGER, last_on_stock INTEGER,
+                description TEXT, datasheet TEXT, stock INTEGER, price TEXT,
+                attributes TEXT, rohs INTEGER, eccn TEXT, assembly INTEGER,
+                assembly_process TEXT, assembly_mode TEXT, website_component_id TEXT,
+                attrition TEXT
             );
             CREATE INDEX jlc_package ON jlc_components(package);
-            CREATE TABLE lcsc_components (lcsc INTEGER, image TEXT, url_slug TEXT);
+            CREATE TABLE lcsc_components (
+                lcsc INTEGER PRIMARY KEY, fetched_at INTEGER, manufacturer TEXT,
+                attributes TEXT, image TEXT, url_slug TEXT
+            );
         """)
         conn.executemany(
-            "INSERT INTO jlc_components VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO jlc_components (lcsc, mfr, category, subcategory, package, manufacturer, stock, attributes, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (100001, "CAP-27-A", "Capacitors", "MLCC", "0603", "M1", 0, json.dumps({"Capacitance": "27pF"}), "27pF"),
                 (100002, "CAP-27-B", "Capacitors", "MLCC", "0603", "M2", 20, json.dumps({"Capacitance": "27pF", "Voltage Rating": "25V", "Tolerance": "±10%"}), "27pF"),
@@ -69,6 +83,7 @@ def matching_databases(tmp_path, monkeypatch):
             ],
         )
     monkeypatch.setattr(libraries, "JLCPARTS_DB_PATH", jlc_path)
+    monkeypatch.setattr(dynamic, "JLCPARTS_DB_PATH", jlc_path)
     monkeypatch.setattr(libraries, "ALTIUM_DB_PATH", altium_path)
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -283,6 +298,309 @@ def test_preview_does_not_write_main_database(matching_databases):
     analyze_bom_matching([row(supplier_part="C777001", value="10uF", comment="10uF")], matching_databases)
     after = matching_databases.connection().exec_driver_sql("SELECT total_changes()").scalar_one()
     assert after == before
+
+
+def remote_capacitor_product(code, package="0603", capacitance="27pF"):
+    return {
+        "productCode": f"C{code}",
+        "productModel": f"REMOTE-CAP-{code}",
+        "parentCatalogName": "Capacitors",
+        "catalogName": "MLCC",
+        "brandNameEn": "Remote Manufacturer",
+        "encapStandard": package,
+        "stockNumber": 321,
+        "isRohsCert": True,
+        "productDescEn": f"{capacitance} ceramic capacitor",
+        "pdfUrl": "https://example.test/capacitor.pdf",
+        "productPriceList": [{"ladder": 1, "usdPrice": 0.02}],
+        "paramVOList": [{"paramNameEn": "Capacitance", "paramValueEn": capacitance}],
+    }
+
+
+def remote_crystal_product(code, package="SMD3225-4P", frequency="24MHz"):
+    return {
+        "productCode": f"C{code}",
+        "productModel": f"REMOTE-XTAL-{code}",
+        "parentCatalogName": "Crystals, Oscillators, Resonators",
+        "catalogName": "Crystals",
+        "brandNameEn": "Remote Manufacturer",
+        "encapStandard": package,
+        "stockNumber": 85,
+        "isRohsCert": True,
+        "productDescEn": f"{frequency} crystal",
+        "pdfUrl": "https://example.test/crystal.pdf",
+        "productPriceList": [{"ladder": 1, "usdPrice": 0.04}],
+        "paramVOList": [{"paramNameEn": "Frequency", "paramValueEn": frequency}],
+    }
+
+
+def test_bom_preview_dynamically_matches_missing_exact_c_code(matching_databases, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: calls.append(code) or remote_capacitor_product(code),
+    )
+
+    item = analyze_bom_matching(
+        [row(supplier_part="C999999")], matching_databases
+    )["items"][0]
+
+    assert item["status"] == "matched_library"
+    assert item["library_source"] == "jlcparts"
+    assert item["external_part_id"] == "999999"
+    assert item["matched_part_name"] == "REMOTE-CAP-999999"
+    assert item["selected"] is True
+    assert calls == [999999]
+
+
+def test_supplied_workbook_dynamic_crystal_regression(matching_databases, monkeypatch):
+    workbook = (
+        Path(__file__).resolve().parents[2]
+        / "BOM"
+        / "BOM__v0.6_0603_PCB1_3_2026-09-29.xlsx"
+    )
+    if not workbook.exists():
+        pytest.skip("Supplied BOM workbook is not available beside the repository")
+
+    parsed_rows = parse_bom_file(workbook.read_bytes(), workbook.name)
+    crystal_row = next(row for row in parsed_rows if row.get("supplier_part") == "C70590")
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: remote_crystal_product(code),
+    )
+    before = {
+        "parts": matching_databases.query(Part).count(),
+        "inventory": matching_databases.query(Inventory).count(),
+        "projects": matching_databases.query(Project).count(),
+    }
+
+    matched = analyze_bom_matching([crystal_row], matching_databases)["items"][0]
+    conflicting_row = dict(crystal_row, footprint="CRYSTAL-SMD_4P-L2.5-W2.0")
+    conflict = analyze_bom_matching([conflicting_row], matching_databases)["items"][0]
+
+    assert matched["status"] == "matched_library"
+    assert matched["external_part_id"] == "70590"
+    assert matched["matched_part_name"] == "REMOTE-XTAL-70590"
+    assert conflict["status"] == "unmatched"
+    assert conflict["selected"] is False
+    assert "package" in conflict["suggestions"][0]["conflicts"]
+    assert before == {
+        "parts": matching_databases.query(Part).count(),
+        "inventory": matching_databases.query(Inventory).count(),
+        "projects": matching_databases.query(Project).count(),
+    }
+
+
+def test_unmatched_bom_refreshes_and_overwrites_conflicting_local_code(
+    matching_databases, monkeypatch
+):
+    conn = sqlite3.connect(libraries.JLCPARTS_DB_PATH)
+    try:
+        conn.execute(
+            """
+            UPDATE jlc_components SET fetched_at = 1, present = 0, sync_seen = 1,
+                category = 'Old Category', subcategory = 'Old Subcategory',
+                mfr = 'CAP-220', package = '0402', manufacturer = 'Old Manufacturer',
+                library_type = 'expand', preferred = 1, last_on_stock = 2,
+                description = 'Old description', datasheet = 'old.pdf', stock = 0,
+                price = 'old-price', attributes = '{"Old":"value"}', rohs = 0,
+                eccn = 'OLD', assembly = 1, assembly_process = 'old-process',
+                assembly_mode = 'old-mode', website_component_id = 'old-id',
+                attrition = '{"Old":1}' WHERE lcsc = 100004
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO lcsc_components
+                (lcsc, fetched_at, manufacturer, attributes, image, url_slug)
+            VALUES (100004, 1, 'Old Manufacturer', '{"Old":"value"}', 'old.png', 'old')
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    calls = []
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: calls.append(code) or remote_capacitor_product(code),
+    )
+
+    item = analyze_bom_matching(
+        [row(supplier_part="C100004", value="27pF", comment="27pF")],
+        matching_databases,
+    )["items"][0]
+
+    assert item["status"] == "matched_library"
+    assert item["external_part_id"] == "100004"
+    assert item["selected"] is True
+    assert calls == [100004]
+    stored = libraries.get_connection(libraries.JLCPARTS_DB_PATH)
+    try:
+        updated = stored.execute(
+            """
+            SELECT fetched_at, present, sync_seen, category, subcategory, mfr,
+                   package, manufacturer, library_type, preferred, description,
+                   datasheet, stock, price, attributes, rohs, eccn, assembly,
+                   assembly_process, assembly_mode, website_component_id, attrition
+            FROM jlc_components WHERE lcsc = 100004
+            """
+        ).fetchone()
+        metadata = stored.execute(
+            "SELECT manufacturer, attributes, image, url_slug FROM lcsc_components WHERE lcsc = 100004"
+        ).fetchone()
+    finally:
+        stored.close()
+    assert updated[0] > 1
+    assert tuple(updated[1:14]) == (
+        1, 0, "Capacitors", "MLCC", "REMOTE-CAP-100004", "0603",
+        "Remote Manufacturer", "lcsc_dynamic", 0,
+        "27pF ceramic capacitor", "https://example.test/capacitor.pdf",
+        321, "1-:0.02",
+    )
+    assert json.loads(updated[14]) == {"Capacitance": "27pF"}
+    assert updated[15:18] == (1, "-", None)
+    assert updated[18:] == (None, None, None, "{}")
+    assert metadata[0] == "Remote Manufacturer"
+    assert json.loads(metadata[1]) == {"Capacitance": "27pF"}
+    assert metadata[2:] == (None, None)
+
+
+def test_bom_preview_deduplicates_dynamic_queries_for_repeated_c_codes(
+    matching_databases, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: calls.append(code) or remote_capacitor_product(code),
+    )
+
+    items = analyze_bom_matching(
+        [row(supplier_part="C999999", designator="C1"),
+         row(supplier_part="C999999", designator="C2")],
+        matching_databases,
+    )["items"]
+
+    assert [item["status"] for item in items] == ["matched_library", "matched_library"]
+    assert calls == [999999]
+
+
+def test_bom_without_lcsc_code_does_not_run_dynamic_lookup(matching_databases, monkeypatch):
+    def unexpected_fetch(code):
+        pytest.fail(f"BOM row without an LCSC code must not query C{code}")
+
+    monkeypatch.setattr(dynamic, "fetch_lcsc_product", unexpected_fetch)
+    item = analyze_bom_matching(
+        [row(supplier_part="", manufacturer_part="REMOTE-MPN", comment="27pF")],
+        matching_databases,
+    )["items"][0]
+
+    assert item["status"] == "unmatched"
+
+
+def test_dynamic_c_code_with_package_conflict_requires_review(matching_databases, monkeypatch):
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: remote_capacitor_product(code, package="0402"),
+    )
+
+    item = analyze_bom_matching(
+        [row(supplier_part="C999998")], matching_databases
+    )["items"][0]
+
+    assert item["status"] == "unmatched"
+    assert item["selected"] is False
+    assert item["suggestions"][0]["external_part_id"] == "999998"
+    assert "package" in item["suggestions"][0]["conflicts"]
+
+
+def test_dynamic_refresh_failure_keeps_existing_catalog_record(matching_databases, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        dynamic, "fetch_lcsc_product", lambda code: calls.append(code) or None
+    )
+
+    item = analyze_bom_matching(
+        [row(supplier_part="C100004", value="27pF", comment="27pF")],
+        matching_databases,
+    )["items"][0]
+
+    assert item["status"] == "unmatched"
+    assert item["selected"] is False
+    assert calls == [100004]
+    conn = sqlite3.connect(libraries.JLCPARTS_DB_PATH)
+    try:
+        mfr = conn.execute(
+            "SELECT mfr FROM jlc_components WHERE lcsc = 100004"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert mfr == "CAP-220"
+
+
+def test_bom_preview_limits_remote_requests_to_four_concurrent_codes(
+    matching_databases, monkeypatch
+):
+    state = {"active": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def fetch(code):
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        try:
+            time.sleep(0.05)
+            return remote_capacitor_product(code)
+        finally:
+            with lock:
+                state["active"] -= 1
+
+    monkeypatch.setattr(dynamic, "fetch_lcsc_product", fetch)
+    rows = [row(supplier_part=f"C{900000 + index}", designator=f"C{index}")
+            for index in range(1, 7)]
+
+    items = analyze_bom_matching(rows, matching_databases)["items"]
+
+    assert all(item["status"] == "matched_library" for item in items)
+    assert state["peak"] == 4
+
+
+def test_bom_manual_search_and_library_search_share_dynamic_code_result(
+    matching_databases, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        dynamic,
+        "fetch_lcsc_product",
+        lambda code: calls.append(code) or remote_capacitor_product(code),
+    )
+    client = TestClient(app)
+
+    manual = client.post("/api/projects/bom/suggest", json={
+        "item": row(row_index=1, value="27pF", comment="27pF"),
+        "query": "C999997",
+    })
+    preview = analyze_bom_matching(
+        [row(supplier_part="C999997")], matching_databases
+    )["items"][0]
+    library = client.get("/api/libraries/jlcparts?q=C999997")
+    global_search = client.get(
+        "/api/search/aggregate?q=C999997&tab=jlcparts&page=1&page_size=5"
+    )
+
+    assert manual.status_code == 200
+    assert manual.json()["items"][0]["external_part_id"] == "999997"
+    assert preview["status"] == "matched_library"
+    assert library.status_code == 200
+    assert library.json()["items"][0]["source"] == "lcsc_dynamic"
+    assert global_search.status_code == 200
+    assert global_search.json()["items"][0]["source"] == "lcsc_dynamic"
+    assert calls == [999997]
 
 
 def test_supplied_workbook_regression():

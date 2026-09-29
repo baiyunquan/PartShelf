@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.services import external_library_service as libraries
+from app.services import component_search_service
 from app.services.fastener_variant_service import (
     build_fastener_variant_id,
     normalize_length,
@@ -503,9 +504,9 @@ class BomMatcher:
 
     def exact_code(self, code: str) -> List[Dict[str, Any]]:
         matches = []
-        if self.jlc:
-            matches.extend(self._from_jlc(r) for r in self.jlc.execute(
-                "SELECT * FROM jlc_components WHERE lcsc = ?", (int(code),)))
+        jlc_component = component_search_service.get_local_lcsc_component(code)
+        if jlc_component:
+            matches.append(self._from_jlc(jlc_component))
         if self.altium:
             matches.extend(self._from_altium(r) for r in self.altium.execute(
                 "SELECT * FROM altium_components WHERE lcsc_part IN (?, ?)", (f"C{code}", code)))
@@ -526,8 +527,8 @@ class BomMatcher:
             return []
         matches = []
         if self.jlc:
-            matches.extend(self._from_jlc(r) for r in self.jlc.execute(
-                "SELECT * FROM jlc_components WHERE mfr = ?", (model,)))
+            matches.extend(self._from_jlc(record) for record in
+                           component_search_service.find_jlc_model(model, self.jlc))
         if self.altium:
             matches.extend(self._from_altium(r) for r in self.altium.execute(
                 "SELECT * FROM altium_components WHERE lib_reference = ? OR mfr_part_number = ?", (model, model)))
@@ -541,11 +542,18 @@ class BomMatcher:
         if not conn:
             return []
         category = _CATEGORY[kind]
-        package_sql = "package LIKE ?"
-        package_arg = f"%{package}%" if package.startswith("3225") else f"{package}%"
-        query = f"SELECT * FROM {'jlc_components' if source == 'jlcparts' else 'altium_components'} WHERE category LIKE ? AND {package_sql}"
         convert = self._from_jlc if source == "jlcparts" else self._from_altium
-        rows = [convert(r) for r in conn.execute(query, (f"{category}%", package_arg))]
+        if source == "jlcparts":
+            raw_rows = component_search_service.find_jlc_by_category_package(
+                category, package, conn
+            )
+        else:
+            package_arg = f"%{package}%" if package.startswith("3225") else f"{package}%"
+            raw_rows = conn.execute(
+                "SELECT * FROM altium_components WHERE category LIKE ? AND package LIKE ?",
+                (f"{category}%", package_arg),
+            )
+        rows = [convert(r) for r in raw_rows]
         self._cache[key] = rows
         return rows
 
@@ -594,6 +602,23 @@ class BomMatcher:
         code = normalized_code(query)
         if code:
             candidates = self.exact_code(code)
+            has_compatible_exact = any(
+                not candidate_conflicts(row, candidate, kind) for candidate in candidates
+            )
+            if row_conflicts(row, kind) or not has_compatible_exact:
+                refreshed = component_search_service.resolve_exact_lcsc_component(
+                    code, refresh=True
+                )
+                if refreshed:
+                    refreshed_candidate = self._from_jlc(refreshed)
+                    candidates = [
+                        candidate for candidate in candidates
+                        if not (
+                            candidate["library_source"] == "jlcparts"
+                            and candidate["external_part_id"] == code
+                        )
+                    ]
+                    candidates.append(refreshed_candidate)
             if not candidates:
                 return self.suggestions(row, kind)
         elif measurement(query, kind) is not None or kind == "led" and color_key(query):

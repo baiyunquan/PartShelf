@@ -250,6 +250,21 @@ def test_dynamic_result_obeys_selected_category_filter(
     assert calls == [131250]
 
 
+def test_refreshed_dynamic_result_reapplies_filters_to_stale_row(
+    jlc_library, remote_product, monkeypatch
+):
+    monkeypatch.setattr(dynamic, "fetch_lcsc_product", lambda code: remote_product)
+    first = libraries.search_jlcparts("C131250", category="Optoelectronics")
+    remote_product["parentCatalogName"] = "Capacitors"
+    monkeypatch.setattr(dynamic, "CACHE_TTL_SECONDS", 0)
+
+    refreshed = libraries.search_jlcparts("C131250", category="Optoelectronics")
+
+    assert first["total"] == 1
+    assert refreshed["total"] == 0
+    assert refreshed["items"] == []
+
+
 def test_public_lookup_validates_response_code_and_product_number(
     remote_product, monkeypatch
 ):

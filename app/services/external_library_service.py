@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from app.i18n.category_i18n import category_i18n
-from app.services import lcsc_dynamic_service
+from app.services import component_search_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
@@ -727,29 +727,18 @@ def search_jlcparts(
             count_prefix = f"WITH {hits_sql}" if code_query else ""
             cur.execute(f"{count_prefix} SELECT count(*) {candidate_from}{where_sql}", params)
             total = cur.fetchone()[0]
-    exact_lcsc = lcsc_dynamic_service.is_exact_lcsc_code(q)
-    should_try_dynamic_lcsc = False
-    if exact_lcsc is not None:
-        cur.execute("SELECT * FROM jlc_components WHERE lcsc = ?", (exact_lcsc,))
-        exact_row = cur.fetchone()
-        should_try_dynamic_lcsc = (
-            exact_row is None
-            or (
-                exact_row["library_type"] == "lcsc_dynamic"
-                and lcsc_dynamic_service.is_component_stale(
-                    exact_row["fetched_at"] if "fetched_at" in exact_row.keys() else None
-                )
-            )
-        )
     conn.close()
 
-    if should_try_dynamic_lcsc:
-        dynamic_item = lcsc_dynamic_service.get_or_fetch_component(exact_lcsc)
-        if dynamic_item and _dynamic_component_matches_filters(
+    dynamic_item = component_search_service.resolve_search_lcsc_query(q)
+    if dynamic_item:
+        if _dynamic_component_matches_filters(
             dynamic_item, category, subcategory, package, library_type, in_stock_only
         ):
             total = 1
             rows = [dynamic_item] if page == 1 else []
+        else:
+            total = 0
+            rows = []
 
     for r in rows:
         if r.get("library_type") == "lcsc_dynamic":
@@ -833,8 +822,7 @@ def _search_dynamic_lcsc_only(
     page_size: int,
     lang: str,
 ) -> Dict[str, Any]:
-    lcsc = lcsc_dynamic_service.is_exact_lcsc_code(query)
-    item = lcsc_dynamic_service.get_or_fetch_component(lcsc) if lcsc is not None else None
+    item = component_search_service.resolve_search_lcsc_query(query)
     if item and _dynamic_component_matches_filters(
         item, category, subcategory, package, library_type, in_stock_only
     ):
@@ -879,31 +867,7 @@ def _search_dynamic_lcsc_only(
 
 
 def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, Any]]:
-    conn = get_connection(JLCPARTS_DB_PATH)
-    item = None
-    if conn:
-        try:
-            cur = conn.cursor()
-            sql = """
-            SELECT j.*, l.image, l.url_slug
-            FROM jlc_components j
-            LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
-            WHERE j.lcsc = ?
-            """
-            cur.execute(sql, (lcsc,))
-            row = cur.fetchone()
-            if row:
-                item = dict(row)
-        finally:
-            conn.close()
-
-    if item is None:
-        item = lcsc_dynamic_service.get_or_fetch_component(lcsc)
-    elif (
-        item.get("library_type") == "lcsc_dynamic"
-        and lcsc_dynamic_service.is_component_stale(item.get("fetched_at"))
-    ):
-        item = lcsc_dynamic_service.get_or_fetch_component(lcsc) or item
+    item = component_search_service.resolve_exact_lcsc_component(lcsc)
     if item is None:
         return None
     if item.get("library_type") == "lcsc_dynamic":

@@ -17,6 +17,7 @@ from app.models.project_part import ProjectPart
 from app.models.part import Part
 from app.models.inventory import Inventory
 from app.models.custom_component import CustomComponent
+from app.services import component_search_service
 from app.services.bom_matcher import BomMatcher, candidate_conflicts, component_kind, normalized_code, public_candidate, row_conflicts
 
 
@@ -214,6 +215,28 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
     preview_items = []
     matcher = BomMatcher()
     try:
+        dynamic_codes = set()
+        for row in parsed_rows:
+            kind = component_kind(row)
+            if kind == "fastener":
+                continue
+            code = (extract_c_code(row.get("supplier_part"))
+                    or extract_c_code(row.get("manufacturer_part"))
+                    or extract_c_code(row.get("comment")))
+            if code is None:
+                continue
+            local_exact = matcher.exact_code(str(code))
+            compatible_exact = any(
+                not candidate_conflicts(row, candidate, kind)
+                for candidate in local_exact
+            )
+            if row_conflicts(row, kind) or not compatible_exact:
+                dynamic_codes.add(code)
+
+        dynamic_components = component_search_service.resolve_bom_lcsc_codes(
+            dynamic_codes
+        )
+
         for idx, row in enumerate(parsed_rows, start=1):
             kind = component_kind(row)
             internal_conflicts = row_conflicts(row, kind)
@@ -282,6 +305,17 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
                     or extract_c_code(row.get("manufacturer_part"))
                     or extract_c_code(row.get("comment")))
             exact = matcher.exact_code(str(code)) if code else []
+            refreshed = dynamic_components.get(code) if code else None
+            if refreshed:
+                refreshed_candidate = matcher._from_jlc(refreshed)
+                exact = [
+                    candidate for candidate in exact
+                    if not (
+                        candidate["library_source"] == "jlcparts"
+                        and candidate["external_part_id"] == str(code)
+                    )
+                ]
+                exact.insert(0, refreshed_candidate)
             stale_inventory = None
             if code and not exact:
                 stale_inventory = db.query(Part).filter(
