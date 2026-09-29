@@ -28,6 +28,9 @@ function renderExternalSpecs(source, extDetails, summary) {
   } else if (src === 'kicad') {
     extBadge.className = 'badge bg-secondary';
     extBadge.textContent = 'KiCad Symbol Library';
+  } else if (src === 'fasteners') {
+    extBadge.className = 'badge bg-secondary';
+    extBadge.textContent = I18N.source_fasteners || 'Mechanical Standards';
   } else {
     extBadge.className = 'badge bg-secondary';
     extBadge.textContent = source || 'Unknown';
@@ -269,6 +272,53 @@ function renderExternalSpecs(source, extDetails, summary) {
         });
       });
     }
+  } else if (src === 'fasteners') {
+    const standard = extDetails.standard || {};
+    const variant = extDetails.selected_variant || {};
+    const dimensions = variant.dimensions || {};
+    const dimensionRows = Object.entries(dimensions).map(([name, value]) => `
+      <tr>
+        <th class="text-muted" style="width: 40%;">${escapeHtml(name)}</th>
+        <td>${escapeHtml(value)}</td>
+      </tr>
+    `).join('');
+    const standardCode = variant.standard_code || standard.standard_code || '-';
+    const length = variant.length
+      ? `${variant.length}${String(variant.length).toLowerCase().includes('in') ? '' : ' mm'}`
+      : '-';
+
+    container.innerHTML = `
+      <div class="row g-4">
+        <div class="col-md-5">
+          <div class="card border-0 bg-light h-100">
+            <div class="card-body">
+              <h6 class="fw-bold text-secondary mb-3">${escapeHtml(standard.standard_name || standardCode)}</h6>
+              <div class="row g-2 small">
+                <div class="col-5 text-muted">${escapeHtml(I18N.fastener_standard || 'Standard')}</div>
+                <div class="col-7 fw-bold">${escapeHtml(standardCode)}</div>
+                <div class="col-5 text-muted">${escapeHtml(I18N.fastener_nominal || 'Nominal size')}</div>
+                <div class="col-7">${escapeHtml(variant.nominal || '-')}</div>
+                ${standard.has_length ? `
+                  <div class="col-5 text-muted">${escapeHtml(I18N.fastener_length || 'Length')}</div>
+                  <div class="col-7">${escapeHtml(length)}</div>
+                ` : ''}
+                <div class="col-5 text-muted">${escapeHtml(I18N.source_fasteners || 'Mechanical Standards')}</div>
+                <div class="col-7">${escapeHtml(standard.authority || '-')}</div>
+              </div>
+              ${standard.description ? `<p class="text-muted small mt-3 mb-0">${escapeHtml(standard.description)}</p>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-7">
+          <h6 class="fw-bold text-secondary mb-2">${escapeHtml(I18N.fastener_dimensions || 'Selected dimensions')}</h6>
+          ${dimensionRows ? `
+            <div class="table-responsive border rounded">
+              <table class="table table-sm table-hover mb-0"><tbody>${dimensionRows}</tbody></table>
+            </div>
+          ` : `<p class="text-muted small">${escapeHtml(I18N.fastener_no_dimensions || 'No additional dimensions recorded.')}</p>`}
+        </div>
+      </div>
+    `;
   }
 }
 
@@ -323,6 +373,17 @@ fetch(`/api/inventory/get_part_by_id?part_id=${partId}`)
       sourceText.textContent = `JLCParts (C${lcscId})`;
       viewInLibBtn.href = `/libraries/jlcparts/${lcscId}`;
       viewInLibBtn.classList.remove('d-none');
+    } else if (src === 'fasteners') {
+      const variant = data.external_details?.selected_variant || {};
+      const standard = data.external_details?.standard || {};
+      const standardCode = variant.standard_code || standard.standard_code || '';
+      sourceBadge.className = 'badge bg-secondary';
+      sourceBadge.textContent = I18N.source_fasteners || 'Mechanical Standards';
+      sourceText.textContent = `${standardCode} ${variant.nominal || ''}${variant.length ? ` × ${variant.length}` : ''}`.trim();
+      if (standardCode) {
+        viewInLibBtn.href = `/libraries/fasteners/${encodeURIComponent(standardCode)}`;
+        viewInLibBtn.classList.remove('d-none');
+      }
     } else {
       sourceBadge.textContent = src || 'External';
       sourceText.textContent = `${src} (#${data.external_part_id})`;

@@ -55,6 +55,24 @@
           </div>
         </div>
 
+        <div class="card shadow-sm border-0 mb-4" id="fastenerInventoryPicker" data-standard-code="{{ standard_code }}">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4">
+                <label for="detailFastenerNominal" class="form-label fw-bold">{{ t('libraries_fasteners.inventory_nominal') }}</label>
+                <select id="detailFastenerNominal" class="form-select"></select>
+              </div>
+              <div class="col-md-4" id="detailFastenerLengthGroup">
+                <label for="detailFastenerLength" class="form-label fw-bold">{{ t('libraries_fasteners.inventory_length') }}</label>
+                <select id="detailFastenerLength" class="form-select"></select>
+              </div>
+              <div class="col-md-4">
+                <button type="button" class="btn btn-success w-100" id="addFastenerVariantBtn" disabled>{{ t('libraries_fasteners.add_variant_to_inventory') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 1. Dimensional Parameters Matrix -->
         <div class="card shadow-sm border-0 mb-4">
           <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
@@ -182,8 +200,11 @@
     </div>
 
     {% include 'partials/footer.html' %}
+    {% include 'partials/import_modal.html' %}
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/fastener_variant.js"></script>
+    <script src="/static/js/import_to_inventory_modal.js"></script>
     <script src="/static/js/libraries_fasteners_details.js"></script>
   </body>
 </html>

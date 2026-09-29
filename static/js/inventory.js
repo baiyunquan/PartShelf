@@ -17,6 +17,8 @@ function getSourceBadge(source) {
     return '<span class="badge bg-dark">Altium</span>';
   } else if (s === 'kicad') {
     return '<span class="badge bg-secondary">KiCad</span>';
+  } else if (s === 'fasteners') {
+    return `<span class="badge bg-secondary">${escapeHtml(I18N.source_fasteners || 'Mechanical')}</span>`;
   }
   return `<span class="badge bg-light text-dark border">${escapeHtml(source || '-')}</span>`;
 }
@@ -123,6 +125,12 @@ const externalTargetSelect = document.getElementById('externalTargetSelect');
 const externalSearchResults = document.getElementById('externalSearchResults');
 const selectedPartPreview = document.getElementById('selectedPartPreview');
 const savePartBtn = document.getElementById('savePartBtn');
+const fastenerVariantSelection = document.getElementById('fastenerVariantSelection');
+const fastenerNominalSelect = document.getElementById('fastenerNominalSelect');
+const fastenerLengthSelect = document.getElementById('fastenerLengthSelect');
+const fastenerLengthGroup = document.getElementById('fastenerLengthGroup');
+const confirmFastenerVariantButton = document.getElementById('confirmFastenerVariant');
+let pendingFastenerStandard = null;
 
 async function executeExternalSearch() {
   const query = (externalSearchInput.value || '').trim();
@@ -133,7 +141,8 @@ async function executeExternalSearch() {
   externalSearchResults.innerHTML = `<div class="text-center text-muted py-3">${I18N.searching_libraries || 'Searching external libraries...'}</div>`;
 
   try {
-    const res = await fetch(`/api/libraries/search?q=${encodeURIComponent(query)}&target=${encodeURIComponent(target)}&limit=15`);
+    const limit = target === 'fasteners' ? 100 : 15;
+    const res = await fetch(`/api/libraries/search?q=${encodeURIComponent(query)}&target=${encodeURIComponent(target)}&limit=${limit}`);
     const data = await res.json();
     renderExternalSearchResults(data, target);
   } catch (e) {
@@ -149,12 +158,15 @@ function renderExternalSearchResults(data, target) {
     (data.jlcparts || []).forEach(item => items.push({ ...item, _source: 'jlcparts' }));
     (data.altium || []).forEach(item => items.push({ ...item, _source: 'altium' }));
     (data.kicad || []).forEach(item => items.push({ ...item, _source: 'kicad' }));
+    (data.fasteners?.items || []).forEach(item => items.push({ ...item, _source: 'fasteners' }));
   } else if (target === 'jlcparts') {
     items = (data.jlcparts || []).map(item => ({ ...item, _source: 'jlcparts' }));
   } else if (target === 'altium') {
     items = (data.altium || []).map(item => ({ ...item, _source: 'altium' }));
   } else if (target === 'kicad') {
     items = (data.kicad || []).map(item => ({ ...item, _source: 'kicad' }));
+  } else if (target === 'fasteners') {
+    items = (data.fasteners?.items || []).map(item => ({ ...item, _source: 'fasteners' }));
   }
 
   if (items.length === 0) {
@@ -186,6 +198,11 @@ function renderExternalSearchResults(data, target) {
       meta = `Library: ${item.library || '-'} | Footprint: ${item.footprint || '-'}`;
       extId = String(item.id);
       badge = '<span class="badge bg-secondary">KiCad</span>';
+    } else if (item._source === 'fasteners') {
+      title = item.standard_code || item.standard_name || '';
+      meta = `${item.authority || '-'} | ${item.category_group_zh || item.category_group || '-'} | ${item.description || ''}`;
+      extId = String(item.standard_code || '');
+      badge = `<span class="badge bg-secondary">${escapeHtml(I18N.source_fasteners || 'Mechanical')}</span>`;
     }
 
     div.innerHTML = `
@@ -202,7 +219,11 @@ function renderExternalSearchResults(data, target) {
     `;
 
     div.querySelector('.select-item-btn').addEventListener('click', () => {
-      selectExternalPart(item._source, extId, title, meta);
+      if (item._source === 'fasteners') {
+        loadFastenerVariantOptions(item, title, meta);
+      } else {
+        selectExternalPart(item._source, extId, title, meta);
+      }
     });
 
     externalSearchResults.appendChild(div);
@@ -210,6 +231,8 @@ function renderExternalSearchResults(data, target) {
 }
 
 function selectExternalPart(source, extId, title, meta) {
+  pendingFastenerStandard = null;
+  if (fastenerVariantSelection) fastenerVariantSelection.style.display = 'none';
   document.getElementById('selectedSource').value = source;
   document.getElementById('selectedExtId').value = extId;
 
@@ -220,6 +243,57 @@ function selectExternalPart(source, extId, title, meta) {
 
   savePartBtn.disabled = false;
 }
+
+async function loadFastenerVariantOptions(item, title, meta) {
+  if (!fastenerVariantSelection) return;
+  fastenerVariantSelection.style.display = 'block';
+  fastenerVariantSelection.querySelector('.card-body').setAttribute('aria-busy', 'true');
+  try {
+    const response = await fetch(`/api/libraries/fasteners/${encodeURIComponent(item.standard_code)}`);
+    if (!response.ok) throw new Error(I18N.fastener_load_failed || 'Unable to load standard dimensions.');
+    const detail = await response.json();
+    pendingFastenerStandard = { item, title, meta, detail };
+    fastenerNominalSelect.replaceChildren();
+    (detail.param_rows || []).forEach(row => {
+      const option = document.createElement('option');
+      option.value = row.nominal;
+      option.textContent = row.nominal;
+      fastenerNominalSelect.appendChild(option);
+    });
+    fastenerLengthSelect.replaceChildren();
+    (detail.length_rows || []).forEach(row => {
+      const option = document.createElement('option');
+      option.value = row.key;
+      option.textContent = row.key;
+      fastenerLengthSelect.appendChild(option);
+    });
+    const needsLength = Boolean(detail.standard?.has_length);
+    fastenerLengthGroup.style.display = needsLength ? '' : 'none';
+    confirmFastenerVariantButton.disabled = !fastenerNominalSelect.options.length ||
+      (needsLength && !fastenerLengthSelect.options.length);
+    document.getElementById('selectedSource').value = '';
+    document.getElementById('selectedExtId').value = '';
+    selectedPartPreview.style.display = 'none';
+    savePartBtn.disabled = true;
+  } catch (error) {
+    pendingFastenerStandard = null;
+    fastenerVariantSelection.style.display = 'none';
+    alert(error.message || I18N.fastener_load_failed || 'Unable to load standard dimensions.');
+  } finally {
+    fastenerVariantSelection.querySelector('.card-body').removeAttribute('aria-busy');
+  }
+}
+
+confirmFastenerVariantButton?.addEventListener('click', () => {
+  if (!pendingFastenerStandard) return;
+  const { item, title, meta, detail } = pendingFastenerStandard;
+  const nominal = fastenerNominalSelect.value;
+  const length = detail.standard?.has_length ? fastenerLengthSelect.value : null;
+  if (!nominal || (detail.standard?.has_length && !length)) return;
+  const externalId = window.buildFastenerVariantId(item.standard_code, nominal, length);
+  const size = length ? `${nominal} × ${length}${String(length).toLowerCase().includes('in') ? '' : ' mm'}` : nominal;
+  selectExternalPart('fasteners', externalId, `${title} ${size}`, `${meta} | ${size}`);
+});
 
 btnExternalSearch.addEventListener('click', executeExternalSearch);
 externalSearchInput.addEventListener('keyup', (e) => {

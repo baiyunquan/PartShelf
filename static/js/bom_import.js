@@ -65,6 +65,12 @@
     })[m]);
   }
 
+  function librarySourceName(source) {
+    if (source === "jlcparts") return "JLCPCB";
+    if (source === "fasteners") return getI18n().tab_fasteners || "Fasteners";
+    return source || "";
+  }
+
   // Load existing projects for select dropdown
   async function loadExistingProjects() {
     if (_projectsLoaded) return;
@@ -279,7 +285,7 @@
           </div>
         `;
       } else if (item.status === "matched_library") {
-        const libName = item.library_source === "jlcparts" ? "JLCPCB" : (item.library_source === "altium" ? "Altium" : "KiCad");
+        const libName = librarySourceName(item.library_source);
         statusBadge = `<span class="badge bg-primary">${getI18n().status_matched_library || "Library Match"}</span>`;
         matchedInfoHtml = `
           <div class="small">
@@ -304,10 +310,11 @@
         statusBadge = `<span class="badge bg-warning text-dark">${review ? (getI18n().status_review_required || "Review required") : (getI18n().status_unmatched || "Unmatched")}</span>`;
         const reason = getI18n()[`reason_${item.match_reason}`] || item.match_reason || "";
         const conflicts = (item.conflicts || []).map((name) => getI18n()[`conflict_${name}`] || name);
+        const missingDimensions = (item.missing_dimensions || []).map((name) => getI18n()[`dimension_${name}`] || name);
         const suggestions = (item.suggestions || []).slice(0, 3).map((candidate, candidateIndex) => `
           <div class="d-flex justify-content-between align-items-center small border-top py-1 gap-2">
             <span class="text-truncate">
-              <strong>${escapeHtml(candidate.library_source === "jlcparts" ? "JLCPCB" : candidate.library_source)}</strong>
+              <strong>${escapeHtml(librarySourceName(candidate.library_source))}</strong>
               ${escapeHtml(candidate.name)}
               <span class="text-muted">${escapeHtml([candidate.value, candidate.package, candidate.voltage, candidate.tolerance].filter(Boolean).join(" | "))}</span>
             </span>
@@ -316,6 +323,7 @@
         `).join("");
         matchedInfoHtml = `
           <div class="small text-muted">${escapeHtml(reason)}</div>
+          ${missingDimensions.length ? `<div class="small text-muted">${escapeHtml(getI18n().missing_dimensions_prefix || "Missing dimensions")}: ${escapeHtml(missingDimensions.join(", "))}</div>` : ""}
           ${conflicts.length ? `<div class="small text-danger">${escapeHtml(conflicts.join("; "))}</div>` : ""}
           ${suggestions ? `<div class="small text-muted mt-1">${getI18n().suggested_candidates || "Candidates"}</div>${suggestions}` : ""}
           <div class="d-flex gap-1 align-items-center mt-1">
@@ -447,7 +455,7 @@
       const row = document.createElement("div");
       row.className = "p-2 border-bottom bg-white d-flex justify-content-between align-items-center";
 
-      const sourceName = it.library_source === "jlcparts" ? "JLCPCB" : (it.library_source === "altium" ? "Altium" : "KiCad");
+      const sourceName = librarySourceName(it.library_source);
       const meta = [it.lcsc_part, it.value, it.package, it.voltage, it.tolerance, it.manufacturer,
         `${getI18n().stock_label || "Stock"}: ${(it.stock || 0).toLocaleString()}`].filter(Boolean).join(" | ");
       const conflicts = (it.conflicts || []).map((name) => getI18n()[`conflict_${name}`] || name).join("; ");

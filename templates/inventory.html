@@ -84,6 +84,7 @@
                         <option value="jlcparts">{{ t('libraries_common.tab_jlcparts') }}</option>
                         <option value="altium">{{ t('libraries_common.tab_altium') }}</option>
                         <option value="kicad">{{ t('libraries_common.tab_kicad') }}</option>
+                        <option value="fasteners">{{ t('inventory.source_fasteners') }}</option>
                       </select>
                     </div>
                   </div>
@@ -91,6 +92,24 @@
                   <!-- Search Results Box -->
                   <div id="externalSearchResults" class="border rounded bg-white p-2" style="max-height: 220px; overflow-y: auto; display: none;">
                     <!-- Results dynamically appended here -->
+                  </div>
+
+                  <div id="fastenerVariantSelection" class="card mt-2" style="display:none;">
+                    <div class="card-body py-2">
+                      <div class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                          <label for="fastenerNominalSelect" class="form-label small fw-bold">{{ t('inventory.fastener_nominal') }}</label>
+                          <select class="form-select form-select-sm" id="fastenerNominalSelect"></select>
+                        </div>
+                        <div class="col-md-5" id="fastenerLengthGroup">
+                          <label for="fastenerLengthSelect" class="form-label small fw-bold">{{ t('inventory.fastener_length') }}</label>
+                          <select class="form-select form-select-sm" id="fastenerLengthSelect"></select>
+                        </div>
+                        <div class="col-md-2">
+                          <button type="button" class="btn btn-outline-primary btn-sm w-100" id="confirmFastenerVariant">{{ t('inventory.select_fastener_variant') }}</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Selected Part Preview Card -->
@@ -151,6 +170,7 @@
 
     <!-- Scripts -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/fastener_variant.js"></script>
     <script src="/static/js/inventory.js"></script>
   </body>
 </html>

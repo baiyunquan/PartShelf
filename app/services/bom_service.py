@@ -48,6 +48,9 @@ HEADER_ALIASES = {
     "manufacturer": [
         "manufacturer", "mfr", "brand", "厂商", "品牌", "生产厂家"
     ],
+    "mechanical_standard": ["standard", "standard code", "标准", "标准号", "执行标准"],
+    "mechanical_nominal": ["nominal size", "nominal", "thread size", "公称尺寸", "螺纹规格"],
+    "mechanical_length": ["length", "screw length", "bolt length", "长度", "螺杆长度"],
 }
 
 
@@ -63,6 +66,7 @@ def normalize_header(header: str) -> Optional[str]:
 
     # 2. Specific substring matches (order matters: specific keys before generic ones)
     ordered_keys = [
+        "mechanical_standard", "mechanical_nominal", "mechanical_length",
         "manufacturer_part", "supplier_part", "primary_category", "secondary_category",
         "pin_count", "designator", "footprint", "manufacturer", "quantity", "value", "comment"
     ]
@@ -123,6 +127,9 @@ def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
                 "pin_count": "",
                 "manufacturer_part": "",
                 "manufacturer": "",
+                "mechanical_standard": "",
+                "mechanical_nominal": "",
+                "mechanical_length": "",
                 "raw_row": [str(c) if c is not None else "" for c in r]
             }
             for idx, canon in col_map.items():
@@ -180,6 +187,9 @@ def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
                 "pin_count": "",
                 "manufacturer_part": "",
                 "manufacturer": "",
+                "mechanical_standard": "",
+                "mechanical_nominal": "",
+                "mechanical_length": "",
                 "raw_row": r
             }
             for idx, canon in col_map.items():
@@ -219,6 +229,9 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
                 "pin_count": row.get("pin_count", ""),
                 "manufacturer_part": row.get("manufacturer_part", ""),
                 "manufacturer": row.get("manufacturer", ""),
+                "mechanical_standard": row.get("mechanical_standard", ""),
+                "mechanical_nominal": row.get("mechanical_nominal", ""),
+                "mechanical_length": row.get("mechanical_length", ""),
                 "raw_supplier_part": row.get("supplier_part", ""),
                 "status": "unmatched",
                 "library_source": None,
@@ -233,9 +246,38 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
                 "selected": False,
                 "confirmed_match": False,
                 "match_reason": "",
+                "missing_dimensions": [],
                 "conflicts": internal_conflicts.copy(),
                 "suggestions": [],
             }
+            if kind == "fastener":
+                match = matcher.fastener_match(row)
+                item["match_reason"] = match["reason"]
+                item["missing_dimensions"] = match["missing_dimensions"]
+                if len(match["items"]) == 1:
+                    candidate = match["items"][0]
+                    inv_part = db.query(Part).filter(
+                        Part.library_source == "fasteners",
+                        Part.external_part_id == candidate["external_part_id"],
+                    ).first()
+                    item.update(
+                        status="in_inventory" if inv_part else "matched_library",
+                        library_source="fasteners",
+                        external_part_id=candidate["external_part_id"],
+                        matched_part_name=candidate["name"],
+                        matched_manufacturer=candidate["authority"],
+                        matched_package=candidate["package"],
+                        matched_stock=0,
+                        inventory_part_id=inv_part.id if inv_part else None,
+                        inventory_quantity=(inv_part.inventory.quantity_available if inv_part and inv_part.inventory else 0),
+                        auto_create_zero_stock=not bool(inv_part),
+                        selected=True,
+                    )
+                else:
+                    item["suggestions"] = match["items"]
+                preview_items.append(item)
+                continue
+
             code = (extract_c_code(row.get("supplier_part"))
                     or extract_c_code(row.get("manufacturer_part"))
                     or extract_c_code(row.get("comment")))
@@ -334,6 +376,23 @@ def execute_bom_import(
                 continue
             source = item.get("library_source")
             external_id = str(item.get("external_part_id") or "").strip()
+            if source == "fasteners" and external_id:
+                row = {
+                    "value": item.get("value"), "comment": item.get("comment"),
+                    "footprint": item.get("footprint"), "manufacturer_part": item.get("manufacturer_part"),
+                    "primary_category": item.get("primary_category"),
+                    "secondary_category": item.get("secondary_category"),
+                    "designator": item.get("designator"),
+                    "mechanical_standard": item.get("mechanical_standard"),
+                    "mechanical_nominal": item.get("mechanical_nominal"),
+                    "mechanical_length": item.get("mechanical_length"),
+                }
+                match = matcher.fastener_match(row)
+                if not matcher.validate_fastener_match(row, external_id):
+                    raise ValueError(f"Row {item.get('row_index')}: fastener dimensions do not match the selected standard variant")
+                if len(match["items"]) != 1 and not item.get("confirmed_match", False):
+                    raise ValueError(f"Row {item.get('row_index')}: manual confirmation is required for this fastener match")
+                continue
             if source == "kicad" and external_id:
                 if not item.get("confirmed_match", False):
                     raise ValueError(f"Row {item.get('row_index')}: manual confirmation is required for this library match")
@@ -431,7 +490,7 @@ def execute_bom_import(
                 part_id = new_part.id
                 created_parts_count += 1
 
-            elif lib_src in ("jlcparts", "altium", "kicad") and ext_id:
+            elif lib_src in ("jlcparts", "altium", "kicad", "fasteners") and ext_id:
                 if not item.get("auto_create_zero_stock", True):
                     skipped_unresolved_count += 1
                     continue

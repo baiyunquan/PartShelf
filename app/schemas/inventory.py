@@ -7,7 +7,7 @@ class PartProjectItem(BaseModel):
     quantity_needed: Optional[int] = 0
 
 class PartToInventoryAdd(BaseModel):
-    library_source: str  # 'jlcparts', 'altium', 'kicad', 'custom'
+    library_source: str  # 'jlcparts', 'altium', 'kicad', 'fasteners', or 'custom'
     external_part_id: str
     quantity: int = 1
     storage_location: Optional[str] = None

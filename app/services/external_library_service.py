@@ -103,7 +103,7 @@ def get_connection(db_path: Path) -> Optional[sqlite3.Connection]:
 
 
 def get_libraries_status() -> Dict[str, Any]:
-    """Returns availability and statistics for all four libraries."""
+    """Return availability and statistics for all installed reference libraries."""
     result = {
         "jlcparts": {"available": False, "count": 0, "lcsc_count": 0},
         "altium": {"available": False, "count": 0},
@@ -923,6 +923,14 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
             summary["description"] = sym.get("description") or sym.get("keywords") or ""
             summary["datasheet_url"] = sym.get("datasheet") if sym.get("datasheet") != "~" else None
 
+    elif src == "fasteners":
+        from app.services.fastener_variant_service import get_fastener_variant
+        variant = get_fastener_variant(pid_str)
+        if variant:
+            summary.update(variant["summary"])
+            summary["part_type_localized"] = summary["part_type"]
+            summary["part_type_en"] = variant["standard"].get("category_group") or summary["part_type"]
+
     elif src == "custom":
         custom_id = int(pid_str) if pid_str.isdigit() else 0
         from db.database import SessionLocal
@@ -965,6 +973,9 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
     elif src == "kicad":
         sym_id = int(pid_str) if pid_str.isdigit() else 0
         external_details = get_kicad_symbol(sym_id)
+    elif src == "fasteners":
+        from app.services.fastener_variant_service import get_fastener_variant
+        external_details = get_fastener_variant(pid_str)
     elif src == "custom":
         custom_id = int(pid_str) if pid_str.isdigit() else 0
         from db.database import SessionLocal
@@ -1299,5 +1310,3 @@ def get_fastener_assembly_guides(nominal: Optional[str] = None) -> List[Dict[str
         return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
-
-

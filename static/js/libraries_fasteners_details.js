@@ -50,6 +50,41 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         document.getElementById('stdDesc').textContent = std.description || '标准构件定义';
         document.getElementById('badgeSourceFile').textContent = std.source_file || 'FsData';
 
+        const nominalSelect = document.getElementById('detailFastenerNominal');
+        const lengthSelect = document.getElementById('detailFastenerLength');
+        const lengthGroup = document.getElementById('detailFastenerLengthGroup');
+        const addVariantButton = document.getElementById('addFastenerVariantBtn');
+        if (nominalSelect && addVariantButton) {
+          nominalSelect.replaceChildren();
+          (data.param_rows || []).forEach(row => {
+            const option = document.createElement('option');
+            option.value = row.nominal;
+            option.textContent = row.nominal;
+            nominalSelect.appendChild(option);
+          });
+          lengthSelect.replaceChildren();
+          (data.length_rows || []).forEach(row => {
+            const option = document.createElement('option');
+            option.value = row.key;
+            option.textContent = row.key;
+            lengthSelect.appendChild(option);
+          });
+          const needsLength = Boolean(std.has_length);
+          lengthGroup.style.display = needsLength ? '' : 'none';
+          addVariantButton.disabled = !nominalSelect.options.length ||
+            (needsLength && !lengthSelect.options.length);
+          addVariantButton.addEventListener('click', () => {
+            const nominal = nominalSelect.value;
+            const length = needsLength ? lengthSelect.value : null;
+            if (!nominal || (needsLength && !length)) return;
+            const externalId = window.buildFastenerVariantId(std.standard_code, nominal, length);
+            const size = length ? `${nominal} × ${length}${String(length).toLowerCase().includes('in') ? '' : ' mm'}` : nominal;
+            const name = `${std.standard_code} ${size}`;
+            const meta = `${std.authority || ''} | ${std.category_group_zh || std.category_group || ''}`;
+            window.openImportModal('fasteners', externalId, name, meta, 1);
+          });
+        }
+
         // 1. Render Param Matrix
         const thead = document.getElementById('paramTableHead');
         const tbody = document.getElementById('paramTableBody');

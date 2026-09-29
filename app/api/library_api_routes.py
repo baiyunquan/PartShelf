@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/status")
 def get_libraries_status():
-    """Get current status, availability, and record counts for all 3 external libraries."""
+    """Get current status, availability, and record counts for all external libraries."""
     return lib_svc.get_libraries_status()
 
 
@@ -28,11 +28,11 @@ def get_category_translations(request: Request):
 def search_libraries(
     request: Request,
     q: str = Query(..., min_length=1, description="Search query keyword or part number"),
-    target: str = Query("all", description="Target library: 'all', 'jlcparts', 'altium', or 'kicad'"),
+    target: str = Query("all", description="Target library: 'all', 'jlcparts', 'altium', 'kicad', or 'fasteners'"),
     limit: int = Query(20, ge=1, le=100)
 ):
     """
-    Search across external component libraries (JLCPCB, Altium, KiCad).
+    Search across electronic and mechanical reference libraries.
     """
     target = target.lower()
     if target == "jlcparts":
@@ -41,8 +41,12 @@ def search_libraries(
         return {"altium": lib_svc.search_altium(q, page_size=limit, lang=get_current_language(request))}
     elif target == "kicad":
         return {"kicad": lib_svc.search_kicad(q, page_size=limit)}
+    elif target == "fasteners":
+        return {"fasteners": lib_svc.query_fasteners(query=q, page_size=limit)}
     else:
-        return lib_svc.search_all_libraries(q, limit_each=limit, lang=get_current_language(request))
+        results = lib_svc.search_all_libraries(q, limit_each=limit, lang=get_current_language(request))
+        results["fasteners"] = lib_svc.query_fasteners(query=q, page_size=limit)
+        return results
 
 
 # ==========================================

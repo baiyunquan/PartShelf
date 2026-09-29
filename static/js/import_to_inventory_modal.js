@@ -1,5 +1,9 @@
 let _importProjectsLoaded = false;
 let _cachedImportProjects = [];
+const _importTranslations = (() => {
+  const el = document.getElementById('page-translations');
+  return el ? JSON.parse(el.textContent || '{}') : {};
+})();
 
 async function loadImportProjects() {
   if (_importProjectsLoaded) return _cachedImportProjects;
@@ -45,6 +49,9 @@ window.openImportModal = async function(source, extId, name, metaText, defaultQt
   } else if (s === 'kicad') {
     badgeEl.className = 'badge bg-secondary';
     badgeEl.textContent = 'KiCad';
+  } else if (s === 'fasteners') {
+    badgeEl.className = 'badge bg-secondary';
+    badgeEl.textContent = _importTranslations.tab_fasteners || 'Fasteners';
   } else {
     badgeEl.className = 'badge bg-secondary';
     badgeEl.textContent = source;

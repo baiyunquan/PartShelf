@@ -32,6 +32,10 @@ class BomImportItem(BaseModel):
     raw_supplier_part: Optional[str] = ""
     manufacturer_part: Optional[str] = ""
     manufacturer: Optional[str] = ""
+    mechanical_standard: Optional[str] = ""
+    mechanical_nominal: Optional[str] = ""
+    mechanical_length: Optional[str] = ""
+    missing_dimensions: Optional[List[str]] = None
     status: str = "unmatched"
     library_source: Optional[str] = None
     external_part_id: Optional[str] = None
