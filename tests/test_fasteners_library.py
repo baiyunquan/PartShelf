@@ -153,3 +153,66 @@ def test_no_emojis_in_fasteners_templates_and_responses():
     # 2. HTML detail page response
     res_detail = client.get("/libraries/fasteners/ISO4762")
     assert not emoji_pattern.search(res_detail.text), "Emoji found in /libraries/fasteners/ISO4762"
+
+
+def test_fasteners_domains():
+    # 1. Check domains endpoint
+    res = client.get("/api/libraries/fasteners/domains")
+    assert res.status_code == 200
+    domains = res.json()
+    assert len(domains) == 3
+    domain_keys = {d["domain"] for d in domains}
+    assert "fasteners" in domain_keys
+    assert "power_transmission" in domain_keys
+    assert "structural_materials" in domain_keys
+
+    # 2. Filter by power transmission
+    res_pt = client.get("/api/libraries/fasteners?domain=power_transmission")
+    assert res_pt.status_code == 200
+    data_pt = res_pt.json()
+    assert data_pt["total"] >= 20
+    assert all(item["domain"] == "power_transmission" for item in data_pt["items"])
+
+    # 3. Filter by structural materials
+    res_sm = client.get("/api/libraries/fasteners?domain=structural_materials")
+    assert res_sm.status_code == 200
+    data_sm = res_sm.json()
+    assert data_sm["total"] >= 15
+    assert all(item["domain"] == "structural_materials" for item in data_sm["items"])
+
+
+def test_fasteners_assembly_guide():
+    # 1. API endpoint for all guides
+    res = client.get("/api/libraries/fasteners/assembly-guide")
+    assert res.status_code == 200
+    guides = res.json()
+    assert len(guides) >= 20
+
+    # 2. Check M8 guide specs
+    m8_res = client.get("/api/libraries/fasteners/assembly-guide?nominal=M8")
+    assert m8_res.status_code == 200
+    m8_guides = m8_res.json()
+    assert len(m8_guides) == 1
+    m8 = m8_guides[0]
+    assert m8["nominal"] == "M8"
+    assert m8["stress_area"] == 36.6
+    assert m8["hex_wrench_af"] == 13.0
+    assert m8["hex_key"] == 6.0
+    assert m8["dry_torque_8_8"] == 26.2
+    assert m8["dry_torque_10_9"] == 38.5
+    assert m8["dry_torque_12_9"] == 45.1
+
+    # 3. Check ISO4762 detail includes assembly_guides with is_current
+    detail = lib_svc.get_fastener_detail("ISO4762")
+    assert "assembly_guides" in detail
+    assert len(detail["assembly_guides"]) > 0
+    curr_guides = [g for g in detail["assembly_guides"] if g.get("is_current")]
+    assert len(curr_guides) >= 10  # M3, M4, M5, M6, M8, M10, etc.
+
+    # 4. Detail page HTML contains assembly guide elements
+    res_html = client.get("/libraries/fasteners/ISO4762")
+    assert res_html.status_code == 200
+    assert "assemblyGuideCard" in res_html.text
+    assert "torqueTable" in res_html.text
+    assert "wrenchTable" in res_html.text
+

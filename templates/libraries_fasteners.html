@@ -28,6 +28,26 @@
         </div>
       </div>
 
+      <!-- Domain Tabs -->
+      <div class="d-flex flex-wrap gap-2 mb-3" id="domainButtonGroup">
+        <button type="button" class="btn btn-outline-primary active fw-bold domain-btn px-3" data-domain="">
+          {{ t('libraries_fasteners.domain_all') }}
+          <span class="badge bg-primary ms-1" id="domainCountAll">0</span>
+        </button>
+        <button type="button" class="btn btn-outline-primary domain-btn px-3" data-domain="fasteners">
+          {{ t('libraries_fasteners.domain_fasteners') }}
+          <span class="badge bg-secondary ms-1" id="domainCountFasteners">0</span>
+        </button>
+        <button type="button" class="btn btn-outline-primary domain-btn px-3" data-domain="power_transmission">
+          {{ t('libraries_fasteners.domain_power_transmission') }}
+          <span class="badge bg-secondary ms-1" id="domainCountPowerTransmission">0</span>
+        </button>
+        <button type="button" class="btn btn-outline-primary domain-btn px-3" data-domain="structural_materials">
+          {{ t('libraries_fasteners.domain_structural_materials') }}
+          <span class="badge bg-secondary ms-1" id="domainCountStructuralMaterials">0</span>
+        </button>
+      </div>
+
       <!-- Search & Filters Card -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-body">
@@ -68,16 +88,17 @@
           <thead class="table-dark">
             <tr>
               <th scope="col" style="min-width: 140px;">{{ t('libraries_fasteners.th_code') }}</th>
-              <th scope="col" style="min-width: 110px;">{{ t('libraries_fasteners.th_authority') }}</th>
-              <th scope="col" style="min-width: 150px;">{{ t('libraries_fasteners.th_category') }}</th>
+              <th scope="col" style="min-width: 90px;">{{ t('libraries_fasteners.th_authority') }}</th>
+              <th scope="col" style="min-width: 120px;">{{ t('libraries_fasteners.filter_domain') }}</th>
+              <th scope="col" style="min-width: 140px;">{{ t('libraries_fasteners.th_category') }}</th>
               <th scope="col">{{ t('libraries_fasteners.th_description') }}</th>
               <th scope="col" style="width: 110px;" class="text-center">{{ t('libraries_fasteners.th_has_length') }}</th>
-              <th scope="col" style="min-width: 130px;" class="text-end">{{ t('libraries_fasteners.th_actions') }}</th>
+              <th scope="col" style="min-width: 110px;" class="text-end">{{ t('libraries_fasteners.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted">{{ t('libraries_common.loading') }}</td>
+              <td colspan="7" class="text-center py-5 text-muted">{{ t('libraries_common.loading') }}</td>
             </tr>
           </tbody>
         </table>
@@ -99,6 +120,19 @@
     <script>
       const i18n = JSON.parse(document.getElementById('page-translations').textContent || '{}');
       let currentPage = 1;
+      let currentDomain = '';
+
+      const DOMAIN_LABELS = {
+        'fasteners': i18n['libraries_fasteners.domain_fasteners'] || '紧固件',
+        'power_transmission': i18n['libraries_fasteners.domain_power_transmission'] || '动力传动',
+        'structural_materials': i18n['libraries_fasteners.domain_structural_materials'] || '结构材料 / 型材'
+      };
+
+      const DOMAIN_BADGES = {
+        'fasteners': 'badge bg-secondary',
+        'power_transmission': 'badge bg-info-subtle text-info-emphasis border border-info-subtle',
+        'structural_materials': 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle'
+      };
 
       function escapeHtml(str) {
         if (!str) return '';
@@ -107,15 +141,41 @@
         })[m]);
       }
 
-      async function loadFilters() {
+      async function loadDomains() {
         try {
-          const [catRes, authRes] = await Promise.all([
-            fetch('/api/libraries/fasteners/categories'),
-            fetch('/api/libraries/fasteners/authorities')
-          ]);
-          if (catRes.ok) {
-            const categories = await catRes.json();
+          const res = await fetch('/api/libraries/fasteners/domains');
+          if (res.ok) {
+            const domains = await res.json();
+            let total = 0;
+            domains.forEach(d => {
+              total += (d.count || 0);
+              if (d.domain === 'fasteners') {
+                const el = document.getElementById('domainCountFasteners');
+                if (el) el.textContent = d.count.toLocaleString();
+              } else if (d.domain === 'power_transmission') {
+                const el = document.getElementById('domainCountPowerTransmission');
+                if (el) el.textContent = d.count.toLocaleString();
+              } else if (d.domain === 'structural_materials') {
+                const el = document.getElementById('domainCountStructuralMaterials');
+                if (el) el.textContent = d.count.toLocaleString();
+              }
+            });
+            const allEl = document.getElementById('domainCountAll');
+            if (allEl) allEl.textContent = total.toLocaleString();
+          }
+        } catch (err) {
+          console.error('Error loading domains:', err);
+        }
+      }
+
+      async function loadCategories(domain = '') {
+        try {
+          const url = domain ? `/api/libraries/fasteners/categories?domain=${encodeURIComponent(domain)}` : '/api/libraries/fasteners/categories';
+          const res = await fetch(url);
+          if (res.ok) {
+            const categories = await res.json();
             const catSelect = document.getElementById('categoryFilter');
+            catSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_categories'] || '全部分类'}</option>`;
             categories.forEach(c => {
               const opt = document.createElement('option');
               opt.value = c.group;
@@ -123,9 +183,18 @@
               catSelect.appendChild(opt);
             });
           }
-          if (authRes.ok) {
-            const authorities = await authRes.json();
+        } catch (err) {
+          console.error('Error loading categories:', err);
+        }
+      }
+
+      async function loadAuthorities() {
+        try {
+          const res = await fetch('/api/libraries/fasteners/authorities');
+          if (res.ok) {
+            const authorities = await res.json();
             const authSelect = document.getElementById('authorityFilter');
+            authSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_authorities'] || '全部体系'}</option>`;
             authorities.forEach(a => {
               const opt = document.createElement('option');
               opt.value = a.authority;
@@ -134,7 +203,7 @@
             });
           }
         } catch (err) {
-          console.error('Error loading filters:', err);
+          console.error('Error loading authorities:', err);
         }
       }
 
@@ -146,7 +215,7 @@
         const pageSize = document.getElementById('pageSizeSelect').value;
 
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted">${i18n['libraries_common.loading'] || 'Loading data...'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">${i18n['libraries_common.loading'] || 'Loading data...'}</td></tr>`;
 
         const params = new URLSearchParams({
           page: page,
@@ -155,6 +224,7 @@
         if (q) params.set('q', q);
         if (cat) params.set('category', cat);
         if (auth) params.set('authority', auth);
+        if (currentDomain) params.set('domain', currentDomain);
 
         try {
           const res = await fetch(`/api/libraries/fasteners?${params.toString()}`);
@@ -163,7 +233,7 @@
           renderTable(data);
           renderPagination(data);
         } catch (err) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Error loading fasteners: ${escapeHtml(err.message)}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">Error loading mechanical records: ${escapeHtml(err.message)}</td></tr>`;
         }
       }
 
@@ -173,13 +243,16 @@
         if (badge) badge.textContent = (data.total || 0).toLocaleString();
 
         if (!data.items || data.items.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted">${i18n['libraries_common.no_data'] || 'No records found'}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">${i18n['libraries_common.no_data'] || 'No records found'}</td></tr>`;
           return;
         }
 
         let html = '';
         data.items.forEach(item => {
           const authBadge = `<span class="badge bg-secondary">${escapeHtml(item.authority || 'STD')}</span>`;
+          const domName = DOMAIN_LABELS[item.domain] || item.domain || '-';
+          const domClass = DOMAIN_BADGES[item.domain] || 'badge bg-light text-dark border';
+          const domBadge = `<span class="${domClass}">${escapeHtml(domName)}</span>`;
           const catName = escapeHtml(item.category_group_zh || item.category_group || '-');
           const catBadge = `<span class="badge bg-light text-dark border">${catName}</span>`;
           const lengthBadge = item.has_length
@@ -194,6 +267,7 @@
                 </a>
               </td>
               <td>${authBadge}</td>
+              <td>${domBadge}</td>
               <td>${catBadge}</td>
               <td>
                 <div class="text-dark">${escapeHtml(item.description || item.standard_name || '-')}</div>
@@ -249,6 +323,32 @@
         nav.innerHTML = navHtml;
       }
 
+      function setupDomainButtons() {
+        document.querySelectorAll('.domain-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            document.querySelectorAll('.domain-btn').forEach(b => {
+              b.classList.remove('active', 'fw-bold');
+              const badge = b.querySelector('.badge');
+              if (badge) {
+                badge.classList.remove('bg-primary');
+                badge.classList.add('bg-secondary');
+              }
+            });
+            this.classList.add('active', 'fw-bold');
+            const badge = this.querySelector('.badge');
+            if (badge) {
+              badge.classList.remove('bg-secondary');
+              badge.classList.add('bg-primary');
+            }
+
+            currentDomain = this.getAttribute('data-domain') || '';
+            document.getElementById('categoryFilter').value = '';
+            loadCategories(currentDomain);
+            fetchFasteners(1);
+          });
+        });
+      }
+
       document.getElementById('filterForm').addEventListener('submit', function(e) {
         e.preventDefault();
         fetchFasteners(1);
@@ -263,11 +363,33 @@
         document.getElementById('categoryFilter').value = '';
         document.getElementById('authorityFilter').value = '';
         document.getElementById('pageSizeSelect').value = '25';
+        currentDomain = '';
+        document.querySelectorAll('.domain-btn').forEach(b => {
+          b.classList.remove('active', 'fw-bold');
+          const badge = b.querySelector('.badge');
+          if (badge) {
+            badge.classList.remove('bg-primary');
+            badge.classList.add('bg-secondary');
+          }
+        });
+        const firstBtn = document.querySelector('.domain-btn[data-domain=""]');
+        if (firstBtn) {
+          firstBtn.classList.add('active', 'fw-bold');
+          const badge = firstBtn.querySelector('.badge');
+          if (badge) {
+            badge.classList.remove('bg-secondary');
+            badge.classList.add('bg-primary');
+          }
+        }
+        loadCategories('');
         fetchFasteners(1);
       });
 
       document.addEventListener('DOMContentLoaded', () => {
-        loadFilters();
+        setupDomainButtons();
+        loadDomains();
+        loadCategories('');
+        loadAuthorities();
         fetchFasteners(1);
       });
     </script>

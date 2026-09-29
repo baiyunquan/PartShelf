@@ -898,24 +898,63 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
 
 
 # ==========================================
-# 4. FreeCAD FastenersWB Mechanical Library
+# 4. Mechanical & Structural Library (FreeCAD & Whole-Spec)
 # ==========================================
 
-def get_fastener_categories() -> List[Dict[str, Any]]:
-    """Returns all category groups with counts from fasteners.db."""
+FASTENER_DOMAINS = [
+    {"domain": "fasteners", "name_zh": "紧固件", "name_en": "Fasteners"},
+    {"domain": "power_transmission", "name_zh": "动力传动", "name_en": "Power Transmission"},
+    {"domain": "structural_materials", "name_zh": "结构材料/型材", "name_en": "Structural Materials & Profiles"},
+]
+
+
+def get_fastener_domains() -> List[Dict[str, Any]]:
+    """Returns domain groups (Fasteners, Power Transmission, Structural Materials) with counts."""
     conn = get_connection(FASTENERS_DB_PATH)
     if not conn:
         return []
     try:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT category_group, category_group_zh, count(*) as count
-            FROM fastener_standards
-            GROUP BY category_group, category_group_zh
-            ORDER BY count DESC
-        """)
+        cur.execute("SELECT domain, count(*) as count FROM fastener_standards GROUP BY domain")
+        counts = {row["domain"]: row["count"] for row in cur.fetchall()}
+        res = []
+        for d in FASTENER_DOMAINS:
+            res.append({
+                "domain": d["domain"],
+                "name_zh": d["name_zh"],
+                "name_en": d["name_en"],
+                "count": counts.get(d["domain"], 0)
+            })
+        return res
+    finally:
+        conn.close()
+
+
+def get_fastener_categories(domain: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Returns all category groups with counts from fasteners.db, optionally filtered by domain."""
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        if domain and domain != "all":
+            cur.execute("""
+                SELECT domain, category_group, category_group_zh, count(*) as count
+                FROM fastener_standards
+                WHERE domain = ?
+                GROUP BY domain, category_group, category_group_zh
+                ORDER BY count DESC
+            """, (domain,))
+        else:
+            cur.execute("""
+                SELECT domain, category_group, category_group_zh, count(*) as count
+                FROM fastener_standards
+                GROUP BY domain, category_group, category_group_zh
+                ORDER BY domain ASC, count DESC
+            """)
         return [
             {
+                "domain": row["domain"],
                 "group": row["category_group"],
                 "group_zh": row["category_group_zh"],
                 "count": row["count"]
@@ -927,7 +966,7 @@ def get_fastener_categories() -> List[Dict[str, Any]]:
 
 
 def get_fastener_authorities() -> List[Dict[str, Any]]:
-    """Returns all standard authorities (ISO, DIN, ASME, etc.) with counts."""
+    """Returns all standard authorities (ISO, DIN, ASME, JIS, KS, etc.) with counts."""
     conn = get_connection(FASTENERS_DB_PATH)
     if not conn:
         return []
@@ -955,10 +994,12 @@ def query_fasteners(
     page_size: int = 25,
     query: Optional[str] = None,
     category: Optional[str] = None,
-    authority: Optional[str] = None
+    authority: Optional[str] = None,
+    domain: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Search and page fastener standards from fasteners.db.
+    Search and page fastener / mechanical standards from fasteners.db.
+    Supports filtering by domain (fasteners, power_transmission, structural_materials).
     """
     conn = get_connection(FASTENERS_DB_PATH)
     if not conn:
@@ -968,6 +1009,10 @@ def query_fasteners(
         cur = conn.cursor()
         where_clauses = []
         params = []
+
+        if domain and domain != "all":
+            where_clauses.append("domain = ?")
+            params.append(domain)
 
         if query:
             q_clean = query.strip()
@@ -1000,11 +1045,11 @@ def query_fasteners(
         offset = (page - 1) * page_size
 
         cur.execute(f"""
-            SELECT id, standard_code, standard_name, authority, category_group, category_group_zh,
+            SELECT id, standard_code, standard_name, authority, domain, category_group, category_group_zh,
                    description, param_table_name, length_table_name, has_length, source_file
             FROM fastener_standards
             {where_sql}
-            ORDER BY authority ASC, standard_code ASC
+            ORDER BY domain ASC, authority ASC, standard_code ASC
             LIMIT ? OFFSET ?
         """, params + [page_size, offset])
 
@@ -1024,7 +1069,7 @@ def query_fasteners(
 def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
     """
     Returns complete metadata, dimensional parameter matrix, valid length matrix,
-    and hole drill references for a fastener standard.
+    hole drill references, and torque/wrench assembly guidelines for a standard.
     """
     conn = get_connection(FASTENERS_DB_PATH)
     if not conn:
@@ -1095,13 +1140,31 @@ def get_fastener_detail(standard_code: str) -> Optional[Dict[str, Any]]:
         cur.execute("SELECT nominal_dia, hole_diameter FROM fastener_hole_charts WHERE chart_type = 'metric_tap_hole'")
         tap_holes = {r[0]: r[1] for r in cur.fetchall()}
 
+        # 4. Fetch assembly guides (torque and wrench specifications)
+        current_nominals = {r["nominal"].upper().replace(" ", "") for r in param_rows}
+        cur.execute("""
+            SELECT nominal, stress_area, hex_key, hex_wrench_af, socket_size,
+                   preload_8_8, dry_torque_8_8, lube_torque_8_8,
+                   preload_10_9, dry_torque_10_9, lube_torque_10_9,
+                   preload_12_9, dry_torque_12_9, lube_torque_12_9
+            FROM fastener_assembly_guides
+            ORDER BY id ASC
+        """)
+        guide_rows = cur.fetchall()
+        assembly_guides = []
+        for gr in guide_rows:
+            g_dict = dict(gr)
+            g_dict["is_current"] = (g_dict["nominal"].upper() in current_nominals)
+            assembly_guides.append(g_dict)
+
         return {
             "standard": standard,
             "param_titles": param_titles,
             "param_rows": param_rows,
             "length_titles": length_titles,
             "length_rows": length_rows,
-            "tap_holes": tap_holes
+            "tap_holes": tap_holes,
+            "assembly_guides": assembly_guides
         }
     finally:
         conn.close()
@@ -1126,4 +1189,21 @@ def get_fastener_hole_charts(chart_type: Optional[str] = None) -> List[Dict[str,
         return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
+
+
+def get_fastener_assembly_guides(nominal: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Returns torque specs and tool sizing assembly guidelines."""
+    conn = get_connection(FASTENERS_DB_PATH)
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor()
+        if nominal:
+            cur.execute("SELECT * FROM fastener_assembly_guides WHERE nominal = ? OR lower(nominal) = lower(?)", (nominal, nominal))
+        else:
+            cur.execute("SELECT * FROM fastener_assembly_guides ORDER BY id ASC")
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
 

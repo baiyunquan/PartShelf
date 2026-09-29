@@ -173,19 +173,31 @@ def get_jlcparts_component_detail(lcsc: int, request: Request):
 
 
 # ==========================================
-# Fasteners Endpoints
+# Fasteners & Mechanical Components Endpoints
 # ==========================================
 
+@router.get("/fasteners/domains")
+def get_fastener_domains():
+    """Get domain groups (Fasteners, Power Transmission, Structural Materials) with counts."""
+    return lib_svc.get_fastener_domains()
+
+
 @router.get("/fasteners/categories")
-def get_fastener_categories():
-    """Get distinct fastener categories and counts."""
-    return lib_svc.get_fastener_categories()
+def get_fastener_categories(domain: Optional[str] = Query(None)):
+    """Get distinct mechanical categories and counts, optionally filtered by domain."""
+    return lib_svc.get_fastener_categories(domain=domain)
 
 
 @router.get("/fasteners/authorities")
 def get_fastener_authorities():
-    """Get standard authorities (ISO, DIN, ASME, etc.)."""
+    """Get standard authorities (ISO, DIN, ASME, JIS, KS, etc.)."""
     return lib_svc.get_fastener_authorities()
+
+
+@router.get("/fasteners/assembly-guide")
+def get_fastener_assembly_guide(nominal: Optional[str] = Query(None)):
+    """Get torque specs and tool sizing assembly guidelines."""
+    return lib_svc.get_fastener_assembly_guides(nominal=nominal)
 
 
 @router.get("/fasteners")
@@ -193,25 +205,27 @@ def search_fasteners(
     q: Optional[str] = Query("", description="Keyword or standard code"),
     category: Optional[str] = Query(None),
     authority: Optional[str] = Query(None),
+    domain: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100)
 ):
-    """Search or list mechanical fasteners with pagination and filtering."""
+    """Search or list mechanical & structural standards with pagination and filtering."""
     return lib_svc.query_fasteners(
         page=page,
         page_size=page_size,
         query=q or "",
         category=category,
-        authority=authority
+        authority=authority,
+        domain=domain
     )
 
 
 @router.get("/fasteners/{standard_code}")
 def get_fastener_detail(standard_code: str):
-    """Get full details of a specific fastener standard including parameter and length tables."""
+    """Get full details of a specific standard including parameter, length tables, and assembly guides."""
     detail = lib_svc.get_fastener_detail(standard_code)
     if not detail:
-        raise HTTPException(status_code=404, detail="Fastener standard not found")
+        raise HTTPException(status_code=404, detail="Mechanical standard not found")
     return detail
 
 
