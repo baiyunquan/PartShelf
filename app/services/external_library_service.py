@@ -13,6 +13,7 @@ import os
 import math
 import sqlite3
 import json
+import re
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -26,6 +27,7 @@ JLCPARTS_DB_PATH = DATA_DIR / "jlcparts.db"
 ALTIUM_DB_PATH = DATA_DIR / "altium_library.db"
 KICAD_DB_PATH = DATA_DIR / "kicad_symbols.db"
 FASTENERS_DB_PATH = DATA_DIR / "fasteners.db"
+STATIC_PARTS_DIR = BASE_DIR / "static" / "images" / "parts"
 
 
 def ensure_libraries_on_startup() -> Dict[str, Any]:
@@ -582,61 +584,138 @@ def search_jlcparts(
 
     cur = conn.cursor()
     conditions = []
-    params = []
+    params = {}
+    code_query = False
 
     q = (query or "").strip()
+    capacitance = None
+    capacitance_sql = (
+        "CASE WHEN j.attributes LIKE :capacitance_hint AND json_valid(j.attributes) THEN "
+        "lower(replace(replace(replace(json_extract(j.attributes, '$.Capacitance'), "
+        "' ', ''), 'µ', 'u'), 'μ', 'u')) END"
+    )
     if q:
+        params.update(query_lower=q.lower(), like=f"%{q}%", prefix=f"{q}%", code=None)
+        capacitance_match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([pnumµμ]?)f", q, re.IGNORECASE)
+        if capacitance_match:
+            unit = capacitance_match.group(2).lower().replace("µ", "u").replace("μ", "u")
+            capacitance = f"{capacitance_match.group(1)}{unit}f"
+            params.update(
+                capacitance=capacitance,
+                query_lower=capacitance,
+                like=f"%{capacitance}%",
+                prefix=f"{capacitance}%",
+            )
+            unit_hint = "" if unit == "u" else unit
+            params["capacitance_hint"] = f"%{capacitance_match.group(1)}%{unit_hint}f%"
+
         # Check if user entered LCSC code e.g. "C12345" or "12345"
         if q.upper().startswith("C") and q[1:].isdigit():
-            lcsc_num = int(q[1:])
-            conditions.append("(j.lcsc = ? OR j.mfr LIKE ?)")
-            params.extend([lcsc_num, f"%{q}%"])
+            params["code"] = int(q[1:])
+            code_query = True
         elif q.isdigit():
-            lcsc_num = int(q)
-            conditions.append("(j.lcsc = ? OR j.mfr LIKE ?)")
-            params.extend([lcsc_num, f"%{q}%"])
+            params["code"] = int(q)
+            code_query = True
         else:
-            conditions.append("(j.mfr LIKE ? OR ('C' || j.lcsc) LIKE ? OR j.description LIKE ?)")
-            params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+            matches = ["j.mfr LIKE :like", "('C' || j.lcsc) LIKE :like", "j.description LIKE :like"]
+            if capacitance is not None:
+                matches.append(f"{capacitance_sql} = :capacitance")
+            conditions.append("(" + " OR ".join(matches) + ")")
 
     if category:
-        conditions.append("j.category = ?")
-        params.append(category)
+        conditions.append("j.category = :category")
+        params["category"] = category
 
     if subcategory:
-        conditions.append("j.subcategory = ?")
-        params.append(subcategory)
+        conditions.append("j.subcategory = :subcategory")
+        params["subcategory"] = subcategory
 
     if package:
-        conditions.append("j.package = ?")
-        params.append(package)
+        conditions.append("j.package = :package")
+        params["package"] = package
 
     if library_type:
-        conditions.append("j.library_type = ?")
-        params.append(library_type)
+        conditions.append("j.library_type = :library_type")
+        params["library_type"] = library_type
 
     if in_stock_only:
         conditions.append("j.stock > 0")
 
     where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    if code_query:
+        # The model index covers the broad code search; fetch full rows only
+        # for matching IDs instead of scanning every large component record.
+        hits_sql = """
+            hits AS (
+                SELECT lcsc FROM jlc_components WHERE mfr LIKE :like
+                UNION
+                SELECT lcsc FROM jlc_components WHERE lcsc = :code
+            )
+        """
+        candidate_from = "FROM hits h JOIN jlc_components j ON j.lcsc = h.lcsc"
+    else:
+        hits_sql = ""
+        candidate_from = "FROM jlc_components j"
 
-    # Count
-    cur.execute(f"SELECT count(*) FROM jlc_components j{where_sql}", params)
-    total = cur.fetchone()[0]
+    if q:
+        rank = ["WHEN j.lcsc = :code OR lower(j.mfr) = :query_lower THEN 0"]
+        if capacitance is not None:
+            rank.append(f"WHEN {capacitance_sql} = :capacitance THEN 1")
+        rank.extend([
+            "WHEN lower(j.mfr) LIKE lower(:prefix) THEN 2",
+            "WHEN lower(j.mfr) LIKE lower(:like) THEN 3",
+        ])
+        rank_sql = "CASE " + " ".join(rank) + " ELSE 4 END"
+    else:
+        # Preserve the stock-first listing when there is no search term.
+        cur.execute(f"SELECT count(*) FROM jlc_components j{where_sql}", params)
+        total = cur.fetchone()[0]
 
-    # Data
-    sql = f"""
-    SELECT j.lcsc, j.category, j.subcategory, j.mfr, j.package, j.joints,
-           j.manufacturer, j.library_type, j.preferred, j.stock, j.price,
-           j.description, j.datasheet, j.attributes, j.rohs, l.image, l.url_slug
-    FROM jlc_components j
-    LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
-    {where_sql}
-    ORDER BY j.stock DESC, j.preferred DESC
-    LIMIT ? OFFSET ?
+    row_columns = """
+        j.lcsc, j.category, j.subcategory, j.mfr, j.package, j.joints,
+        j.manufacturer, j.library_type, j.preferred, j.stock, j.price,
+        j.description, j.datasheet, j.attributes, j.rohs, l.image, l.url_slug
     """
-    cur.execute(sql, params + [page_size, offset])
+    if q:
+        # Rank and paginate narrow rows before loading attributes and joined data.
+        ranked_prefix = f"{hits_sql}, " if code_query else ""
+        sql = f"""
+        WITH {ranked_prefix} ranked AS (
+            SELECT j.lcsc, j.stock, j.preferred, {rank_sql} AS relevance,
+                   count(*) OVER() AS search_total
+            {candidate_from}
+            {where_sql}
+            ORDER BY relevance, j.stock DESC, j.preferred DESC, j.lcsc ASC
+            LIMIT :page_size OFFSET :offset
+        )
+        SELECT {row_columns}, ranked.search_total
+        FROM ranked
+        JOIN jlc_components j ON j.lcsc = ranked.lcsc
+        LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+        ORDER BY ranked.relevance, ranked.stock DESC,
+                 ranked.preferred DESC, ranked.lcsc ASC
+        """
+    else:
+        sql = f"""
+        SELECT {row_columns}
+        FROM jlc_components j
+        LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
+        {where_sql}
+        ORDER BY j.stock DESC, j.preferred DESC, j.lcsc ASC
+        LIMIT :page_size OFFSET :offset
+        """
+    cur.execute(sql, {**params, "page_size": page_size, "offset": offset})
     rows = [dict(r) for r in cur.fetchall()]
+    if q:
+        if rows:
+            total = rows[0]["search_total"]
+            for row in rows:
+                row.pop("search_total")
+        else:
+            # A page beyond the last match still reports the full match count.
+            count_prefix = f"WITH {hits_sql}" if code_query else ""
+            cur.execute(f"{count_prefix} SELECT count(*) {candidate_from}{where_sql}", params)
+            total = cur.fetchone()[0]
     conn.close()
 
     for r in rows:
@@ -644,9 +723,14 @@ def search_jlcparts(
         r["subcategory_localized"] = category_i18n.translate_secondary(r.get("subcategory") or "", lang)
         # Build image URLs
         if r.get("image"):
-            r["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{r['image']}"
-            r["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{r['image']}"
-            r["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{r['image']}"
+            img_file = r["image"]
+            if (STATIC_PARTS_DIR / img_file).exists():
+                r["image_url_small"] = f"/static/images/parts/{img_file}"
+                r["image_url_medium"] = f"/static/images/parts/{img_file}"
+            else:
+                r["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{img_file}"
+                r["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{img_file}"
+            r["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{img_file}"
         else:
             r["image_url_small"] = None
             r["image_url_medium"] = None
@@ -700,9 +784,14 @@ def get_jlcparts_component(lcsc: int, lang: str = "zh") -> Optional[Dict[str, An
         item["subcategory_localized"] = category_i18n.translate_secondary(item.get("subcategory") or "", lang)
 
         if item.get("image"):
-            item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{item['image']}"
-            item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{item['image']}"
-            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{item['image']}"
+            img_file = item["image"]
+            if (STATIC_PARTS_DIR / img_file).exists():
+                item["image_url_small"] = f"/static/images/parts/{img_file}"
+                item["image_url_medium"] = f"/static/images/parts/{img_file}"
+            else:
+                item["image_url_small"] = f"https://assets.lcsc.com/images/lcsc/96x96/{img_file}"
+                item["image_url_medium"] = f"https://assets.lcsc.com/images/lcsc/224x224/{img_file}"
+            item["image_url_large"] = f"https://assets.lcsc.com/images/lcsc/900x900/{img_file}"
         else:
             item["image_url_small"] = None
             item["image_url_medium"] = None
