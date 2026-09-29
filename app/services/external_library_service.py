@@ -635,8 +635,13 @@ def search_jlcparts(
         params["package"] = package
 
     if library_type:
-        conditions.append("j.library_type = :library_type")
-        params["library_type"] = library_type
+        if library_type == "no_fee":
+            conditions.append("(j.library_type = 'base' OR j.preferred = 1)")
+        elif library_type == "expand":
+            conditions.append("(j.library_type = 'expand' AND j.preferred = 0)")
+        else:
+            conditions.append("j.library_type = :library_type")
+            params["library_type"] = library_type
 
     if in_stock_only:
         conditions.append("j.stock > 0")

@@ -119,6 +119,26 @@ def test_filters_and_blank_listing_keep_existing_behavior(jlc_library):
     assert [item["lcsc"] for item in blank["items"]] == [104, 105, 103]
 
 
+def test_no_fee_filter_includes_base_and_preferred_but_excludes_extended(jlc_library):
+    conn = sqlite3.connect(jlc_library)
+    conn.execute(
+        "UPDATE jlc_components SET library_type='base', preferred=0 WHERE lcsc=101"
+    )
+    conn.execute(
+        "UPDATE jlc_components SET preferred=1 WHERE lcsc=102"
+    )
+    conn.commit()
+    conn.close()
+
+    no_fee = libraries.search_jlcparts("", library_type="no_fee", page_size=20)
+    basic_only = libraries.search_jlcparts("", library_type="base", page_size=20)
+    extended_only = libraries.search_jlcparts("", library_type="expand", page_size=20)
+
+    assert {item["lcsc"] for item in no_fee["items"]} == {101, 102, 103}
+    assert [item["lcsc"] for item in basic_only["items"]] == [101]
+    assert {item["lcsc"] for item in extended_only["items"]} == {104, 105, 106, 107, 108}
+
+
 def test_pagination_and_empty_page_preserve_total(jlc_library):
     first = libraries.search_jlcparts("27pf", page=1, page_size=3)
     second = libraries.search_jlcparts("27pf", page=2, page_size=3)

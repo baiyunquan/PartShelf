@@ -46,3 +46,9 @@ def test_javascript_translation_references():
         refs.extend(re.findall(r'\btranslation\("([a-z][a-z0-9_]*)"\)', source))
         assert refs
         assert not {f"{section}.{key}" for key in refs} - set(catalog)
+
+
+def test_jlcparts_unknown_stock_label_is_translated_in_both_languages():
+    for language in ("zh", "en"):
+        catalog = json.loads((LOCALES / f"{language}.json").read_text(encoding="utf-8"))
+        assert catalog["libraries_common"]["stock_unknown"]

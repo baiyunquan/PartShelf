@@ -34,11 +34,15 @@ const lcscNum = document.getElementById('detailContainer')?.dataset?.lcsc || win
         badges.innerHTML = '';
         if (data.library_type === 'base') {
           badges.innerHTML += `<span class="badge bg-success">${i18n.badge_basic || 'Basic Part'}</span>`;
+        } else if (data.preferred === 1) {
+          badges.innerHTML += `<span class="badge bg-info text-dark">${i18n.badge_preferred || 'Preferred'}</span>`;
         } else {
           badges.innerHTML += `<span class="badge bg-secondary">${i18n.badge_extended || 'Expand Part'}</span>`;
         }
         if (data.stock > 0) {
           badges.innerHTML += `<span class="badge bg-success">${i18n.badge_in_stock || 'In Stock'}: ${data.stock.toLocaleString()}</span>`;
+        } else if (data.stock < 0) {
+          badges.innerHTML += `<span class="badge bg-secondary">${i18n.stock_unknown || 'Stock unknown'}</span>`;
         } else {
           badges.innerHTML += `<span class="badge bg-secondary">${i18n.badge_out_of_stock || 'Out of Stock'}</span>`;
         }
@@ -81,9 +85,10 @@ const lcscNum = document.getElementById('detailContainer')?.dataset?.lcsc || win
         document.getElementById('propSubcategory').textContent = data.subcategory ? (subcatLocalized && subcatLocalized !== data.subcategory ? `${subcatLocalized} (${data.subcategory})` : (subcatLocalized || data.subcategory)) : '-';
         document.getElementById('propPackage').textContent = data.package || '-';
         document.getElementById('propJoints').textContent = data.joints || '-';
-        document.getElementById('propStock').innerHTML = data.stock > 0 ?
-          `<span class="text-success fw-bold">${data.stock.toLocaleString()}</span>` :
-          `<span class="text-muted">0</span>`;
+        document.getElementById('propStock').innerHTML = data.stock < 0 ?
+          `<span class="text-muted">${i18n.stock_unknown || '-'}</span>` : data.stock > 0 ?
+            `<span class="text-success fw-bold">${data.stock.toLocaleString()}</span>` :
+            `<span class="text-muted">0</span>`;
         document.getElementById('propLibraryType').textContent = data.library_type || '-';
 
         // Manufacturing

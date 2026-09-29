@@ -87,12 +87,19 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         data.items.forEach(item => {
           const tr = document.createElement('tr');
           const isBasic = item.library_type === 'base';
-          const typeBadge = isBasic ?
-            `<span class="badge bg-success">${i18n.badge_basic || 'Basic'}</span>` :
-            `<span class="badge bg-light text-dark border">${i18n.badge_extended || 'Expand'}</span>`;
+          const isPreferred = !isBasic && item.preferred === 1;
+          let typeBadge;
+          if (isBasic) {
+            typeBadge = `<span class="badge bg-success">${i18n.badge_basic || 'Basic'}</span>`;
+          } else if (isPreferred) {
+            typeBadge = `<span class="badge bg-info text-dark">${i18n.badge_preferred || 'Preferred'}</span>`;
+          } else {
+            typeBadge = `<span class="badge bg-light text-dark border">${i18n.badge_extended || 'Expand'}</span>`;
+          }
 
           const stockClass = item.stock > 0 ? 'text-success fw-bold' : 'text-muted';
-          const stockText = item.stock > 0 ? item.stock.toLocaleString() : '0';
+          const stockText = item.stock < 0 ? (i18n.stock_unknown || '-') :
+            item.stock > 0 ? item.stock.toLocaleString() : '0';
 
           let priceText = '-';
           if (item.price_breaks && item.price_breaks.length > 0) {
