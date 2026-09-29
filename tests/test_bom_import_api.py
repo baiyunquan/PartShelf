@@ -60,6 +60,19 @@ def test_bom_preview_api():
     assert "unmatched_count" in data
 
 
+def test_import_endpoint_requires_manual_confirmation_for_substitute():
+    response = client.post("/api/projects/bom/import", json={
+        "target_type": "new", "project_name": "TEST_REJECT_UNCONFIRMED",
+        "items": [{
+            "row_index": 1, "selected": True, "raw_supplier_part": "C999999999",
+            "library_source": "jlcparts", "external_part_id": "100002",
+            "status": "matched_library", "confirmed_match": False,
+        }],
+    })
+    assert response.status_code == 400
+    assert "confirmation" in response.json()["detail"]
+
+
 def test_bom_custom_part_api():
     res = client.post("/api/projects/bom/custom_part", json={
         "name": "TEST_M2_SCREW",
@@ -97,6 +110,7 @@ def test_bom_import_new_project():
     items_to_import[0]["custom_name"] = "TEST_CUSTOM_LED"
     items_to_import[0]["custom_manufacturer"] = "TEST_OPTO"
     items_to_import[0]["custom_package"] = "0603"
+    items_to_import[0]["selected"] = True
 
     # 2. Execute Import as new project
     import_payload = {

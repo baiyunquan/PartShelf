@@ -37,6 +37,7 @@
   const summaryInInv = document.getElementById("bomSummaryInInventory");
   const summaryMatchedLib = document.getElementById("bomSummaryMatchedLib");
   const summaryUnmatched = document.getElementById("bomSummaryUnmatched");
+  const skippedSummary = document.getElementById("bomSkippedSummary");
   const targetSummaryText = document.getElementById("bomTargetSummaryText");
 
   // Sub-modal elements
@@ -237,6 +238,13 @@
     summaryInInv.textContent = inInv;
     summaryMatchedLib.textContent = matchedLib;
     summaryUnmatched.textContent = unmatched;
+    const omitted = _parsedData.items.filter((item) => !item.selected).length;
+    skippedSummary.textContent = (getI18n().skipped_rows_notice || "Rows not included: {count}")
+      .replace("{count}", String(omitted));
+    const bindable = _parsedData.items.filter((item) => item.status !== "unmatched" || item.is_custom);
+    const chosen = bindable.filter((item) => item.selected).length;
+    selectAllCb.checked = bindable.length > 0 && chosen === bindable.length;
+    selectAllCb.indeterminate = chosen > 0 && chosen < bindable.length;
   }
 
   function renderTableRows() {
@@ -282,6 +290,7 @@
               </div>
               <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="window.openSearchBindModal(${idx})">Rebind</button>
             </div>
+            ${(item.conflicts || []).length ? `<div class="small text-danger">${escapeHtml(item.conflicts.map((name) => getI18n()[`conflict_${name}`] || name).join("; "))}</div>` : ""}
             <div class="form-check mt-1 mb-0">
               <input class="form-check-input row-zero-stock-cb" type="checkbox" id="cb-zero-${idx}" ${item.auto_create_zero_stock ? "checked" : ""}>
               <label class="form-check-label text-muted" style="font-size: 0.75rem;" for="cb-zero-${idx}">
@@ -291,9 +300,25 @@
           </div>
         `;
       } else {
-        statusBadge = `<span class="badge bg-warning text-dark">${getI18n().status_unmatched || "Unmatched"}</span>`;
+        const review = (item.conflicts || []).length || (item.suggestions || []).length;
+        statusBadge = `<span class="badge bg-warning text-dark">${review ? (getI18n().status_review_required || "Review required") : (getI18n().status_unmatched || "Unmatched")}</span>`;
+        const reason = getI18n()[`reason_${item.match_reason}`] || item.match_reason || "";
+        const conflicts = (item.conflicts || []).map((name) => getI18n()[`conflict_${name}`] || name);
+        const suggestions = (item.suggestions || []).slice(0, 3).map((candidate, candidateIndex) => `
+          <div class="d-flex justify-content-between align-items-center small border-top py-1 gap-2">
+            <span class="text-truncate">
+              <strong>${escapeHtml(candidate.library_source === "jlcparts" ? "JLCPCB" : candidate.library_source)}</strong>
+              ${escapeHtml(candidate.name)}
+              <span class="text-muted">${escapeHtml([candidate.value, candidate.package, candidate.voltage, candidate.tolerance].filter(Boolean).join(" | "))}</span>
+            </span>
+            <button type="button" class="btn btn-outline-primary btn-sm row-suggestion-btn" data-idx="${idx}" data-candidate="${candidateIndex}">${getI18n().btn_select_part || "Select"}</button>
+          </div>
+        `).join("");
         matchedInfoHtml = `
-          <div class="d-flex gap-1 align-items-center">
+          <div class="small text-muted">${escapeHtml(reason)}</div>
+          ${conflicts.length ? `<div class="small text-danger">${escapeHtml(conflicts.join("; "))}</div>` : ""}
+          ${suggestions ? `<div class="small text-muted mt-1">${getI18n().suggested_candidates || "Candidates"}</div>${suggestions}` : ""}
+          <div class="d-flex gap-1 align-items-center mt-1">
             <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" onclick="window.openSearchBindModal(${idx})">
               ${getI18n().btn_search_bind || "Search"}
             </button>
@@ -306,11 +331,13 @@
 
       tr.innerHTML = `
         <td class="text-center">
-          <input class="form-check-input row-select-cb" type="checkbox" data-idx="${idx}" ${item.selected ? "checked" : ""}>
+          <input class="form-check-input row-select-cb" type="checkbox" data-idx="${idx}" ${item.selected ? "checked" : ""} ${item.status === "unmatched" && !item.is_custom ? "disabled" : ""}>
         </td>
         <td class="text-muted small">${item.row_index}</td>
         <td>
-          <div class="fw-bold text-dark">${escapeHtml(item.comment || item.manufacturer_part || "-")}</div>
+          <div class="fw-bold text-dark">${escapeHtml(item.value || item.comment || item.manufacturer_part || "-")}</div>
+          ${item.value && item.comment && item.value !== item.comment ? `<small class="d-block text-muted">${getI18n().label_comment || "Comment"}: ${escapeHtml(item.comment)}</small>` : ""}
+          ${item.manufacturer_part && item.manufacturer_part !== item.value && item.manufacturer_part !== item.comment ? `<small class="d-block text-muted">${escapeHtml(item.manufacturer_part)}</small>` : ""}
           <small class="text-muted">${escapeHtml(item.manufacturer || "")}</small>
         </td>
         <td><code>${escapeHtml(item.designator || "-")}</code></td>
@@ -330,6 +357,7 @@
       cb.addEventListener("change", function () {
         const i = parseInt(this.getAttribute("data-idx"), 10);
         _parsedData.items[i].selected = this.checked;
+        updateSummaryCounters();
       });
     });
 
@@ -346,28 +374,38 @@
         _parsedData.items[i].auto_create_zero_stock = this.checked;
       });
     });
+    tbody.querySelectorAll(".row-suggestion-btn").forEach((button) => {
+      button.addEventListener("click", () => {
+        const index = Number(button.dataset.idx);
+        const candidate = _parsedData.items[index].suggestions[Number(button.dataset.candidate)];
+        selectCandidate(index, candidate);
+      });
+    });
   }
 
   // Select all checkbox
   selectAllCb.addEventListener("change", function () {
     const isChecked = this.checked;
     if (_parsedData) {
-      _parsedData.items.forEach((item) => (item.selected = isChecked));
+      _parsedData.items.forEach((item) => {
+        item.selected = isChecked && (item.status !== "unmatched" || item.is_custom);
+      });
     }
-    tbody.querySelectorAll(".row-select-cb").forEach((cb) => (cb.checked = isChecked));
+    tbody.querySelectorAll(".row-select-cb").forEach((cb) => (cb.checked = isChecked && !cb.disabled));
+    updateSummaryCounters();
   });
 
   // Search & Bind Modal Logic
   window.openSearchBindModal = function (rowIndex) {
     _currentBindingRowIndex = rowIndex;
     const item = _parsedData.items[rowIndex];
-    bindSearchInput.value = item.manufacturer_part || item.comment || "";
-    bindSearchResults.innerHTML = `<div class="text-muted text-center py-4">Search to find matching components...</div>`;
+    bindSearchInput.value = item.raw_supplier_part || item.manufacturer_part || item.value || item.comment || "";
+    renderBindSearchResults({ items: item.suggestions || [] });
 
     const modal = bootstrap.Modal.getOrCreateInstance(searchModalEl);
     modal.show();
 
-    if (bindSearchInput.value.trim()) {
+    if (bindSearchInput.value.trim() && !(item.suggestions || []).length) {
       executeBindSearch();
     }
   };
@@ -381,9 +419,13 @@
     const query = (bindSearchInput.value || "").trim();
     if (!query) return;
 
-    bindSearchResults.innerHTML = `<div class="text-muted text-center py-3">Searching libraries...</div>`;
+    bindSearchResults.innerHTML = `<div class="text-muted text-center py-3">${getI18n().searching || "Searching libraries..."}</div>`;
     try {
-      const res = await fetch(`/api/libraries/search?q=${encodeURIComponent(query)}&target=all&limit=10`);
+      const res = await fetch("/api/projects/bom/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item: _parsedData.items[_currentBindingRowIndex], query }),
+      });
       if (!res.ok) throw new Error("Search failed");
       const data = await res.json();
       renderBindSearchResults(data);
@@ -394,13 +436,10 @@
 
   function renderBindSearchResults(data) {
     bindSearchResults.innerHTML = "";
-    const items = [];
-    (data.jlcparts || []).forEach((it) => items.push({ ...it, _src: "jlcparts" }));
-    (data.altium || []).forEach((it) => items.push({ ...it, _src: "altium" }));
-    (data.kicad || []).forEach((it) => items.push({ ...it, _src: "kicad" }));
+    const items = data.items || [];
 
     if (items.length === 0) {
-      bindSearchResults.innerHTML = `<div class="text-muted text-center py-4">No matching components found.</div>`;
+      bindSearchResults.innerHTML = `<div class="text-muted text-center py-4">${getI18n().no_matches || "No matching components found."}</div>`;
       return;
     }
 
@@ -408,35 +447,19 @@
       const row = document.createElement("div");
       row.className = "p-2 border-bottom bg-white d-flex justify-content-between align-items-center";
 
-      let name = "";
-      let meta = "";
-      let extId = "";
-      let badge = "";
-
-      if (it._src === "jlcparts") {
-        name = it.mfr || `C${it.lcsc}`;
-        extId = String(it.lcsc);
-        meta = `Package: ${it.package || "-"} | Mfr: ${it.manufacturer || "-"} | Stock: ${(it.stock || 0).toLocaleString()}`;
-        badge = '<span class="badge bg-primary">JLCPCB</span>';
-      } else if (it._src === "altium") {
-        name = it.lib_reference || it.mfr_part_number;
-        extId = String(it.id);
-        meta = `Package: ${it.package || "-"} | Mfr: ${it.manufacturer || "-"}`;
-        badge = '<span class="badge bg-dark">Altium</span>';
-      } else {
-        name = it.name || it.value;
-        extId = String(it.id);
-        meta = `Library: ${it.library || "-"} | Footprint: ${it.footprint || "-"}`;
-        badge = '<span class="badge bg-secondary">KiCad</span>';
-      }
+      const sourceName = it.library_source === "jlcparts" ? "JLCPCB" : (it.library_source === "altium" ? "Altium" : "KiCad");
+      const meta = [it.lcsc_part, it.value, it.package, it.voltage, it.tolerance, it.manufacturer,
+        `${getI18n().stock_label || "Stock"}: ${(it.stock || 0).toLocaleString()}`].filter(Boolean).join(" | ");
+      const conflicts = (it.conflicts || []).map((name) => getI18n()[`conflict_${name}`] || name).join("; ");
 
       row.innerHTML = `
         <div class="me-2 text-truncate">
           <div class="d-flex align-items-center gap-1">
-            ${badge}
-            <strong class="text-dark">${escapeHtml(name)}</strong>
+            <span class="badge bg-dark">${escapeHtml(sourceName)}</span>
+            <strong class="text-dark">${escapeHtml(it.name)}</strong>
           </div>
           <small class="text-muted d-block text-truncate">${escapeHtml(meta)}</small>
+          ${conflicts ? `<small class="text-danger d-block">${escapeHtml(conflicts)}</small>` : ""}
         </div>
         <button type="button" class="btn btn-outline-primary btn-sm text-nowrap">
           ${getI18n().btn_select_part || "Select"}
@@ -444,26 +467,50 @@
       `;
 
       row.querySelector("button").addEventListener("click", () => {
-        bindComponentToRow(_currentBindingRowIndex, {
-          library_source: it._src,
-          external_part_id: extId,
-          matched_part_name: name,
-          matched_manufacturer: it.manufacturer || "Generic",
-          matched_package: it.package || it.footprint || "Standard",
-          status: "matched_library",
-          auto_create_zero_stock: true,
-          is_custom: false,
-        });
-        bootstrap.Modal.getInstance(searchModalEl).hide();
+        if (selectCandidate(_currentBindingRowIndex, it)) {
+          bootstrap.Modal.getInstance(searchModalEl).hide();
+        }
       });
 
       bindSearchResults.appendChild(row);
     });
   }
 
+  function bindingFromCandidate(candidate) {
+    return {
+      library_source: candidate.library_source,
+      external_part_id: candidate.external_part_id,
+      matched_part_name: candidate.name,
+      matched_manufacturer: candidate.manufacturer || "",
+      matched_package: candidate.package || "",
+      matched_stock: candidate.stock || 0,
+      status: "matched_library",
+      auto_create_zero_stock: true,
+      is_custom: false,
+      inventory_part_id: null,
+      selected: true,
+      confirmed_match: true,
+      match_reason: "manual_selection",
+      conflicts: candidate.conflicts || [],
+    };
+  }
+
+  function selectCandidate(rowIndex, candidate) {
+    const conflicts = [...new Set([...(_parsedData.items[rowIndex].conflicts || []), ...(candidate.conflicts || [])])];
+    if (conflicts.length && !window.confirm(getI18n().confirm_conflicting_candidate || "This candidate conflicts with the BOM. Bind it anyway?")) {
+      return false;
+    }
+    bindComponentToRow(rowIndex, { ...bindingFromCandidate(candidate), conflicts });
+    return true;
+  }
+
   function bindComponentToRow(rowIndex, bindData) {
     if (rowIndex === null || !_parsedData) return;
     Object.assign(_parsedData.items[rowIndex], bindData);
+    if (bindData.status === "matched_library" || bindData.is_custom) {
+      _parsedData.items[rowIndex].selected = true;
+      _parsedData.items[rowIndex].confirmed_match = true;
+    }
     updateSummaryCounters();
     renderTableRows();
   }
@@ -502,6 +549,8 @@
       matched_part_name: name,
       matched_manufacturer: customMfrInput.value.trim(),
       library_source: "custom",
+      selected: true,
+      confirmed_match: true,
     });
 
     bootstrap.Modal.getInstance(customModalEl).hide();
@@ -514,6 +563,9 @@
       alert(getI18n().no_items_selected || "Please select at least one component to import.");
       return;
     }
+    const omitted = _parsedData.items.length - selectedItems.length;
+    if (omitted && !window.confirm((getI18n().skipped_confirm || "{count} BOM rows will not be imported. Continue?")
+      .replace("{count}", String(omitted)))) return;
 
     const targetType = targetNewRadio.checked ? "new" : "existing";
     const projectName = projectNameInput.value.trim();

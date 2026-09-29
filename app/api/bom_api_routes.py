@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 from db.database import get_db
 from app.i18n import get_current_language
 from app.services.bom_service import parse_bom_file, analyze_bom_matching, execute_bom_import
+from app.services.bom_matcher import BomMatcher
 from app.models.custom_component import CustomComponent
 
 router = APIRouter()
@@ -24,6 +25,11 @@ class BomImportItem(BaseModel):
     designator: Optional[str] = ""
     footprint: Optional[str] = ""
     comment: Optional[str] = ""
+    value: Optional[str] = ""
+    primary_category: Optional[str] = ""
+    secondary_category: Optional[str] = ""
+    pin_count: Optional[str] = ""
+    raw_supplier_part: Optional[str] = ""
     manufacturer_part: Optional[str] = ""
     manufacturer: Optional[str] = ""
     status: str = "unmatched"
@@ -31,6 +37,7 @@ class BomImportItem(BaseModel):
     external_part_id: Optional[str] = None
     inventory_part_id: Optional[int] = None
     selected: bool = True
+    confirmed_match: bool = False
     auto_create_zero_stock: bool = True
     is_custom: bool = False
     custom_name: Optional[str] = None
@@ -46,6 +53,11 @@ class BomImportRequest(BaseModel):
     existing_project_id: Optional[int] = None
     quantity_strategy: str = "overwrite"  # 'overwrite' or 'add'
     items: List[BomImportItem]
+
+
+class BomSuggestionRequest(BaseModel):
+    item: BomImportItem
+    query: str = ""
 
 
 class CustomPartCreateRequest(BaseModel):
@@ -165,6 +177,16 @@ def import_bom(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while importing BOM: {str(e)}"
         )
+
+
+@router.post("/suggest")
+def suggest_bom_parts(payload: BomSuggestionRequest, request: Request) -> Dict[str, Any]:
+    matcher = BomMatcher()
+    try:
+        return {"items": matcher.search(payload.item.model_dump(), payload.query,
+                                        lang=get_current_language(request))}
+    finally:
+        matcher.close()
 
 
 @router.post("/custom_part")

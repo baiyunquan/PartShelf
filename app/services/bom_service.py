@@ -9,7 +9,7 @@ import io
 import re
 import csv
 import openpyxl
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.models.project import Project
@@ -17,10 +17,14 @@ from app.models.project_part import ProjectPart
 from app.models.part import Part
 from app.models.inventory import Inventory
 from app.models.custom_component import CustomComponent
-from app.services import external_library_service as lib_svc
+from app.services.bom_matcher import BomMatcher, candidate_conflicts, component_kind, normalized_code, public_candidate, row_conflicts
 
 
 HEADER_ALIASES = {
+    "value": ["value", "元件值", "标称值"],
+    "primary_category": ["primary category", "一级分类"],
+    "secondary_category": ["secondary category", "二级分类"],
+    "pin_count": ["pin count", "pins", "引脚数"],
     "supplier_part": [
         "supplier part", "supplierpart", "lcsc part", "lcsc part #", "lcsc",
         "立创编号", "客户编号", "器件编号", "料号", "立创料号", "supplier_part"
@@ -35,7 +39,7 @@ HEADER_ALIASES = {
         "footprint", "package", "封装", "规格封装", "封装规格"
     ],
     "comment": [
-        "comment", "value", "型号", "规格", "参数", "器件型号", "值", "元件型号", "description"
+        "comment", "型号", "规格", "参数", "器件型号", "值", "元件型号", "description"
     ],
     "manufacturer_part": [
         "manufacturer part", "mfr.part #", "mfr part", "mfr part #", "mpn",
@@ -59,8 +63,8 @@ def normalize_header(header: str) -> Optional[str]:
 
     # 2. Specific substring matches (order matters: specific keys before generic ones)
     ordered_keys = [
-        "manufacturer_part", "supplier_part", "designator",
-        "footprint", "manufacturer", "quantity", "comment"
+        "manufacturer_part", "supplier_part", "primary_category", "secondary_category",
+        "pin_count", "designator", "footprint", "manufacturer", "quantity", "value", "comment"
     ]
     for canon in ordered_keys:
         for alias in HEADER_ALIASES[canon]:
@@ -85,8 +89,7 @@ def extract_c_code(val: Any) -> Optional[int]:
 def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
     """
     Parses an uploaded BOM file (.xlsx, .xls, or .csv) and returns a list of row dicts
-    containing canonical keys: supplier_part, quantity, designator, footprint, comment,
-    manufacturer_part, manufacturer, and raw_row.
+    containing canonical keys including independent value, category and pin count fields.
     """
     fn = filename.lower()
     rows = []
@@ -114,6 +117,10 @@ def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
                 "designator": "",
                 "footprint": "",
                 "comment": "",
+                "value": "",
+                "primary_category": "",
+                "secondary_category": "",
+                "pin_count": "",
                 "manufacturer_part": "",
                 "manufacturer": "",
                 "raw_row": [str(c) if c is not None else "" for c in r]
@@ -167,6 +174,10 @@ def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
                 "designator": "",
                 "footprint": "",
                 "comment": "",
+                "value": "",
+                "primary_category": "",
+                "secondary_category": "",
+                "pin_count": "",
                 "manufacturer_part": "",
                 "manufacturer": "",
                 "raw_row": r
@@ -189,140 +200,115 @@ def parse_bom_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
 
 
 def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: str = "zh") -> Dict[str, Any]:
-    """
-    Analyzes each row of the parsed BOM and matches against:
-    1. Local inventory (Part table)
-    2. JLCParts library (jlcparts.db)
-    3. Altium library (altium_library.db)
-    Returns preview items with match statuses: 'in_inventory', 'matched_library', 'unmatched'.
-    """
+    """Preview exact supplier codes and review-only substitute candidates."""
     preview_items = []
-    in_inv_count = 0
-    matched_lib_count = 0
-    unmatched_count = 0
-
-    for idx, row in enumerate(parsed_rows, start=1):
-        item = {
-            "row_index": idx,
-            "quantity": row.get("quantity", 1),
-            "designator": row.get("designator", ""),
-            "footprint": row.get("footprint", ""),
-            "comment": row.get("comment", ""),
-            "manufacturer_part": row.get("manufacturer_part", ""),
-            "manufacturer": row.get("manufacturer", ""),
-            "raw_supplier_part": row.get("supplier_part", ""),
-            "status": "unmatched",
-            "library_source": None,
-            "external_part_id": None,
-            "matched_part_name": None,
-            "matched_manufacturer": None,
-            "matched_package": None,
-            "matched_stock": None,
-            "inventory_part_id": None,
-            "inventory_quantity": 0,
-            "auto_create_zero_stock": True,
-            "selected": True,
-        }
-
-        # Check LCSC C-code first
-        lcsc_num = extract_c_code(row.get("supplier_part"))
-        if not lcsc_num:
-            # Fallback: check if comment or manufacturer_part contains C-code
-            lcsc_num = extract_c_code(row.get("comment")) or extract_c_code(row.get("manufacturer_part"))
-
-        if lcsc_num:
-            # 1. Check local inventory for this JLCParts component
-            inv_part = db.query(Part).filter(
-                Part.library_source == "jlcparts",
-                Part.external_part_id == str(lcsc_num)
-            ).first()
-
-            if inv_part:
-                summary = lib_svc.resolve_part_summary("jlcparts", str(lcsc_num), lang=lang)
-                item["status"] = "in_inventory"
-                item["library_source"] = "jlcparts"
-                item["external_part_id"] = str(lcsc_num)
-                item["matched_part_name"] = summary.get("name") or f"C{lcsc_num}"
-                item["matched_manufacturer"] = summary.get("manufacturer")
-                item["matched_package"] = summary.get("package")
-                item["inventory_part_id"] = inv_part.id
-                item["inventory_quantity"] = inv_part.inventory.quantity_available if inv_part.inventory else 0
-                item["auto_create_zero_stock"] = False
-                in_inv_count += 1
-                preview_items.append(item)
-                continue
-
-            # 2. Check JLCParts library
-            jlc_comp = lib_svc.get_jlcparts_component(lcsc_num, lang=lang)
-            if jlc_comp:
-                item["status"] = "matched_library"
-                item["library_source"] = "jlcparts"
-                item["external_part_id"] = str(lcsc_num)
-                item["matched_part_name"] = jlc_comp.get("mfr") or f"C{lcsc_num}"
-                item["matched_manufacturer"] = jlc_comp.get("manufacturer")
-                item["matched_package"] = jlc_comp.get("package")
-                item["matched_stock"] = jlc_comp.get("stock", 0)
-                item["auto_create_zero_stock"] = True
-                matched_lib_count += 1
-                preview_items.append(item)
-                continue
-
-        # If no C-code or JLCParts match, try searching Altium library by manufacturer_part or comment
-        search_kw = (row.get("manufacturer_part") or "").strip()
-        if not search_kw and row.get("comment"):
-            # Avoid searching generic short terms like '0.1uF' or 'SMT'
-            cand = row.get("comment").strip()
-            if len(cand) >= 4 and not re.match(r'^[0-9.]+[uUpPnN]?[fF]?$', cand):
-                search_kw = cand
-
-        if search_kw:
-            # Check local inventory first
-            inv_part = db.query(Part).filter(
-                Part.library_source == "altium",
-                Part.external_part_id == search_kw
-            ).first()
-            if inv_part:
-                summary = lib_svc.resolve_part_summary("altium", search_kw, lang=lang)
-                item["status"] = "in_inventory"
-                item["library_source"] = "altium"
-                item["external_part_id"] = search_kw
-                item["matched_part_name"] = summary.get("name")
-                item["matched_manufacturer"] = summary.get("manufacturer")
-                item["matched_package"] = summary.get("package")
-                item["inventory_part_id"] = inv_part.id
-                item["inventory_quantity"] = inv_part.inventory.quantity_available if inv_part.inventory else 0
-                item["auto_create_zero_stock"] = False
-                in_inv_count += 1
-                preview_items.append(item)
-                continue
-
-            altium_search = lib_svc.search_altium(search_kw, page_size=1, lang=lang)
-            if altium_search.get("items"):
-                top_match = altium_search["items"][0]
-                item["status"] = "matched_library"
-                item["library_source"] = "altium"
-                item["external_part_id"] = str(top_match["id"])
-                item["matched_part_name"] = top_match.get("lib_reference") or top_match.get("mfr_part_number")
-                item["matched_manufacturer"] = top_match.get("manufacturer")
-                item["matched_package"] = top_match.get("package")
-                item["auto_create_zero_stock"] = True
-                matched_lib_count += 1
-                preview_items.append(item)
-                continue
-
-        # If not matched
-        item["status"] = "unmatched"
-        unmatched_count += 1
-        preview_items.append(item)
-
+    matcher = BomMatcher()
+    try:
+        for idx, row in enumerate(parsed_rows, start=1):
+            kind = component_kind(row)
+            internal_conflicts = row_conflicts(row, kind)
+            item = {
+                "row_index": idx,
+                "quantity": row.get("quantity", 1),
+                "designator": row.get("designator", ""),
+                "footprint": row.get("footprint", ""),
+                "comment": row.get("comment", ""),
+                "value": row.get("value", ""),
+                "primary_category": row.get("primary_category", ""),
+                "secondary_category": row.get("secondary_category", ""),
+                "pin_count": row.get("pin_count", ""),
+                "manufacturer_part": row.get("manufacturer_part", ""),
+                "manufacturer": row.get("manufacturer", ""),
+                "raw_supplier_part": row.get("supplier_part", ""),
+                "status": "unmatched",
+                "library_source": None,
+                "external_part_id": None,
+                "matched_part_name": None,
+                "matched_manufacturer": None,
+                "matched_package": None,
+                "matched_stock": None,
+                "inventory_part_id": None,
+                "inventory_quantity": 0,
+                "auto_create_zero_stock": True,
+                "selected": False,
+                "confirmed_match": False,
+                "match_reason": "",
+                "conflicts": internal_conflicts.copy(),
+                "suggestions": [],
+            }
+            code = (extract_c_code(row.get("supplier_part"))
+                    or extract_c_code(row.get("manufacturer_part"))
+                    or extract_c_code(row.get("comment")))
+            exact = matcher.exact_code(str(code)) if code else []
+            stale_inventory = None
+            if code and not exact:
+                stale_inventory = db.query(Part).filter(
+                    Part.library_source == "jlcparts",
+                    Part.external_part_id == str(code),
+                ).first()
+            exact_ranked = sorted(exact, key=lambda candidate: (
+                bool(candidate_conflicts(row, candidate, kind)),
+                0 if candidate["library_source"] == "jlcparts" else 1,
+                candidate["external_part_id"],
+            ))
+            valid_exact = [candidate for candidate in exact_ranked
+                           if not candidate_conflicts(row, candidate, kind)]
+            if valid_exact and not internal_conflicts:
+                candidate = valid_exact[0]
+                inv_part = db.query(Part).filter(
+                    Part.library_source == candidate["library_source"],
+                    Part.external_part_id == candidate["external_part_id"],
+                ).first()
+                item.update(
+                    status="in_inventory" if inv_part else "matched_library",
+                    library_source=candidate["library_source"],
+                    external_part_id=candidate["external_part_id"],
+                    matched_part_name=candidate["name"],
+                    matched_manufacturer=candidate.get("manufacturer"),
+                    matched_package=candidate.get("package"),
+                    matched_stock=candidate.get("stock", 0),
+                    inventory_part_id=inv_part.id if inv_part else None,
+                    inventory_quantity=(inv_part.inventory.quantity_available if inv_part and inv_part.inventory else 0),
+                    auto_create_zero_stock=not bool(inv_part),
+                    selected=True,
+                    match_reason="exact_supplier_code",
+                )
+            else:
+                item["match_reason"] = "conflict" if exact or internal_conflicts else (
+                    "original_code_missing" if code else "no_supplier_code")
+                model_matches = matcher.exact_model(row.get("manufacturer_part") or "")
+                if model_matches and all(candidate_conflicts(row, candidate, kind) for candidate in model_matches):
+                    for model_candidate in model_matches:
+                        item["conflicts"] = list(dict.fromkeys(
+                            item["conflicts"] + candidate_conflicts(row, model_candidate, kind)))
+                    item["match_reason"] = "conflict"
+                for candidate in exact_ranked:
+                    conflicts = candidate_conflicts(row, candidate, kind)
+                    item["conflicts"] = list(dict.fromkeys(item["conflicts"] + conflicts))
+                    item["suggestions"].append(public_candidate(candidate, "exact_supplier_code", conflicts))
+                if stale_inventory:
+                    item["match_reason"] = "inventory_reference_missing"
+                    item["conflicts"].append("missing_reference")
+                    item["suggestions"].insert(0, public_candidate({
+                        "library_source": "jlcparts", "external_part_id": str(code),
+                        "lcsc": code, "name": f"C{code}", "package": "",
+                        "stock": (stale_inventory.inventory.quantity_available if stale_inventory.inventory else 0),
+                    }, "inventory_reference", ["missing_reference"]))
+                excluded = {(candidate["library_source"], candidate["external_part_id"]) for candidate in exact}
+                remaining = 10 - len(item["suggestions"])
+                if remaining > 0:
+                    item["suggestions"].extend(matcher.suggestions(row, kind, excluded)[:remaining])
+                item["suggestions"] = item["suggestions"][:10]
+            preview_items.append(item)
+    finally:
+        matcher.close()
     return {
         "total_rows": len(parsed_rows),
-        "in_inventory_count": in_inv_count,
-        "matched_library_count": matched_lib_count,
-        "unmatched_count": unmatched_count,
+        "in_inventory_count": sum(item["status"] == "in_inventory" for item in preview_items),
+        "matched_library_count": sum(item["status"] == "matched_library" for item in preview_items),
+        "unmatched_count": sum(item["status"] == "unmatched" for item in preview_items),
         "items": preview_items,
     }
-
 
 def execute_bom_import(
     db: Session,
@@ -340,6 +326,42 @@ def execute_bom_import(
     - Creates CustomComponent and Part records for custom components.
     - Connects parts to ProjectPart with selected merge strategy ('overwrite' or 'add').
     """
+    # Validate all proposed links before creating a project or inventory record.
+    matcher = BomMatcher()
+    try:
+        for item in items:
+            if not item.get("selected", True) or item.get("is_custom"):
+                continue
+            source = item.get("library_source")
+            external_id = str(item.get("external_part_id") or "").strip()
+            if source == "kicad" and external_id:
+                if not item.get("confirmed_match", False):
+                    raise ValueError(f"Row {item.get('row_index')}: manual confirmation is required for this library match")
+                continue
+            if source not in ("jlcparts", "altium") or not external_id:
+                continue
+            candidate = matcher.lookup(source, external_id)
+            supplied_code = (extract_c_code(item.get("raw_supplier_part"))
+                             or extract_c_code(item.get("manufacturer_part"))
+                             or extract_c_code(item.get("comment")))
+            candidate_code = normalized_code(candidate.get("lcsc_part") if source == "altium" else candidate.get("lcsc")) if candidate else None
+            exact_code = supplied_code is not None and candidate_code == str(supplied_code)
+            row = {
+                "value": item.get("value"), "comment": item.get("comment"),
+                "footprint": item.get("footprint"), "pin_count": item.get("pin_count"),
+                "designator": item.get("designator"),
+                "primary_category": item.get("primary_category"),
+                "secondary_category": item.get("secondary_category"),
+            }
+            kind = component_kind(row)
+            conflicts = row_conflicts(row, kind)
+            if candidate:
+                conflicts.extend(candidate_conflicts(row, candidate, kind))
+            if (not exact_code or conflicts) and not item.get("confirmed_match", False):
+                raise ValueError(f"Row {item.get('row_index')}: manual confirmation is required for this library match")
+    finally:
+        matcher.close()
+
     # 1. Target Project resolution
     if target_type == "new":
         name = (project_name or "").strip()
@@ -361,6 +383,7 @@ def execute_bom_import(
 
     imported_count = 0
     created_parts_count = 0
+    skipped_unresolved_count = 0
 
     # 2. Iterate confirmed items
     for item in items:
@@ -410,6 +433,7 @@ def execute_bom_import(
 
             elif lib_src in ("jlcparts", "altium", "kicad") and ext_id:
                 if not item.get("auto_create_zero_stock", True):
+                    skipped_unresolved_count += 1
                     continue
 
                 # Check again if part was created in an earlier row in this same batch
@@ -440,6 +464,7 @@ def execute_bom_import(
 
         if not part_id:
             # Unmatched row without resolution, skip
+            skipped_unresolved_count += 1
             continue
 
         # 3. Associate with ProjectPart
@@ -472,4 +497,5 @@ def execute_bom_import(
         "project_name": project.name,
         "imported_parts_count": imported_count,
         "created_inventory_parts_count": created_parts_count,
+        "skipped_unresolved_count": skipped_unresolved_count,
     }
