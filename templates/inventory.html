@@ -22,6 +22,11 @@
             <button class="btn btn-primary me-2 text-nowrap" id="searchButton" type="button">{{ t('inventory.search_btn') }}</button>
             <button class="btn btn-outline-secondary" id="resetSearchButton" type="button" style="display:none;" aria-label="{{ t('inventory.reset_search') }}">&times;</button>
           </div>
+          <select id="warehouseStatusFilter" class="form-select mt-2" aria-label="{{ t('inventory.warehouse_status') }}">
+            <option value="">{{ t('inventory.warehouse_filter_all') }}</option>
+            <option value="in_warehouse">{{ t('inventory.warehouse_filter_in') }}</option>
+            <option value="not_in_warehouse">{{ t('inventory.warehouse_filter_out') }}</option>
+          </select>
         </div>          
         <div class="col-md-5 text-md-end">
           <!-- Add Component button -->
@@ -44,6 +49,7 @@
               <th scope="col" style="width: 110px;">{{ t('inventory.th_source') }}</th>
               <th scope="col" style="min-width: 140px;">{{ t('inventory.th_package') }}</th>
               <th scope="col" style="min-width: 130px;">{{ t('inventory.th_location') }}</th>
+              <th scope="col" style="min-width: 180px;">{{ t('inventory.th_warehouse') }}</th>
               <th scope="col" style="width: 100px;">{{ t('inventory.th_quantity') }}</th>
               <th scope="col">{{ t('inventory.th_projects') }}</th>
               <th scope="col" style="width: 90px;" class="text-end">{{ t('inventory.th_actions') }}</th>

@@ -858,8 +858,9 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
     Dynamically resolves common component attributes (name, manufacturer, package, type, etc.)
     from the referenced external database with in-memory caching.
     """
-    cache_key = f"{lang}:{library_source}:{external_part_id}"
-    if cache_key in _PART_SUMMARY_CACHE:
+    src = (library_source or "").lower()
+    cache_key = f"{lang}:{src}:{external_part_id}"
+    if src != "custom" and cache_key in _PART_SUMMARY_CACHE:
         return _PART_SUMMARY_CACHE[cache_key]
 
     summary = {
@@ -872,7 +873,6 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
         "datasheet_url": None,
     }
 
-    src = (library_source or "").lower()
     pid_str = str(external_part_id)
 
     if src == "jlcparts":
@@ -949,7 +949,8 @@ def resolve_part_summary(library_source: str, external_part_id: str, lang: str =
         finally:
             db.close()
 
-    _PART_SUMMARY_CACHE[cache_key] = summary
+    if src != "custom":
+        _PART_SUMMARY_CACHE[cache_key] = summary
     return summary
 
 

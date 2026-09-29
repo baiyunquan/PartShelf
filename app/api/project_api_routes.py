@@ -17,8 +17,8 @@ from app.i18n import get_current_language
 router = APIRouter()
 
 @router.get("/", response_model=list[ProjectListItem])
-def get_all_projects(db: Session = Depends(get_db)):
-    return ProjectService.get_all_projects(db)
+def get_all_projects(request: Request, db: Session = Depends(get_db)):
+    return ProjectService.get_all_projects(db, lang=get_current_language(request))
 
 @router.post("/add")
 def create_project(
@@ -40,7 +40,10 @@ def create_project_api(
         id=project.id,
         name=project.name,
         description=project.description,
-        parts_count=0
+        parts_count=0,
+        system_key=project.system_key,
+        is_system=bool(project.system_key),
+        total_available_quantity=0,
     )
 
 @router.get("/procurement/list", response_model=list[ProcurementItem])

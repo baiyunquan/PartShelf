@@ -136,7 +136,7 @@ def test_bom_import_new_project():
     assert details["parts_count"] == import_result["imported_parts_count"]
 
 
-def test_bom_import_existing_project_strategies():
+def test_bom_import_always_creates_a_new_batch_and_preserves_each_demand():
     # 1. Create base project
     proj_res = client.post("/api/projects/api_add", json={
         "name": "TEST_EXISTING_PROJECT",
@@ -169,7 +169,7 @@ def test_bom_import_existing_project_strategies():
     part_id = details1["parts"][0]["part_id"]
     assert details1["parts"][0]["quantity_needed"] == 5
 
-    # 3. Import same part with quantity 10 and strategy 'add'
+    # Re-importing a matched local item creates a separate zero-stock batch.
     item_reimport_add = {
         "row_index": 1,
         "quantity": 10,
@@ -185,9 +185,9 @@ def test_bom_import_existing_project_strategies():
     })
     assert res2.status_code == 200
     details2 = client.get(f"/api/projects/{project_id}").json()
-    assert details2["parts"][0]["quantity_needed"] == 15  # 5 + 10
+    assert details2["parts_count"] == 2
 
-    # 4. Import same part with quantity 8 and strategy 'overwrite'
+    # The legacy overwrite selector is accepted but does not replace demand.
     item_reimport_overwrite = {
         "row_index": 1,
         "quantity": 8,
@@ -203,4 +203,7 @@ def test_bom_import_existing_project_strategies():
     })
     assert res3.status_code == 200
     details3 = client.get(f"/api/projects/{project_id}").json()
-    assert details3["parts"][0]["quantity_needed"] == 8  # overwritten to 8
+    assert details3["parts_count"] == 3
+    assert sorted(part["quantity_needed"] for part in details3["parts"]) == [5, 8, 10]
+    assert len({part["part_id"] for part in details3["parts"]}) == 3
+    assert all(part["quantity_available"] == 0 for part in details3["parts"])

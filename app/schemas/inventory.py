@@ -46,6 +46,10 @@ class PartInventoryFlatGet(BaseModel):
     quantity: Optional[int] = 0
     image_url: Optional[str] = None
     datasheet_url: Optional[str] = None
+    warehouse_status: str = "not_in_warehouse"
+    warehouse_box_id: Optional[str] = None
+    warehouse_drawer_code: Optional[str] = None
+    warehouse_photo_url: Optional[str] = None
     projects: List[PartProjectItem] = []
 
 class PartDetailsFlatGet(BaseModel):
@@ -62,5 +66,9 @@ class PartDetailsFlatGet(BaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
     datasheet_url: Optional[str] = None
+    warehouse_status: str = "not_in_warehouse"
+    warehouse_box_id: Optional[str] = None
+    warehouse_drawer_code: Optional[str] = None
+    warehouse_photo_url: Optional[str] = None
     projects: List[PartProjectItem] = []
     external_details: Optional[Dict[str, Any]] = None

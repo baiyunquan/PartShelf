@@ -1,6 +1,7 @@
 const I18N = JSON.parse(document.getElementById('page-translations').textContent);
       const urlParams = new URLSearchParams(window.location.search);
       const projectId = urlParams.get("project_id");
+      let isSystemProject = false;
 
       if (!projectId) {
         alert(I18N.missing_project_id);
@@ -14,9 +15,15 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
             return res.json();
           })
           .then(data => {
+            isSystemProject = Boolean(data.is_system);
+            document.getElementById("project-actions").classList.toggle("d-none", isSystemProject);
+            document.getElementById("project-actions-header").classList.toggle("d-none", isSystemProject);
+            document.getElementById("project-shortage-card").classList.toggle("d-none", isSystemProject);
+            document.getElementById("loose-parts-hint").hidden = !isSystemProject;
             document.getElementById("project-name").textContent = data.name;
             document.getElementById("project-description").textContent = data.description || I18N.no_description;
             document.getElementById("project-parts-count").textContent = data.parts_count || 0;
+            document.getElementById("project-available-total").textContent = data.total_available_quantity || 0;
 
             renderBomTable(data.parts || []);
             renderShortageTable(data.parts || []);
@@ -57,7 +64,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
                 ${p.shortage > 0 ? `缺 ${p.shortage}` : '充足'}
               </span>
             </td>
-            <td class="text-end">
+            <td class="text-end ${isSystemProject ? 'd-none' : ''}">
               <button class="btn btn-outline-secondary btn-sm me-1" onclick="editQuantity(${p.part_id}, ${p.quantity_needed || 0})">
                 ${I18N.btn_edit_qty}
               </button>

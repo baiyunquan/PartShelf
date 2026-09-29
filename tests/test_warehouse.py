@@ -107,8 +107,8 @@ def test_warehouse_page_exposes_local_qr_controls_and_a4_print_resources():
     assert "warehouse-cabinet-config" in page_script.text
     assert '"font-size": Math.min(15, drawer.heightMm * 0.4, drawer.widthMm * 0.25)' in page_script.text
     assert "const labelsPerPage = 32" in page_script.text
-    assert "fetch(" not in page_script.text
-    assert "/api/" not in page_script.text
+    assert 'fetch("/api/warehouse/contents")' in page_script.text
+    assert "part.photo_url" in page_script.text
 
 
 def test_warehouse_translations_are_available_in_both_languages():

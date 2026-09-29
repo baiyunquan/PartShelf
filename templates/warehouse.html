@@ -52,7 +52,7 @@
               <div><dt>{{ t('warehouse.drawer_dimensions') }}</dt><dd id="warehouse-detail-dimensions"></dd></div>
               <div><dt>{{ t('warehouse.drawer_position') }}</dt><dd id="warehouse-detail-position"></dd></div>
             </dl>
-            <div class="warehouse-qr-detail">
+              <div class="warehouse-qr-detail">
               <h3>{{ t('warehouse.qr_code') }}</h3>
               <div id="warehouse-selected-qr" class="warehouse-qr-image"></div>
               <div class="warehouse-qr-payload">
@@ -60,6 +60,11 @@
                 <code id="warehouse-selected-qr-payload"></code>
               </div>
             </div>
+            <section class="warehouse-drawer-parts-section" aria-labelledby="warehouse-drawer-parts-heading">
+              <h3 id="warehouse-drawer-parts-heading">{{ t('warehouse.drawer_parts_title') }}</h3>
+              <p id="warehouse-drawer-parts-empty" class="text-muted">{{ t('warehouse.drawer_parts_empty') }}</p>
+              <div id="warehouse-drawer-parts" class="warehouse-drawer-parts"></div>
+            </section>
           </div>
         </aside>
       </div>

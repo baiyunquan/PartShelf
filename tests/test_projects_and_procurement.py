@@ -9,6 +9,7 @@ from app.models.inventory import Inventory
 from app.models.manufacturer import Manufacturer
 from app.models.package import Package
 from app.models.type import Type
+from app.models.custom_component import CustomComponent
 
 client = TestClient(app)
 
@@ -16,22 +17,61 @@ client = TestClient(app)
 def clean_db():
     db = SessionLocal()
     try:
-        db.query(ProjectPart).delete()
-        db.query(Project).delete()
+        projects = db.query(Project).filter(Project.name == "TEST_RF_TRANSCEIVER_BOARD").all()
+        project_ids = [project.id for project in projects]
+        if project_ids:
+            db.query(ProjectPart).filter(ProjectPart.project_id.in_(project_ids)).delete(synchronize_session=False)
+            db.query(Project).filter(Project.id.in_(project_ids)).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+    yield
+    db = SessionLocal()
+    try:
+        parts = db.query(Part).filter(Part.note == "TEST_PROJECT_CRUD_PART").all()
+        custom_ids = [int(part.external_part_id) for part in parts if part.library_source == "custom"]
+        part_ids = [part.id for part in parts]
+        if part_ids:
+            db.query(ProjectPart).filter(ProjectPart.part_id.in_(part_ids)).delete(synchronize_session=False)
+            db.query(Inventory).filter(Inventory.part_id.in_(part_ids)).delete(synchronize_session=False)
+            db.query(Part).filter(Part.id.in_(part_ids)).delete(synchronize_session=False)
+        if custom_ids:
+            db.query(CustomComponent).filter(CustomComponent.id.in_(custom_ids)).delete(synchronize_session=False)
+        projects = db.query(Project).filter(Project.name == "TEST_RF_TRANSCEIVER_BOARD").all()
+        project_ids = [project.id for project in projects]
+        if project_ids:
+            db.query(ProjectPart).filter(ProjectPart.project_id.in_(project_ids)).delete(synchronize_session=False)
+            db.query(Project).filter(Project.id.in_(project_ids)).delete(synchronize_session=False)
         db.commit()
     finally:
         db.close()
 
 def test_project_crud_and_procurement():
+    db = SessionLocal()
+    component = CustomComponent(
+        name="TEST_PROJECT_PART", manufacturer="Test", package="0603", part_type="Capacitor"
+    )
+    db.add(component)
+    db.flush()
+    test_part = Part(
+        library_source="custom", external_part_id=str(component.id), note="TEST_PROJECT_CRUD_PART"
+    )
+    db.add(test_part)
+    db.flush()
+    db.add(Inventory(part_id=test_part.id, quantity_available=100))
+    db.commit()
+    part_id = test_part.id
+    db.close()
+
     # 1. Create a project
     res = client.post("/api/projects/api_add", json={
-        "name": "RF Transceiver Board",
+        "name": "TEST_RF_TRANSCEIVER_BOARD",
         "description": "2.4GHz transceivers"
     })
     assert res.status_code == 200
     proj_data = res.json()
     project_id = proj_data["id"]
-    assert proj_data["name"] == "RF Transceiver Board"
+    assert proj_data["name"] == "TEST_RF_TRANSCEIVER_BOARD"
 
     # 2. Get all projects
     res = client.get("/api/projects/")
@@ -39,13 +79,10 @@ def test_project_crud_and_procurement():
     projects = res.json()
     assert any(p["id"] == project_id for p in projects)
 
-    # 3. Add a part to inventory (or get existing parts)
-    res = client.get("/api/inventory/get_parts_inventory")
-    parts = res.json()
-    assert len(parts) > 0
-    test_part = parts[0]
-    part_id = test_part["id"]
-    current_stock = test_part["quantity"]
+    # 3. Use the test-owned part and stock row seeded above.
+    res = client.get("/api/inventory/get_part_by_id", params={"part_id": part_id})
+    test_part_data = res.json()
+    current_stock = test_part_data["quantity"]
 
     # 4. Associate part with the project, requesting 500 units
     needed_qty = current_stock + 200

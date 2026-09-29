@@ -20,14 +20,13 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               <span class="badge ${p.parts_count > 0 ? 'bg-primary' : 'bg-secondary'}">
                 ${p.parts_count}
               </span>
+              <small class="d-block text-muted">${I18N.available_total}: ${p.total_available_quantity || 0}</small>
             </td>
             <td class="text-end">
               <a href="/project_details?project_id=${p.id}" class="btn btn-outline-primary btn-sm me-1">
                 ${I18N.btn_details}
               </a>
-              <button class="btn btn-outline-danger btn-sm" onclick="deleteProject(${p.id})">
-                ${I18N.btn_delete}
-              </button>
+              ${p.is_system ? '' : `<button class="btn btn-outline-danger btn-sm" onclick="deleteProject(${p.id})">${I18N.btn_delete}</button>`}
             </td>
           `;
           tbody.appendChild(row);

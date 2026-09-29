@@ -7,6 +7,7 @@ from app.models.file_template import FileTemplate
 from app.models.project import Project
 from app.models.project_part import ProjectPart
 from app.models.custom_component import CustomComponent
+from app.models.warehouse_placement import WarehousePlacement
 
 __all__ = [
     "Manufacturer",
@@ -18,4 +19,5 @@ __all__ = [
     "Project",
     "ProjectPart",
     "CustomComponent",
+    "WarehousePlacement",
 ]

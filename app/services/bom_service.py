@@ -431,123 +431,93 @@ def execute_bom_import(
             description=(project_description or "").strip() if project_description else None
         )
         db.add(project)
-        db.commit()
-        db.refresh(project)
+        db.flush()
     else:
         if not existing_project_id:
             raise ValueError("existing_project_id is required when target_type is 'existing'")
         project = db.query(Project).filter(Project.id == existing_project_id).first()
         if not project:
             raise ValueError(f"Project with ID {existing_project_id} not found")
+        if project.system_key:
+            raise ValueError("System projects are read-only and cannot receive BOM imports")
 
     imported_count = 0
     created_parts_count = 0
     skipped_unresolved_count = 0
-
-    # 2. Iterate confirmed items
-    for item in items:
+    batches = {}
+    for index, item in enumerate(items):
         if not item.get("selected", True):
             continue
 
-        part_id = item.get("inventory_part_id")
-        qty_needed = max(1, int(item.get("quantity", 1)))
-        lib_src = item.get("library_source")
-        ext_id = str(item.get("external_part_id") or "").strip()
+        library_source = str(item.get("library_source") or "").strip().lower()
+        external_part_id = str(item.get("external_part_id") or "").strip()
+        inventory_part_id = item.get("inventory_part_id")
 
-        # If item needs a new Part record (e.g. matched library or custom)
-        if not part_id:
-            if item.get("is_custom") or lib_src == "custom":
-                custom_name = item.get("custom_name") or item.get("comment") or "Custom Part"
-                custom_mfr = item.get("custom_manufacturer") or item.get("manufacturer") or "Generic"
-                custom_pkg = item.get("custom_package") or item.get("footprint") or "Standard"
-                custom_desc = item.get("custom_description") or f"Imported for project #{project.id}"
+        # Older previews may only carry the matched local Part ID. Resolve its
+        # external identity, then create a fresh import-batch record below.
+        if inventory_part_id and (not library_source or not external_part_id):
+            existing_part = db.query(Part).filter(Part.id == inventory_part_id).first()
+            if existing_part:
+                library_source = existing_part.library_source
+                external_part_id = existing_part.external_part_id
 
-                custom_comp = CustomComponent(
-                    name=custom_name,
-                    manufacturer=custom_mfr,
-                    package=custom_pkg,
-                    part_type="Custom",
-                    description=custom_desc
-                )
-                db.add(custom_comp)
-                db.commit()
-                db.refresh(custom_comp)
-
-                new_part = Part(
-                    library_source="custom",
-                    external_part_id=str(custom_comp.id),
-                    storage_location="Default Storage",
-                    note=f"Custom BOM Part for {project.name}"
-                )
-                db.add(new_part)
-                db.commit()
-                db.refresh(new_part)
-
-                new_inv = Inventory(part_id=new_part.id, quantity_available=0)
-                db.add(new_inv)
-                db.commit()
-
-                part_id = new_part.id
-                created_parts_count += 1
-
-            elif lib_src in ("jlcparts", "altium", "kicad", "fasteners") and ext_id:
-                if not item.get("auto_create_zero_stock", True):
-                    skipped_unresolved_count += 1
-                    continue
-
-                # Check again if part was created in an earlier row in this same batch
-                existing_part = db.query(Part).filter(
-                    Part.library_source == lib_src,
-                    Part.external_part_id == ext_id
-                ).first()
-
-                if existing_part:
-                    part_id = existing_part.id
-                else:
-                    new_part = Part(
-                        library_source=lib_src,
-                        external_part_id=ext_id,
-                        storage_location="Default Storage",
-                        note=f"Auto-created from BOM import for {project.name}"
-                    )
-                    db.add(new_part)
-                    db.commit()
-                    db.refresh(new_part)
-
-                    new_inv = Inventory(part_id=new_part.id, quantity_available=0)
-                    db.add(new_inv)
-                    db.commit()
-
-                    part_id = new_part.id
-                    created_parts_count += 1
-
-        if not part_id:
-            # Unmatched row without resolution, skip
+        if item.get("is_custom"):
+            key = ("custom", index)
+        elif library_source in ("jlcparts", "altium", "kicad", "fasteners", "custom") and external_part_id:
+            key = (library_source, external_part_id)
+        else:
             skipped_unresolved_count += 1
             continue
 
-        # 3. Associate with ProjectPart
-        existing_pp = db.query(ProjectPart).filter(
-            ProjectPart.project_id == project.id,
-            ProjectPart.part_id == part_id
-        ).first()
+        batch = batches.get(key)
+        if batch is None:
+            batch = {"item": item, "quantity": 0, "library_source": library_source,
+                     "external_part_id": external_part_id}
+            batches[key] = batch
+        batch["quantity"] += max(1, int(item.get("quantity", 1)))
 
-        if existing_pp:
-            if quantity_strategy == "add":
-                existing_pp.quantity_needed = (existing_pp.quantity_needed or 0) + qty_needed
-            else:
-                # 'overwrite' strategy
-                existing_pp.quantity_needed = qty_needed
-        else:
-            new_pp = ProjectPart(
-                project_id=project.id,
-                part_id=part_id,
-                quantity_needed=qty_needed
+    for batch in batches.values():
+        item = batch["item"]
+        qty_needed = batch["quantity"]
+        lib_src = batch["library_source"]
+        ext_id = batch["external_part_id"]
+
+        if item.get("is_custom"):
+            custom_name = item.get("custom_name") or item.get("comment") or "Custom Part"
+            custom_mfr = item.get("custom_manufacturer") or item.get("manufacturer") or "Generic"
+            custom_pkg = item.get("custom_package") or item.get("footprint") or "Standard"
+            custom_desc = item.get("custom_description") or f"Imported for project #{project.id}"
+            custom_comp = CustomComponent(
+                name=custom_name,
+                manufacturer=custom_mfr,
+                package=custom_pkg,
+                part_type="Custom",
+                description=custom_desc,
             )
-            db.add(new_pp)
+            db.add(custom_comp)
+            db.flush()
+            lib_src = "custom"
+            ext_id = str(custom_comp.id)
 
+        new_part = Part(
+            library_source=lib_src,
+            external_part_id=ext_id,
+            storage_location="Default Storage",
+            note=f"Imported from BOM for {project.name}",
+        )
+        db.add(new_part)
+        db.flush()
+        db.add(Inventory(part_id=new_part.id, quantity_available=0))
+        db.add(ProjectPart(
+            project_id=project.id,
+            part_id=new_part.id,
+            quantity_needed=qty_needed,
+        ))
         imported_count += 1
+        created_parts_count += 1
 
+    # quantity_strategy remains accepted for old clients but batch imports
+    # always create fresh Part rows and preserve quantities as new demand.
     db.commit()
 
     return {

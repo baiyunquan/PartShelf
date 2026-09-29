@@ -41,8 +41,8 @@ def update_part_meta(meta_in: PartMetaUpdate, db: Session = Depends(get_db)):
 
 
 @router.get("/get_parts_inventory")
-def get_parts_inventory_list(request: Request, db: Session = Depends(get_db)):
-    return InventoryService.get_parts_inventory_list(db, lang=get_current_language(request))
+def get_parts_inventory_list(request: Request, warehouse_status: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    return InventoryService.get_parts_inventory_list(db, lang=get_current_language(request), warehouse_status=warehouse_status)
 
 
 @router.get("/get_part_by_id")
@@ -51,8 +51,8 @@ def get_part_by_id(request: Request, part_id: int = Query(..., description="ID o
 
 
 @router.get("/search")
-def search_in_inventory(search_key: str, request: Request, db: Session = Depends(get_db)):
-    return InventoryService.search(search_key, db, lang=get_current_language(request))
+def search_in_inventory(search_key: str, request: Request, warehouse_status: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    return InventoryService.search(search_key, db, lang=get_current_language(request), warehouse_status=warehouse_status)
 
 
 @router.delete("/delete_part")

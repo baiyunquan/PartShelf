@@ -79,7 +79,7 @@
       if (res.ok) {
         const projects = await res.json();
         existingSelect.innerHTML = `<option value="">-- ${getI18n().label_select_project || "Select Project"} --</option>`;
-        projects.forEach((p) => {
+        projects.filter((p) => !p.is_system).forEach((p) => {
           const opt = document.createElement("option");
           opt.value = p.id;
           opt.textContent = `#${p.id} - ${p.name}`;
@@ -579,7 +579,6 @@
     const projectName = projectNameInput.value.trim();
     const projectDesc = projectDescInput.value.trim();
     const existingProjectId = targetExistingRadio.checked ? parseInt(existingSelect.value, 10) : null;
-    const qtyStrategy = document.querySelector('input[name="bomQuantityStrategy"]:checked')?.value || "overwrite";
 
     if (targetType === "new" && !projectName) {
       alert(getI18n().label_project_name || "Project name is required.");
@@ -598,7 +597,6 @@
       project_name: projectName,
       project_description: projectDesc,
       existing_project_id: existingProjectId,
-      quantity_strategy: qtyStrategy,
       items: selectedItems,
     };
 

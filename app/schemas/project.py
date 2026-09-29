@@ -31,6 +31,9 @@ class ProjectDetails(BaseModel):
     name: str
     description: Optional[str] = None
     parts_count: int = 0
+    system_key: Optional[str] = None
+    is_system: bool = False
+    total_available_quantity: int = 0
     parts: List[ProjectPartItem] = []
 
 class ProjectListItem(BaseModel):
@@ -38,6 +41,9 @@ class ProjectListItem(BaseModel):
     name: str
     description: Optional[str] = None
     parts_count: int = 0
+    system_key: Optional[str] = None
+    is_system: bool = False
+    total_available_quantity: int = 0
 
 class ProjectRef(BaseModel):
     id: int

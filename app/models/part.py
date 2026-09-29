@@ -16,3 +16,7 @@ class Part(Base):
 
     inventory = relationship("Inventory", back_populates="part", uselist=False, cascade="all, delete-orphan")
     project_parts = relationship("ProjectPart", back_populates="part", cascade="all, delete-orphan")
+    warehouse_placement = relationship(
+        "WarehousePlacement", back_populates="part", uselist=False,
+        cascade="all, delete-orphan"
+    )

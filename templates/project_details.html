@@ -19,7 +19,7 @@
         <a href="/projects" class="btn btn-outline-secondary btn-sm">
           ← {{ t('project_details.back_to_projects') }}
         </a>
-        <div class="d-flex gap-2">
+        <div id="project-actions" class="d-flex gap-2 d-none">
           <button class="btn btn-outline-primary" type="button" onclick="openBomImportModal(projectId)">
             {{ t('bom_import.btn_import_bom') }}
           </button>
@@ -40,6 +40,8 @@
             <div class="col-md-3 text-md-end mt-2 mt-md-0">
               <span class="text-muted small d-block">{{ t('project_details.parts_count') }}</span>
               <span id="project-parts-count" class="fs-4 fw-bold text-dark">0</span>
+              <span id="project-available-total-label" class="text-muted small d-block">{{ t('project_details.available_total') }}</span>
+              <span id="project-available-total" class="fs-5 fw-bold text-success">0</span>
             </div>
           </div>
         </div>
@@ -61,7 +63,7 @@
                 <th scope="col" style="width: 110px;">{{ t('project_details.th_available') }}</th>
                 <th scope="col" style="width: 120px;">{{ t('project_details.th_needed') }}</th>
                 <th scope="col" style="width: 110px;">{{ t('project_details.th_shortage') }}</th>
-                <th scope="col" style="width: 160px;" class="text-end">{{ t('project_details.th_actions') }}</th>
+                <th id="project-actions-header" scope="col" style="width: 160px;" class="text-end">{{ t('project_details.th_actions') }}</th>
               </tr>
             </thead>
             <tbody id="bom-table-body">
@@ -72,7 +74,7 @@
       </div>
 
       <!-- Project Shortage List Card -->
-      <div class="card shadow-sm border-0 mb-5">
+      <div id="project-shortage-card" class="card shadow-sm border-0 mb-5">
         <div class="card-header bg-white py-3">
           <h5 class="fw-bold mb-1 text-danger">{{ t('project_details.procurement_summary_header') }}</h5>
           <small class="text-muted">{{ t('project_details.procurement_summary_desc') }}</small>
@@ -97,6 +99,8 @@
           {{ t('project_details.no_shortage_hint') }}
         </div>
       </div>
+
+      <p id="loose-parts-hint" class="alert alert-info" hidden>{{ t('project_details.loose_parts_hint') }}</p>
 
       <!-- Add Part to Project Modal -->
       <div class="modal fade" id="addPartModal" tabindex="-1" aria-labelledby="addPartModalLabel" aria-hidden="true">

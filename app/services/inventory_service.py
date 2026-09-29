@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.crud.inventory import create_inventory, get_inventory_by_part_id, update_inventory_quantity
-from app.crud.part import create_part, delete_part, get_all_parts, get_part_by_id, update_part
+from app.crud.part import create_part, delete_part, get_all_parts, get_inventory_parts_by_warehouse_status, get_part_by_id, update_part
 from app.crud.project_part import add_part_to_project, get_project_part
 from app.models.part import Part
 from app.models.inventory import Inventory
 from app.models.project_part import ProjectPart
+from app.models.project import Project
 from app.schemas.inventory import (
     PartDetailsFlatGet,
     PartInventoryFlatGet,
@@ -53,6 +54,16 @@ class InventoryService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Component #{ext_id} not found in {src} library."
+                )
+
+        if part.project_ids:
+            protected_project = db.query(Project).filter(
+                Project.id.in_(part.project_ids), Project.system_key.is_not(None)
+            ).first()
+            if protected_project:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="System projects are read-only",
                 )
 
         # Create Part record (supports multiple records for the same external part if in different locations)
@@ -153,12 +164,22 @@ class InventoryService:
             quantity=qty,
             image_url=summary.get("image_url"),
             datasheet_url=summary.get("datasheet_url"),
+            warehouse_status=("in_warehouse" if part.warehouse_placement else "not_in_warehouse"),
+            warehouse_box_id=part.warehouse_placement.cabinet_id if part.warehouse_placement else None,
+            warehouse_drawer_code=part.warehouse_placement.drawer_code if part.warehouse_placement else None,
+            warehouse_photo_url=(f"/api/warehouse/parts/{part.id}/photo" if part.warehouse_placement else None),
             projects=cls._map_projects(part)
         )
 
     @classmethod
-    def get_parts_inventory_list(cls, db: Session, limit: int = 0, lang: str = "zh") -> List[PartInventoryFlatGet]:
-        parts_list = get_all_parts(db, limit=limit)
+    def get_parts_inventory_list(cls, db: Session, limit: int = 0, lang: str = "zh", warehouse_status: Optional[str] = None) -> List[PartInventoryFlatGet]:
+        if warehouse_status:
+            try:
+                parts_list = get_inventory_parts_by_warehouse_status(db, warehouse_status, limit=limit)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error))
+        else:
+            parts_list = get_all_parts(db, limit=limit)
         return [cls._map_flat_part(part, lang) for part in parts_list]
 
     @classmethod
@@ -188,18 +209,22 @@ class InventoryService:
             description=summary.get("description"),
             image_url=summary.get("image_url"),
             datasheet_url=summary.get("datasheet_url"),
+            warehouse_status=("in_warehouse" if part_found.warehouse_placement else "not_in_warehouse"),
+            warehouse_box_id=part_found.warehouse_placement.cabinet_id if part_found.warehouse_placement else None,
+            warehouse_drawer_code=part_found.warehouse_placement.drawer_code if part_found.warehouse_placement else None,
+            warehouse_photo_url=(f"/api/warehouse/parts/{part_found.id}/photo" if part_found.warehouse_placement else None),
             projects=cls._map_projects(part_found),
             external_details=full_info.get("external_details")
         )
 
     @classmethod
-    def search(cls, search_key: str, db: Session, lang: str = "zh") -> List[PartInventoryFlatGet]:
+    def search(cls, search_key: str, db: Session, lang: str = "zh", warehouse_status: Optional[str] = None) -> List[PartInventoryFlatGet]:
         q = (search_key or "").strip().lower()
         if not q:
-            return cls.get_parts_inventory_list(db, lang=lang)
+            return cls.get_parts_inventory_list(db, lang=lang, warehouse_status=warehouse_status)
 
         # Get all parts and filter dynamically against hydrated attributes or storage location / note
-        all_parts = cls.get_parts_inventory_list(db, lang=lang)
+        all_parts = cls.get_parts_inventory_list(db, lang=lang, warehouse_status=warehouse_status)
         matched = []
         for p in all_parts:
             text_corpus = f"{p.name} {p.manufacturer or ''} {p.package or ''} {p.part_type or ''} {p.storage_location or ''} {p.note or ''}".lower()

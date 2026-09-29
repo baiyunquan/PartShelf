@@ -214,6 +214,36 @@
   padding-top: 0.35rem;
 }
 
+.warehouse-drawer-parts-section {
+  margin-top: 1.5rem;
+  border-top: 1px solid #dee2e6;
+  padding-top: 1rem;
+}
+
+.warehouse-drawer-parts {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.warehouse-part-card {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid #dee2e6;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+  background: #fff;
+}
+
+.warehouse-part-photo {
+  width: 4rem;
+  height: 4rem;
+  object-fit: contain;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+}
+
 .warehouse-qr-image {
   display: grid;
   place-items: center;

@@ -10,7 +10,7 @@ def create_project(db: Session, project: Project) -> Project:
 def get_all_projects(db: Session):
     return db.query(Project).options(
         joinedload(Project.parts)
-    ).all()
+    ).order_by(Project.system_key.is_not(None).desc(), Project.id).all()
 
 def get_project_by_id(db: Session, project_id: int):
     return db.query(Project).options(

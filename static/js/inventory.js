@@ -1,6 +1,7 @@
 const I18N = JSON.parse(document.getElementById('page-translations').textContent || '{}');
 const tbody = document.getElementById("parts-table-body");
 const resetButton = document.getElementById("resetSearchButton");
+const warehouseStatusFilter = document.getElementById("warehouseStatusFilter");
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -27,7 +28,7 @@ function renderTable(parts) {
   tbody.innerHTML = "";
   if (!parts || parts.length === 0) {
     const emptyRow = document.createElement("tr");
-    emptyRow.innerHTML = `<td colspan="8" class="text-center text-muted py-4">${I18N.empty_hint || 'No inventory parts found.'}</td>`;
+    emptyRow.innerHTML = `<td colspan="9" class="text-center text-muted py-4">${I18N.empty_hint || 'No inventory parts found.'}</td>`;
     tbody.appendChild(emptyRow);
     return;
   }
@@ -58,6 +59,12 @@ function renderTable(parts) {
         <span class="badge bg-light text-dark border">${escapeHtml(part.storage_location || 'Default Storage')}</span>
       </td>
       <td>
+        <span class="badge ${part.warehouse_status === 'in_warehouse' ? 'bg-success' : 'bg-secondary'}">
+          ${part.warehouse_status === 'in_warehouse' ? (I18N.warehouse_filter_in || 'In warehouse') : (I18N.warehouse_filter_out || 'Not added to warehouse')}
+        </span>
+        ${part.warehouse_box_id ? `<small class="d-block text-muted">${escapeHtml(I18N.warehouse_box || 'Box')} ${escapeHtml(part.warehouse_box_id)} / ${escapeHtml(I18N.warehouse_drawer || 'Drawer')} ${escapeHtml(part.warehouse_drawer_code || '')}</small>` : ''}
+      </td>
+      <td>
         <span class="badge ${part.quantity > 0 ? 'bg-success' : 'bg-danger'}">
           ${part.quantity !== null && part.quantity !== undefined ? part.quantity : 0}
         </span>
@@ -77,7 +84,8 @@ function loadAllParts() {
   document.getElementById('searchInput').value = '';
   resetButton.style.display = 'none';
 
-  fetch("/api/inventory/get_parts_inventory")
+  const statusQuery = warehouseStatusFilter.value ? `?warehouse_status=${encodeURIComponent(warehouseStatusFilter.value)}` : '';
+  fetch(`/api/inventory/get_parts_inventory${statusQuery}`)
     .then(res => res.json())
     .then(parts => renderTable(parts))
     .catch(err => {
@@ -93,7 +101,8 @@ function handleSearch(searchKey) {
   }
 
   resetButton.style.display = 'inline-block';
-  fetch(`/api/inventory/search?search_key=${encodeURIComponent(searchKey)}`)
+  const statusQuery = warehouseStatusFilter.value ? `&warehouse_status=${encodeURIComponent(warehouseStatusFilter.value)}` : '';
+  fetch(`/api/inventory/search?search_key=${encodeURIComponent(searchKey)}${statusQuery}`)
     .then(res => res.json())
     .then(parts => renderTable(parts))
     .catch(err => {
@@ -107,6 +116,11 @@ document.getElementById('searchButton').addEventListener('click', function() {
   handleSearch(document.getElementById('searchInput').value);
 });
 resetButton.addEventListener('click', loadAllParts);
+warehouseStatusFilter.addEventListener('change', () => {
+  const query = document.getElementById('searchInput').value.trim();
+  if (query) handleSearch(query);
+  else loadAllParts();
+});
 
 // Enter key on search input
 document.getElementById('searchInput').addEventListener('keyup', function(e) {
@@ -383,7 +397,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
       container.innerHTML = "";
-      projects.forEach(project => {
+      projects.filter(project => !project.is_system).forEach(project => {
         const div = document.createElement("div");
         div.className = "form-check";
         div.innerHTML = `

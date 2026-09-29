@@ -5,7 +5,7 @@
   const translationsNode = document.getElementById("page-translations");
   const cabinetConfigNode = document.getElementById("warehouse-cabinet-config");
   const I18N = JSON.parse(translationsNode.textContent);
-  const cabinets = JSON.parse(cabinetConfigNode.textContent);
+  let cabinets = JSON.parse(cabinetConfigNode.textContent);
   const cabinetSelect = document.getElementById("warehouse-cabinet-select");
   const summary = document.getElementById("warehouse-summary");
   const boxMeta = document.getElementById("warehouse-box-meta");
@@ -13,6 +13,9 @@
   const detailsPlaceholder = document.getElementById("warehouse-drawer-placeholder");
   const detailsContent = document.getElementById("warehouse-drawer-content");
   const printSheet = document.getElementById("warehouse-print-sheet");
+  const drawerParts = document.getElementById("warehouse-drawer-parts");
+  const drawerPartsEmpty = document.getElementById("warehouse-drawer-parts-empty");
+  let unplacedPartCount = 0;
   let selectedDrawerNode = null;
 
   function translation(key) {
@@ -62,8 +65,12 @@
     summary.replaceChildren();
     const items = [[translation("box_id"), cabinet.id]];
     for (const group of cabinet.drawerGroups) {
-      items.push([drawerTypeName(group), String(group.drawers.length)]);
+    items.push([drawerTypeName(group), String(group.drawers.length)]);
     }
+    const registeredParts = cabinet.drawerGroups.flatMap(group => group.drawers)
+      .reduce((count, drawer) => count + (drawer.parts || []).length, 0);
+    items.push([translation("drawer_parts_count"), String(registeredParts)]);
+    items.push([translation("unplaced_count"), String(unplacedPartCount)]);
     for (const [label, value] of items) {
       const item = document.createElement("span");
       item.className = "warehouse-summary-item";
@@ -101,6 +108,7 @@
     const rowText = translation("drawer_row").replace("{row}", drawer.row);
     const columnText = translation("drawer_column").replace("{column}", drawer.column);
     setText("warehouse-detail-position", `${rowText}, ${columnText}`);
+    renderDrawerParts(drawer);
 
     const qrContainer = document.getElementById("warehouse-selected-qr");
     qrContainer.replaceChildren(makeQrSvg(drawer.qrPayload, `${drawer.code} ${translation("qr_code")}`));
@@ -116,6 +124,34 @@
       selectedDrawerNode.classList.add("is-selected");
       selectedDrawerNode.setAttribute("aria-pressed", "true");
       selectedDrawerNode.setAttribute("aria-label", visualLabel);
+    }
+  }
+
+  function renderDrawerParts(drawer) {
+    const parts = drawer.parts || [];
+    drawerParts.replaceChildren();
+    drawerPartsEmpty.hidden = parts.length > 0;
+    for (const part of parts) {
+      const card = document.createElement("article");
+      card.className = "warehouse-part-card";
+      const photo = document.createElement("img");
+      photo.className = "warehouse-part-photo";
+      photo.src = part.photo_url;
+      photo.alt = part.name;
+      const content = document.createElement("div");
+      const name = document.createElement("a");
+      name.href = `/component_details?part_id=${encodeURIComponent(part.id)}`;
+      name.textContent = part.name;
+      name.className = "fw-bold";
+      const metadata = document.createElement("p");
+      metadata.className = "text-muted mb-1";
+      metadata.textContent = [part.library_source, part.external_part_id, part.package]
+        .filter(Boolean).join(" · ");
+      const quantity = document.createElement("span");
+      quantity.textContent = `${translation("part_quantity")}: ${part.quantity}`;
+      content.append(name, metadata, quantity);
+      card.append(photo, content);
+      drawerParts.appendChild(card);
     }
   }
 
@@ -200,6 +236,24 @@
     }
   }
 
+  async function loadWarehouseContents() {
+    try {
+      const response = await fetch("/api/warehouse/contents");
+      if (!response.ok) throw new Error("warehouse contents request failed");
+      const payload = await response.json();
+      cabinets = payload.cabinets || [];
+      unplacedPartCount = payload.unplaced_part_count || 0;
+      const selected = cabinets.find(item => item.id === cabinetSelect.value) || cabinets[0];
+      if (selected) {
+        cabinetSelect.value = selected.id;
+        renderCabinet(selected);
+      }
+    } catch (error) {
+      console.error(error);
+      summary.textContent = translation("warehouse_load_error");
+    }
+  }
+
   function makeLabel(cabinet, group, drawer) {
     const label = document.createElement("article");
     label.className = "warehouse-label";
@@ -257,4 +311,5 @@
     cabinetSelect.value = cabinets[0].id;
     renderCabinet(cabinets[0]);
   }
+  loadWarehouseContents();
 })();
