@@ -19,6 +19,7 @@ from app.schemas.inventory import (
     PartToInventoryAdd,
 )
 from app.services.external_library_service import resolve_part_summary, resolve_part_full
+from app.services import search_alias_service
 
 
 class InventoryService:
@@ -219,18 +220,52 @@ class InventoryService:
 
     @classmethod
     def search(cls, search_key: str, db: Session, lang: str = "zh", warehouse_status: Optional[str] = None) -> List[PartInventoryFlatGet]:
-        q = (search_key or "").strip().lower()
+        q = (search_key or "").strip()
         if not q:
             return cls.get_parts_inventory_list(db, lang=lang, warehouse_status=warehouse_status)
 
         # Get all parts and filter dynamically against hydrated attributes or storage location / note
         all_parts = cls.get_parts_inventory_list(db, lang=lang, warehouse_status=warehouse_status)
+        query_terms = search_alias_service.expand_query(q, "inventory")
+        normalized_query = search_alias_service.normalize_alias_text(q)
         matched = []
         for p in all_parts:
-            text_corpus = f"{p.name} {p.manufacturer or ''} {p.package or ''} {p.part_type or ''} {p.storage_location or ''} {p.note or ''}".lower()
-            if q in text_corpus or f"c{p.external_part_id}".lower() == q or str(p.id) == q:
-                matched.append(p)
-        return matched
+            if hasattr(p, "dict"):
+                record = p.dict()
+            elif isinstance(p, dict):
+                record = p
+            else:
+                record = vars(p)
+            native_aliases = search_alias_service.native_aliases_for_record("inventory", record)
+            curated_aliases = search_alias_service.record_curated_aliases("inventory", record)
+            normalized_native_aliases = [
+                search_alias_service.normalize_alias_text(value)
+                for value in native_aliases
+            ]
+            normalized_all_aliases = [
+                search_alias_service.normalize_alias_text(value)
+                for value in (*native_aliases, *curated_aliases)
+            ]
+            original_match = any(normalized_query in value for value in normalized_native_aliases)
+            direct_match = (
+                f"c{record.get('external_part_id', '')}".casefold() == normalized_query
+                or str(record.get("id", "")) == q
+            )
+            alias_match = (
+                any(normalized_query in value for value in (
+                    search_alias_service.normalize_alias_text(alias)
+                    for alias in curated_aliases
+                ))
+                or any(
+                    search_alias_service.normalize_alias_text(term) in value
+                    for term in query_terms[1:]
+                    for value in normalized_all_aliases
+                )
+            )
+            if original_match or direct_match or alias_match:
+                matched.append((0 if original_match or direct_match else 1, p))
+        matched.sort(key=lambda item: item[0])
+        return [part for _, part in matched]
 
     @staticmethod
     def delete_part_with_id(part_id: int, db: Session):

@@ -6,7 +6,7 @@ client = TestClient(app)
 
 
 def test_quick_search_api():
-    """Verify live autocomplete API returns structured results across all 4 libraries."""
+    """Verify live autocomplete API returns structured results across all five search sources."""
     resp = client.get("/api/search/quick?q=stm32")
     assert resp.status_code == 200
     data = resp.json()

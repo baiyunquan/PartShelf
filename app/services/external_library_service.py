@@ -27,6 +27,7 @@ from app.i18n.fastener_aliases import (
     localized_standard_name,
 )
 from app.services import component_search_service
+from app.services import search_alias_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
@@ -288,9 +289,23 @@ def search_altium(
     params = []
 
     q = (query or "").strip()
+    query_terms = search_alias_service.expand_query(q, "altium")
+    q = query_terms[0] if query_terms else q
+    alias_keys = search_alias_service.record_keys_for_query("altium", q)
+    text_fields = search_alias_service.searchable_fields("altium")
+    original_match = "(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")"
+    original_params = [f"%{q}%"] * len(text_fields) if q else []
     if q:
-        conditions.append("(lib_reference LIKE ? OR lcsc_part LIKE ? OR mfr_part_number LIKE ? OR description LIKE ?)")
-        params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
+        term_matches = []
+        for term in query_terms:
+            term_matches.append("(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")")
+            params.extend([f"%{term}%"] * len(text_fields))
+        for key in alias_keys:
+            source_file, separator, lib_reference = key.partition("|")
+            if separator:
+                term_matches.append("(lower(source_file) = lower(?) AND lower(lib_reference) = lower(?))")
+                params.extend([source_file, lib_reference])
+        conditions.append("(" + " OR ".join(term_matches) + ")")
 
     if category:
         conditions.append("category = ?")
@@ -312,6 +327,7 @@ def search_altium(
     total = cur.fetchone()[0]
 
     # Data
+    relevance_order = f"CASE WHEN {original_match} THEN 0 ELSE 1 END, id" if q else "id"
     sql = f"""
     SELECT id, lib_reference, lcsc_part, category, package, manufacturer,
            mfr_part_number, basic_part, description, resistance, capacitance,
@@ -319,10 +335,10 @@ def search_altium(
            jlcpcb_url, lcsc_url, parameters_json, source_file
     FROM altium_components
     {where_sql}
-    ORDER BY id
+    ORDER BY {relevance_order}
     LIMIT ? OFFSET ?
     """
-    cur.execute(sql, params + [page_size, offset])
+    cur.execute(sql, params + original_params + [page_size, offset])
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -418,9 +434,23 @@ def search_kicad(
     params = []
 
     q = (query or "").strip()
+    query_terms = search_alias_service.expand_query(q, "kicad")
+    q = query_terms[0] if query_terms else q
+    alias_keys = search_alias_service.record_keys_for_query("kicad", q)
+    text_fields = search_alias_service.searchable_fields("kicad")
+    original_match = "(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")"
+    original_params = [f"%{q}%"] * len(text_fields) if q else []
     if q:
-        conditions.append("(name LIKE ? OR value LIKE ? OR keywords LIKE ? OR description LIKE ?)")
-        params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
+        term_matches = []
+        for term in query_terms:
+            term_matches.append("(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")")
+            params.extend([f"%{term}%"] * len(text_fields))
+        for key in alias_keys:
+            alias_library, separator, name = key.partition("|")
+            if separator:
+                term_matches.append("(lower(library) = lower(?) AND lower(name) = lower(?))")
+                params.extend([alias_library, name])
+        conditions.append("(" + " OR ".join(term_matches) + ")")
 
     if library:
         conditions.append("library = ?")
@@ -433,16 +463,17 @@ def search_kicad(
     total = cur.fetchone()[0]
 
     # Data (omitting heavy raw_sexpr in list view for performance)
+    relevance_order = f"CASE WHEN {original_match} THEN 0 ELSE 1 END, library, name" if q else "library, name"
     sql = f"""
     SELECT id, library, name, extends, reference, value, footprint,
            datasheet, description, keywords, fp_filters, in_bom, on_board,
            properties_json, source_file
     FROM kicad_symbols
     {where_sql}
-    ORDER BY library, name
+    ORDER BY {relevance_order}
     LIMIT ? OFFSET ?
     """
-    cur.execute(sql, params + [page_size, offset])
+    cur.execute(sql, params + original_params + [page_size, offset])
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -635,6 +666,8 @@ def search_jlcparts(
     page_size = max(1, min(200, page_size))
     offset = (page - 1) * page_size
     q = (query or "").strip()
+    query_terms = search_alias_service.expand_query(q, "jlcparts") if q else ()
+    q = query_terms[0] if query_terms else q
 
     conn = get_connection(JLCPARTS_DB_PATH)
     if not conn:
@@ -649,6 +682,19 @@ def search_jlcparts(
     code_query = False
 
     capacitance = None
+    alias_keys = search_alias_service.record_keys_for_query("jlcparts", q) if q else ()
+    jlc_search_fields = tuple(
+        f"j.{field}" for field in search_alias_service.searchable_fields("jlcparts")
+    ) + ("('C' || j.lcsc)",)
+    alias_lcsc_codes = []
+    for key in alias_keys:
+        normalized_code = re.sub(r"^c", "", str(key).strip(), flags=re.IGNORECASE)
+        if normalized_code.isdigit():
+            alias_lcsc_codes.append(int(normalized_code))
+    alias_lcsc_codes = list(dict.fromkeys(alias_lcsc_codes))
+    for index, lcsc in enumerate(alias_lcsc_codes):
+        params[f"alias_lcsc_{index}"] = lcsc
+
     capacitance_sql = (
         "CASE WHEN j.attributes LIKE :capacitance_hint AND json_valid(j.attributes) THEN "
         "lower(replace(replace(replace(json_extract(j.attributes, '$.Capacitance'), "
@@ -677,9 +723,16 @@ def search_jlcparts(
             params["code"] = int(q)
             code_query = True
         else:
-            matches = ["j.mfr LIKE :like", "('C' || j.lcsc) LIKE :like", "j.description LIKE :like"]
+            matches = [f"{field} LIKE :like" for field in jlc_search_fields]
             if capacitance is not None:
                 matches.append(f"{capacitance_sql} = :capacitance")
+            for index, term in enumerate(query_terms[1:], start=1):
+                parameter_name = f"alias_like_{index}"
+                params[parameter_name] = f"%{term}%"
+                matches.extend(f"{field} LIKE :{parameter_name}" for field in jlc_search_fields)
+            if alias_lcsc_codes:
+                target_names = [f":alias_lcsc_{index}" for index in range(len(alias_lcsc_codes))]
+                matches.append("j.lcsc IN (" + ", ".join(target_names) + ")")
             conditions.append("(" + " OR ".join(matches) + ")")
 
     if category:
@@ -710,13 +763,16 @@ def search_jlcparts(
     if code_query:
         # The model index covers the broad code search; fetch full rows only
         # for matching IDs instead of scanning every large component record.
-        hits_sql = """
-            hits AS (
-                SELECT lcsc FROM jlc_components WHERE mfr LIKE :like
-                UNION
-                SELECT lcsc FROM jlc_components WHERE lcsc = :code
+        hit_queries = [
+            "SELECT lcsc FROM jlc_components WHERE mfr LIKE :like",
+            "SELECT lcsc FROM jlc_components WHERE lcsc = :code",
+        ]
+        if alias_lcsc_codes:
+            target_names = [f":alias_lcsc_{index}" for index in range(len(alias_lcsc_codes))]
+            hit_queries.append(
+                "SELECT lcsc FROM jlc_components WHERE lcsc IN (" + ", ".join(target_names) + ")"
             )
-        """
+        hits_sql = "hits AS (" + " UNION ".join(hit_queries) + ")"
         candidate_from = "FROM hits h JOIN jlc_components j ON j.lcsc = h.lcsc"
     else:
         hits_sql = ""
@@ -730,7 +786,20 @@ def search_jlcparts(
             "WHEN lower(j.mfr) LIKE lower(:prefix) THEN 2",
             "WHEN lower(j.mfr) LIKE lower(:like) THEN 3",
         ])
-        rank_sql = "CASE " + " ".join(rank) + " ELSE 4 END"
+        original_field_matches = " OR ".join(f"{field} LIKE :like" for field in jlc_search_fields)
+        rank.append("WHEN (" + original_field_matches + ") THEN 4")
+        alias_rank_matches = []
+        for index in range(1, len(query_terms)):
+            parameter_name = f"alias_like_{index}"
+            alias_rank_matches.extend(f"{field} LIKE :{parameter_name}" for field in jlc_search_fields)
+        if alias_lcsc_codes:
+            alias_rank_matches.extend(
+                f"j.lcsc = :alias_lcsc_{index}"
+                for index in range(len(alias_lcsc_codes))
+            )
+        if alias_rank_matches:
+            rank.append("WHEN (" + " OR ".join(alias_rank_matches) + ") THEN 5")
+        rank_sql = "CASE " + " ".join(rank) + " ELSE 6 END"
     else:
         # Preserve the stock-first listing when there is no search term.
         cur.execute(f"SELECT count(*) FROM jlc_components j{where_sql}", params)
@@ -1257,6 +1326,7 @@ def query_fasteners(
         cur = conn.cursor()
         where_clauses = []
         params = []
+        fastener_search_fields = search_alias_service.searchable_fields("fasteners")
 
         if domain and domain != "all":
             where_clauses.append("domain = ?")
@@ -1264,20 +1334,22 @@ def query_fasteners(
 
         if query:
             q_clean = query.strip()
-            q_param = f"%{q_clean}%"
+            query_terms = search_alias_service.expand_query(q_clean, "fasteners")
+            q_clean = query_terms[0] if query_terms else q_clean
             alias_codes = expand_fastener_query(q_clean)
-            alias_sql = ""
+            term_matches = []
+            for term in query_terms:
+                term_param = f"%{term}%"
+                text_match = " OR ".join(f"{field} LIKE ?" for field in fastener_search_fields)
+                term_matches.append(
+                    f"({text_match} OR param_table_name IN ("
+                    "SELECT DISTINCT table_name FROM fastener_tables WHERE row_key = ? OR row_key LIKE ?))"
+                )
+                params.extend([term_param] * len(fastener_search_fields) + [term, term_param])
             if alias_codes:
-                alias_sql = " OR standard_code IN (" + ", ".join("?" for _ in alias_codes) + ")"
-            where_clauses.append("""(
-                standard_code LIKE ?
-                OR standard_name LIKE ?
-                OR description LIKE ?
-                OR category_group_zh LIKE ?
-                OR param_table_name IN (SELECT DISTINCT table_name FROM fastener_tables WHERE row_key = ? OR row_key LIKE ?)
-            """ + alias_sql + ")")
-            params.extend([q_param, q_param, q_param, q_param, q_clean, q_param])
-            params.extend(alias_codes)
+                term_matches.append("standard_code IN (" + ", ".join("?" for _ in alias_codes) + ")")
+                params.extend(alias_codes)
+            where_clauses.append("(" + " OR ".join(term_matches) + ")")
 
         if category and category != "all":
             where_clauses.append("(category_group = ? OR category_group_zh = ?)")
@@ -1297,14 +1369,27 @@ def query_fasteners(
         page = max(1, min(page, total_pages)) if total > 0 else 1
         offset = (page - 1) * page_size
 
+        if query:
+            original_fields = " OR ".join(f"{field} LIKE ?" for field in fastener_search_fields)
+            original_match = (
+                f"({original_fields} OR param_table_name IN ("
+                "SELECT DISTINCT table_name FROM fastener_tables WHERE row_key = ? OR row_key LIKE ?))"
+            )
+            original_rank_params = [f"%{query.strip()}%"] * len(fastener_search_fields)
+            original_rank_params.extend([query.strip(), f"%{query.strip()}%"])
+            relevance_order = f"CASE WHEN {original_match} THEN 0 ELSE 1 END, domain ASC, authority ASC, standard_code ASC"
+        else:
+            original_rank_params = []
+            relevance_order = "domain ASC, authority ASC, standard_code ASC"
+
         cur.execute(f"""
             SELECT id, standard_code, standard_name, authority, domain, category_group, category_group_zh,
                    description, param_table_name, length_table_name, has_length, source_file
             FROM fastener_standards
             {where_sql}
-            ORDER BY domain ASC, authority ASC, standard_code ASC
+            ORDER BY {relevance_order}
             LIMIT ? OFFSET ?
-        """, params + [page_size, offset])
+        """, params + original_rank_params + [page_size, offset])
 
         items = []
         for row in cur.fetchall():

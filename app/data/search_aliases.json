@@ -1,0 +1,33 @@
+{
+  "max_query_variants": 8,
+  "synonym_groups": [
+    {"terms": ["电容", "电容器", "capacitor", "capacitors"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["电阻", "电阻器", "resistor", "resistors"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["电感", "电感器", "inductor", "inductors"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["二极管", "diode", "diodes"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["连接器", "接插件", "connector", "connectors"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["晶振", "晶体振荡器", "crystal", "oscillator", "oscillators"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["场效应管", "mosfet", "fet"], "sources": ["inventory", "jlcparts", "altium", "kicad"]},
+    {"terms": ["螺母", "nut", "nuts"], "sources": ["inventory", "fasteners"]},
+    {"terms": ["螺丝", "螺钉", "screw", "screws"], "sources": ["inventory", "fasteners"]},
+    {"terms": ["螺栓", "bolt", "bolts"], "sources": ["inventory", "fasteners"]},
+    {"terms": ["垫圈", "垫片", "washer", "washers"], "sources": ["inventory", "fasteners"]},
+    {"terms": ["隔离柱", "支撑柱", "spacer", "standoff", "standoffs"], "sources": ["inventory", "fasteners"]},
+    {"terms": ["热熔螺母", "热熔嵌件", "heat-set insert", "heat-staked insert"], "sources": ["inventory", "fasteners"]}
+  ],
+  "record_aliases": {
+    "fasteners": {
+      "IUTHeatInsert": ["热熔螺母", "热熔铜螺母", "热熔嵌件", "热压嵌件"],
+      "ASMEB18.6.1.2": ["平头螺丝", "沉头螺钉"],
+      "ASMEB18.6.1.3": ["平头螺丝", "沉头螺钉"],
+      "ASMEB18.6.3.1A": ["平头螺丝", "沉头螺钉"],
+      "ASMEB18.6.3.1B": ["平头螺丝", "沉头螺钉"],
+      "ISO10642": ["平头螺丝", "沉头螺钉"],
+      "ISO14581": ["平头螺丝", "沉头螺钉"],
+      "ISO2009": ["平头螺丝", "沉头螺钉"],
+      "ISO7046": ["平头螺丝", "沉头螺钉"],
+      "WN1413A": ["平头螺丝", "沉头螺钉"],
+      "WN1423": ["平头螺丝", "沉头螺钉"]
+    }
+  }
+}

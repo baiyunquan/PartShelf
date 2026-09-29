@@ -1,10 +1,11 @@
 """
 Unified Global Search API Router for PartShelf.
-Coordinates search requests across all 4 component sources:
+Coordinates search requests across all 5 searchable sources:
 - Local Inventory (parts.db via InventoryService)
 - JLCPCB In-stock Parts (jlcparts.db via external_library_service)
 - Altium JLCPCB Libraries (altium_library.db via external_library_service)
 - KiCad Symbol Libraries (kicad_symbols.db via external_library_service)
+- Fasteners and Mechanical Standards (fasteners.db via external_library_service)
 
 All underlying search functions remain distributed in their respective services.
 """
