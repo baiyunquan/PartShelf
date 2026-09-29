@@ -55,6 +55,11 @@
             </a>
           </li>
           <li class="nav-item mb-2">
+            <a class="nav-link {% if active_page == 'warehouse' %}active{% endif %}" {% if active_page == 'warehouse' %}aria-current="page"{% endif %} href="/warehouse">
+              {{ t('app.nav_warehouse') }}
+            </a>
+          </li>
+          <li class="nav-item mb-2">
             <hr class="border-secondary my-2">
             <div class="text-uppercase small text-secondary fw-bold px-3 mb-2">{{ t('app.nav_libraries_section') }}</div>
           </li>

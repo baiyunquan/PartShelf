@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.i18n import i18n, DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, get_current_language
+from app.warehouse_config import get_cabinet_config
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -31,6 +32,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "projects.html": "projects",
         "project_details.html": "project_details",
         "procurement.html": "procurement",
+        "warehouse.html": "warehouse",
         "libraries_jlcparts.html": "libraries_jlcparts",
         "libraries_jlcparts_details.html": "libraries_jlcparts",
         "libraries_altium.html": "libraries_altium",
@@ -107,6 +109,14 @@ def get_project_details_template(request: Request):
 def get_procurement_template(request: Request):
     return render_template(request=request, name="procurement.html", context={"active_page": "procurement"})
 
+@router.get("/warehouse", response_class=HTMLResponse)
+def get_warehouse_template(request: Request):
+    return render_template(
+        request=request,
+        name="warehouse.html",
+        context={"active_page": "warehouse", "warehouse_cabinets": get_cabinet_config()},
+    )
+
 @router.get("/search", response_class=HTMLResponse)
 def get_search_template(request: Request, q: str = ""):
     return render_template(
@@ -182,4 +192,3 @@ def get_fasteners_details_template(request: Request, standard_code: str):
         name="libraries_fasteners_details.html",
         context={"active_page": "lib_fasteners_details", "active_lib": "fasteners", "standard_code": standard_code}
     )
-

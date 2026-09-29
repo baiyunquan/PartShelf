@@ -37,10 +37,12 @@ def test_catalog_keys_and_template_references():
 
 def test_javascript_translation_references():
     catalog = flatten(json.loads((LOCALES / "zh.json").read_text(encoding="utf-8")))
-    for page in ("inventory", "component_details"):
+    for page in ("inventory", "component_details", "warehouse"):
         script = ROOT / "static" / "js" / f"{page}.js"
         assert script.exists()
         section = "details" if page == "component_details" else page
-        refs = re.findall(r"\bI18N\.([a-z][a-z0-9_]*)\b", script.read_text(encoding="utf-8"))
+        source = script.read_text(encoding="utf-8")
+        refs = re.findall(r"\bI18N\.([a-z][a-z0-9_]*)\b", source)
+        refs.extend(re.findall(r'\btranslation\("([a-z][a-z0-9_]*)"\)', source))
         assert refs
         assert not {f"{section}.{key}" for key in refs} - set(catalog)

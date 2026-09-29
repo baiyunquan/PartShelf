@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t('warehouse.title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <link href="/static/css/warehouse.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <script src="/static/js/vendor/qrcode-generator.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    {% include 'partials/navbar.html' %}
+
+    <main id="warehouse-page" class="container warehouse-page">
+      <header class="warehouse-header">
+        <div>
+          <h1>{{ t('warehouse.heading') }}</h1>
+          <p>{{ t('warehouse.subtitle') }}</p>
+        </div>
+        <div class="warehouse-toolbar">
+          <div class="warehouse-cabinet-picker">
+            <label for="warehouse-cabinet-select">{{ t('warehouse.box_select_label') }}</label>
+            <select id="warehouse-cabinet-select" class="form-select" aria-label="{{ t('warehouse.box_select_label') }}"></select>
+          </div>
+          <button id="warehouse-print-button" class="btn btn-outline-primary" type="button">
+            {{ t('warehouse.print_labels') }}
+          </button>
+        </div>
+      </header>
+
+      <section id="warehouse-summary" class="warehouse-summary" aria-live="polite"></section>
+
+      <div class="warehouse-layout">
+        <section class="warehouse-box-card" aria-label="{{ t('warehouse.heading') }}">
+          <div id="warehouse-box-meta" class="warehouse-box-meta"></div>
+          <div id="warehouse-cabinet-visual" class="warehouse-cabinet-visual"></div>
+          <p class="warehouse-print-note">{{ t('warehouse.print_note') }}</p>
+        </section>
+
+        <aside id="warehouse-drawer-details" class="warehouse-details-card" aria-live="polite">
+          <h2>{{ t('warehouse.drawer_panel_title') }}</h2>
+          <p id="warehouse-drawer-placeholder" class="warehouse-drawer-placeholder">
+            {{ t('warehouse.drawer_select_hint') }}
+          </p>
+          <div id="warehouse-drawer-content" hidden>
+            <dl class="warehouse-detail-list">
+              <div><dt>{{ t('warehouse.box_id') }}</dt><dd id="warehouse-detail-box"></dd></div>
+              <div><dt>{{ t('warehouse.drawer_code') }}</dt><dd id="warehouse-detail-code"></dd></div>
+              <div><dt>{{ t('warehouse.drawer_type_label') }}</dt><dd id="warehouse-detail-type"></dd></div>
+              <div><dt>{{ t('warehouse.drawer_dimensions') }}</dt><dd id="warehouse-detail-dimensions"></dd></div>
+              <div><dt>{{ t('warehouse.drawer_position') }}</dt><dd id="warehouse-detail-position"></dd></div>
+            </dl>
+            <div class="warehouse-qr-detail">
+              <h3>{{ t('warehouse.qr_code') }}</h3>
+              <div id="warehouse-selected-qr" class="warehouse-qr-image"></div>
+              <div class="warehouse-qr-payload">
+                <span>{{ t('warehouse.qr_payload') }}</span>
+                <code id="warehouse-selected-qr-payload"></code>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div id="warehouse-print-sheet" aria-hidden="true"></div>
+    </main>
+
+    {% include 'partials/footer.html' %}
+
+    <script id="warehouse-cabinet-config" type="application/json">{{ warehouse_cabinets | tojson }}</script>
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/warehouse.js"></script>
+  </body>
+</html>
