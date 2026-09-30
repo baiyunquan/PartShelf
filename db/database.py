@@ -2,6 +2,8 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
+from starlette.requests import Request
+from app.user_identity import SESSION_USERNAME_KEY, USERNAME_COOKIE_NAME, normalize_username
 
 from pathlib import Path
 
@@ -23,8 +25,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-def get_db():
+def get_db(request: Request):
     db = SessionLocal()
+    db.info[SESSION_USERNAME_KEY] = normalize_username(
+        request.cookies.get(USERNAME_COOKIE_NAME)
+    )
     try:
         yield db
     finally:

@@ -170,6 +170,9 @@ def import_bom(
             items=raw_items
         )
         return result
+    except HTTPException:
+        db.rollback()
+        raise
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

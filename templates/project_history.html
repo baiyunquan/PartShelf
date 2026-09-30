@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t('project_history.title') }}</title>
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
+    <link href="/static/css/project_history.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.js"></script>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body class="bg-light pb-5">
+    {% set active_page = 'project_history' %}
+    {% include 'partials/navbar.html' %}
+
+    <main class="container mt-5 pt-5">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+        <div>
+          <h1 class="h2 fw-bold mb-1">{{ t('project_history.heading') }}</h1>
+          <p class="text-muted mb-0">{{ t('project_history.subtitle') }}</p>
+        </div>
+        <div class="history-member-filter">
+          <label for="history-member-filter" class="form-label mb-1">{{ t('project_history.filter_member') }}</label>
+          <select id="history-member-filter" class="form-select">
+            <option value="all">{{ t('project_history.filter_all') }}</option>
+            <option value="unattributed">{{ t('project_history.filter_unattributed') }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-responsive bg-white shadow-sm rounded">
+        <table class="table table-striped table-hover align-middle mb-0 history-table">
+          <thead class="table-dark">
+            <tr>
+              <th scope="col">{{ t('project_history.th_time') }}</th>
+              <th scope="col">{{ t('project_history.th_member') }}</th>
+              <th scope="col">{{ t('project_history.th_project') }}</th>
+              <th scope="col">{{ t('project_history.th_component') }}</th>
+              <th scope="col">{{ t('project_history.th_action') }}</th>
+              <th scope="col">{{ t('project_history.th_quantity') }}</th>
+            </tr>
+          </thead>
+          <tbody id="project-history-rows">
+            <tr><td colspan="6" class="text-center text-muted py-4">{{ t('libraries_common.loading') }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <span id="project-history-page-summary" class="text-muted small" aria-live="polite"></span>
+        <div class="d-flex gap-2">
+          <button id="project-history-previous" type="button" class="btn btn-outline-secondary btn-sm">{{ t('project_history.previous') }}</button>
+          <button id="project-history-next" type="button" class="btn btn-outline-secondary btn-sm">{{ t('project_history.next') }}</button>
+        </div>
+      </div>
+      <div id="project-history-error" class="alert alert-danger d-none mt-3" role="alert"></div>
+    </main>
+
+    {% include 'partials/footer.html' %}
+    <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/project_history.js"></script>
+  </body>
+</html>

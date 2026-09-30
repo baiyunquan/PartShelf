@@ -52,3 +52,6 @@ A modern inventory management web app for electronic components. Easily track pa
 
 Install `requirements-dev.txt`, then run `python -m pytest -q`. The tests check that the Chinese and English catalogs have matching keys and that translation keys used by templates and page scripts exist.
 
+## Runtime configuration
+
+`PARTSHELF_TEST_MODE` defaults to `true`, allowing direct API mutations without a username cookie and attributing those records to no operator. Set it to `false` to require a username cookie for project-component changes.

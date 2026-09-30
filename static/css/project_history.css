@@ -1,0 +1,23 @@
+.history-member-filter {
+  min-width: min(100%, 16rem);
+}
+
+.history-table th,
+.history-table td {
+  vertical-align: middle;
+}
+
+.history-table td {
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+}
+
+.history-table .history-time {
+  min-width: 11rem;
+  white-space: nowrap;
+}
+
+.history-table .history-quantity {
+  min-width: 9rem;
+  white-space: nowrap;
+}

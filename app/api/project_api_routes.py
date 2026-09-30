@@ -1,7 +1,13 @@
+from datetime import timezone
+from math import ceil
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from db.database import get_db
+from app.models.part import Part
+from app.models.project import Project
+from app.models.project_component_history import ProjectComponentHistory
 from app.schemas.project import (
     ProcurementItem,
     ProjectCreate,
@@ -15,6 +21,79 @@ from app.services.project_service import ProjectService
 from app.i18n import get_current_language
 
 router = APIRouter()
+
+
+@router.get("/history")
+def get_project_component_history(
+    username: str | None = Query(None),
+    unattributed: bool = Query(False),
+    part_id: int | None = Query(None, ge=1),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    if username and unattributed:
+        raise HTTPException(status_code=400, detail="Choose either a member or unattributed history")
+
+    query = db.query(ProjectComponentHistory)
+    if username and username.strip():
+        query = query.filter(ProjectComponentHistory.username == username.strip())
+    elif unattributed:
+        query = query.filter(ProjectComponentHistory.username.is_(None))
+    if part_id is not None:
+        query = query.filter(ProjectComponentHistory.part_id == part_id)
+
+    total = query.count()
+    rows = query.order_by(
+        ProjectComponentHistory.changed_at.desc(),
+        ProjectComponentHistory.id.desc(),
+    ).offset((page - 1) * page_size).limit(page_size).all()
+    member_query = db.query(ProjectComponentHistory.username).filter(
+        ProjectComponentHistory.username.is_not(None)
+    )
+    if part_id is not None:
+        member_query = member_query.filter(ProjectComponentHistory.part_id == part_id)
+    members = [row[0] for row in member_query.distinct()
+               .order_by(ProjectComponentHistory.username).all()]
+    project_ids = {row.project_id for row in rows if row.project_id is not None}
+    part_ids = {row.part_id for row in rows if row.part_id is not None}
+    existing_project_ids = set()
+    existing_part_ids = set()
+    if project_ids:
+        existing_project_ids = {
+            row[0] for row in db.query(Project.id).filter(Project.id.in_(project_ids)).all()
+        }
+    if part_ids:
+        existing_part_ids = {
+            row[0] for row in db.query(Part.id).filter(Part.id.in_(part_ids)).all()
+        }
+
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "username": row.username,
+                "changed_at": row.changed_at.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "action": row.action,
+                "project_id": row.project_id,
+                "project_exists": row.project_id in existing_project_ids,
+                "project_name": row.project_name_snapshot,
+                "part_id": row.part_id,
+                "part_exists": row.part_id in existing_part_ids,
+                "part_source": row.part_source_snapshot,
+                "part_external_id": row.part_external_id_snapshot,
+                "part_name": row.part_name_snapshot,
+                "quantity_before": row.quantity_before,
+                "quantity_after": row.quantity_after,
+            }
+            for row in rows
+        ],
+        "members": members,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": ceil(total / page_size) if total else 0,
+    }
 
 @router.get("/", response_model=list[ProjectListItem])
 def get_all_projects(request: Request, db: Session = Depends(get_db)):

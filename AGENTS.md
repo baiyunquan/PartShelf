@@ -22,3 +22,7 @@
   - **程序化辅助重构原则（Program-Assisted Refactoring）**：
     - 涉及批量模板瘦身、静态资源抽取或全库格式对齐等大型重构任务时，必须编写专用的自动化 Python 脚本（参考 `scripts/refactor_extract_assets.py`）辅助执行，严禁手工逐文件手搓分离，保证抽取精度与幂等性。
 
+## 工作树与提交
+
+- 开发修改直接在当前主工作树中完成，不创建独立 Git worktree。
+- 完成用户要求的修改后创建 Git commit，提交信息使用英文 Conventional Commits 格式。

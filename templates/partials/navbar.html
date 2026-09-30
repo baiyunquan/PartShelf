@@ -55,6 +55,11 @@
             </a>
           </li>
           <li class="nav-item mb-2">
+            <a class="nav-link {% if active_page == 'project_history' %}active{% endif %}" {% if active_page == 'project_history' %}aria-current="page"{% endif %} href="/project-history">
+              {{ t('app.nav_project_history') }}
+            </a>
+          </li>
+          <li class="nav-item mb-2">
             <a class="nav-link {% if active_page == 'warehouse' %}active{% endif %}" {% if active_page == 'warehouse' %}aria-current="page"{% endif %} href="/warehouse">
               {{ t('app.nav_warehouse') }}
             </a>
@@ -97,7 +102,9 @@
         "card_altium_title": {{ t('search.card_altium_title') | tojson }},
         "card_kicad_title": {{ t('search.card_kicad_title') | tojson }},
         "nav_lib_fasteners": {{ t('app.nav_lib_fasteners') | tojson }},
+        "username_prompt": {{ t('app.username_prompt') | tojson }},
         "live_view_all": {{ t('search.live_view_all') | tojson }}
       }
     </script>
     <script src="/static/js/navbar_search.js"></script>
+    <script src="/static/js/user_identity.js"></script>

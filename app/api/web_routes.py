@@ -31,6 +31,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "component_details.html": "details",
         "projects.html": "projects",
         "project_details.html": "project_details",
+        "project_history.html": "project_history",
         "bom_import.html": "bom_import",
         "procurement.html": "procurement",
         "warehouse.html": "warehouse",
@@ -105,6 +106,15 @@ def get_projects_template(request: Request):
 @router.get("/project_details", response_class=HTMLResponse)
 def get_project_details_template(request: Request):
     return render_template(request=request, name="project_details.html", context={"active_page": "projects"})
+
+
+@router.get("/project-history", response_class=HTMLResponse)
+def get_project_history_template(request: Request):
+    return render_template(
+        request=request,
+        name="project_history.html",
+        context={"active_page": "project_history"},
+    )
 
 
 @router.get("/bom-import", response_class=HTMLResponse)

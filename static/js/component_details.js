@@ -523,5 +523,7 @@ function deletePart() {
 
 document.getElementById('updateQuantityBtn').addEventListener('click', updateQuantity);
 document.getElementById('deletePartBtn').addEventListener('click', deletePart);
-document.getElementById('viewHistoryBtn').addEventListener('click', () => alert(I18N.history_coming_soon || 'Coming soon'));
+document.getElementById('viewHistoryBtn').addEventListener('click', () => {
+  window.location.href = `/project-history?part_id=${encodeURIComponent(partId)}`;
+});
 document.getElementById('exportDetailsBtn').addEventListener('click', () => alert(I18N.export_coming_soon || 'Coming soon'));

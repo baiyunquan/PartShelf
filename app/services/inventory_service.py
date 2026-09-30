@@ -20,6 +20,7 @@ from app.schemas.inventory import (
 )
 from app.services.external_library_service import resolve_part_summary, resolve_part_full
 from app.services import search_alias_service
+from app.user_identity import require_project_history_username
 
 
 class InventoryService:
@@ -45,6 +46,9 @@ class InventoryService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="external_part_id cannot be empty"
             )
+
+        if part.project_ids:
+            require_project_history_username(db)
 
         # Validate that the external part exists
         summary = resolve_part_summary(src, ext_id)
