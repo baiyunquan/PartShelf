@@ -7,6 +7,8 @@
     <link href="/static/css/bootstrap.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+      <link href="/static/css/libraries_fasteners.css" rel="stylesheet">
+      <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     {% set active_page = 'lib_fasteners' %}
@@ -84,16 +86,16 @@
 
       <!-- Fasteners Standards Table -->
       <div class="table-responsive shadow-sm rounded bg-white">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" data-list-layout="fasteners">
           <thead class="table-dark">
             <tr>
-              <th scope="col" style="min-width: 140px;">{{ t('libraries_fasteners.th_code') }}</th>
-              <th scope="col" style="min-width: 90px;">{{ t('libraries_fasteners.th_authority') }}</th>
-              <th scope="col" style="min-width: 120px;">{{ t('libraries_fasteners.filter_domain') }}</th>
-              <th scope="col" style="min-width: 140px;">{{ t('libraries_fasteners.th_category') }}</th>
+              <th scope="col">{{ t('libraries_fasteners.th_code') }}</th>
+              <th scope="col">{{ t('libraries_fasteners.th_authority') }}</th>
+              <th scope="col">{{ t('libraries_fasteners.filter_domain') }}</th>
+              <th scope="col">{{ t('libraries_fasteners.th_category') }}</th>
               <th scope="col">{{ t('libraries_fasteners.th_description') }}</th>
-              <th scope="col" style="width: 110px;" class="text-center">{{ t('libraries_fasteners.th_has_length') }}</th>
-              <th scope="col" style="min-width: 110px;" class="text-end">{{ t('libraries_fasteners.th_actions') }}</th>
+              <th scope="col" class="text-center">{{ t('libraries_fasteners.th_has_length') }}</th>
+              <th scope="col" class="text-end" data-sortable="false">{{ t('libraries_fasteners.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -118,5 +120,6 @@
 
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/libraries_fasteners.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

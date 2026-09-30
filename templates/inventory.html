@@ -7,6 +7,8 @@
     <link href="/static/css/bootstrap.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+      <link href="/static/css/inventory.css" rel="stylesheet">
+      <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     <!-- Navbar -->
@@ -41,18 +43,18 @@
 
       <!-- Parts Table -->
       <div class="table-responsive shadow-sm rounded bg-white">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" data-list-layout="inventory">
           <thead class="table-dark">
             <tr>
-              <th scope="col" style="width: 70px;">{{ t('inventory.th_id') }}</th>
-              <th scope="col" style="min-width: 170px;">{{ t('inventory.th_name') }}</th>
-              <th scope="col" style="width: 110px;">{{ t('inventory.th_source') }}</th>
-              <th scope="col" style="min-width: 140px;">{{ t('inventory.th_package') }}</th>
-              <th scope="col" style="min-width: 130px;">{{ t('inventory.th_location') }}</th>
-              <th scope="col" style="min-width: 180px;">{{ t('inventory.th_warehouse') }}</th>
-              <th scope="col" style="width: 100px;">{{ t('inventory.th_quantity') }}</th>
+              <th scope="col">{{ t('inventory.th_id') }}</th>
+              <th scope="col">{{ t('inventory.th_name') }}</th>
+              <th scope="col">{{ t('inventory.th_source') }}</th>
+              <th scope="col">{{ t('inventory.th_package') }}</th>
+              <th scope="col">{{ t('inventory.th_location') }}</th>
+              <th scope="col">{{ t('inventory.th_warehouse') }}</th>
+              <th scope="col">{{ t('inventory.th_quantity') }}</th>
               <th scope="col">{{ t('inventory.th_projects') }}</th>
-              <th scope="col" style="width: 90px;" class="text-end">{{ t('inventory.th_actions') }}</th>
+              <th scope="col" class="text-end" data-sortable="false">{{ t('inventory.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="parts-table-body">
@@ -178,5 +180,6 @@
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/fastener_variant.js"></script>
     <script src="/static/js/inventory.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

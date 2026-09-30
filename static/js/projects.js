@@ -13,10 +13,10 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
         projects.forEach(p => {
           const row = document.createElement("tr");
           row.innerHTML = `
-            <td><span class="badge bg-light text-dark border">#${p.id}</span></td>
+            <td data-sort-value="${p.id}"><span class="badge bg-light text-dark border">#${p.id}</span></td>
             <td class="fw-bold">${p.name}</td>
             <td class="text-secondary">${p.description || '-'}</td>
-            <td class="text-center">
+            <td class="text-center" data-sort-value="${p.parts_count || 0}">
               <span class="badge ${p.parts_count > 0 ? 'bg-primary' : 'bg-secondary'}">
                 ${p.parts_count}
               </span>

@@ -32,13 +32,13 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
                 </td>
                 <td><code>${item.package || '-'}</code></td>
                 <td><span class="badge bg-info text-dark">${item.part_type || '-'}</span></td>
-                <td class="text-center">
+                <td class="text-center" data-sort-value="${item.quantity_available}">
                   <span class="badge ${item.quantity_available > 0 ? 'bg-success' : 'bg-danger'}">
                     ${item.quantity_available}
                   </span>
                 </td>
-                <td class="text-center fw-bold text-primary">${item.total_needed}</td>
-                <td class="text-center">
+                <td class="text-center fw-bold text-primary" data-sort-value="${item.total_needed}">${item.total_needed}</td>
+                <td class="text-center" data-sort-value="${item.shortage}">
                   <span class="badge ${item.shortage > 0 ? 'bg-danger fs-6' : 'bg-success'}">
                     ${item.shortage > 0 ? `缺 ${item.shortage}` : '充足'}
                   </span>

@@ -411,6 +411,10 @@
   },
   "bom_import": {
     "btn_import_bom": "导入 BOM",
+    "page_heading": "导入并审核 BOM",
+    "back_to_source": "返回来源页",
+    "target_summary_new": "新建项目：{name}",
+    "target_summary_existing": "现有项目：{name}",
     "modal_title": "导入 BOM (CSV / XLSX)",
     "step_upload": "1. 上传文件与目标设置",
     "step_preview": "2. 解析与匹配确认",

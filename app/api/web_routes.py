@@ -31,6 +31,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "component_details.html": "details",
         "projects.html": "projects",
         "project_details.html": "project_details",
+        "bom_import.html": "bom_import",
         "procurement.html": "procurement",
         "warehouse.html": "warehouse",
         "libraries_jlcparts.html": "libraries_jlcparts",
@@ -104,6 +105,20 @@ def get_projects_template(request: Request):
 @router.get("/project_details", response_class=HTMLResponse)
 def get_project_details_template(request: Request):
     return render_template(request=request, name="project_details.html", context={"active_page": "projects"})
+
+
+@router.get("/bom-import", response_class=HTMLResponse)
+def get_bom_import_template(request: Request, project_id: int | None = None):
+    return_url = f"/project_details?project_id={project_id}" if project_id and project_id > 0 else "/projects"
+    return render_template(
+        request=request,
+        name="bom_import.html",
+        context={
+            "active_page": "projects",
+            "project_id": project_id if project_id and project_id > 0 else None,
+            "return_url": return_url,
+        },
+    )
 
 @router.get("/procurement", response_class=HTMLResponse)
 def get_procurement_template(request: Request):

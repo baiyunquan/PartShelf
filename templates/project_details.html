@@ -7,6 +7,8 @@
     <link href="/static/css/bootstrap.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+      <link href="/static/css/project_details.css" rel="stylesheet">
+      <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     <!-- Navbar -->
@@ -20,9 +22,9 @@
           ← {{ t('project_details.back_to_projects') }}
         </a>
         <div id="project-actions" class="d-flex gap-2 d-none">
-          <button class="btn btn-outline-primary" type="button" onclick="openBomImportModal(projectId)">
+          <a class="btn btn-outline-primary" id="importBomButton" href="/bom-import">
             {{ t('bom_import.btn_import_bom') }}
-          </button>
+          </a>
           <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPartModal">
             <span class="me-1">+</span>{{ t('project_details.add_part_btn') }}
           </button>
@@ -53,17 +55,17 @@
           <h5 class="fw-bold mb-0">{{ t('project_details.bom_header') }}</h5>
         </div>
         <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle mb-0">
+          <table class="table table-striped table-hover align-middle mb-0" data-list-layout="project-bom">
             <thead class="table-dark">
               <tr>
                 <th scope="col">{{ t('project_details.th_part_name') }}</th>
                 <th scope="col">{{ t('project_details.th_manufacturer') }}</th>
                 <th scope="col">{{ t('project_details.th_package') }}</th>
                 <th scope="col">{{ t('project_details.th_type') }}</th>
-                <th scope="col" style="width: 110px;">{{ t('project_details.th_available') }}</th>
-                <th scope="col" style="width: 120px;">{{ t('project_details.th_needed') }}</th>
-                <th scope="col" style="width: 110px;">{{ t('project_details.th_shortage') }}</th>
-                <th id="project-actions-header" scope="col" style="width: 160px;" class="text-end">{{ t('project_details.th_actions') }}</th>
+                <th scope="col">{{ t('project_details.th_available') }}</th>
+                <th scope="col">{{ t('project_details.th_needed') }}</th>
+                <th scope="col">{{ t('project_details.th_shortage') }}</th>
+                <th id="project-actions-header" scope="col" class="text-end" data-sortable="false">{{ t('project_details.th_actions') }}</th>
               </tr>
             </thead>
             <tbody id="bom-table-body">
@@ -80,7 +82,7 @@
           <small class="text-muted">{{ t('project_details.procurement_summary_desc') }}</small>
         </div>
         <div class="table-responsive">
-          <table class="table table-hover align-middle mb-0" id="shortage-table">
+          <table class="table table-hover align-middle mb-0" id="shortage-table" data-list-layout="project-shortage">
             <thead class="table-light">
               <tr>
                 <th scope="col">{{ t('project_details.th_part_name') }}</th>
@@ -135,12 +137,11 @@
 
     </div>
 
-    {% include 'partials/bom_import_modal.html' %}
     {% include 'partials/footer.html' %}
 
     <!-- Translations & Script -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
-    <script src="/static/js/bom_import.js"></script>
     <script src="/static/js/project_details.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

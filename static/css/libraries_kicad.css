@@ -1,0 +1,16 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="kicad"] { table-layout: fixed; width: max(100%, 1697px); min-width: 1697px; }
+table[data-list-layout="kicad"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="kicad"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="kicad"] .d-flex, table[data-list-layout="kicad"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="kicad"] th:nth-child(1), table[data-list-layout="kicad"] td:nth-child(1) { width: 311px; min-width: 311px; }
+table[data-list-layout="kicad"] th:nth-child(2), table[data-list-layout="kicad"] td:nth-child(2) { width: 128px; min-width: 128px; }
+table[data-list-layout="kicad"] th:nth-child(3), table[data-list-layout="kicad"] td:nth-child(3) { width: 102px; min-width: 102px; }
+table[data-list-layout="kicad"] th:nth-child(4), table[data-list-layout="kicad"] td:nth-child(4) { width: 142px; min-width: 142px; }
+table[data-list-layout="kicad"] th:nth-child(5), table[data-list-layout="kicad"] td:nth-child(5) { width: 298px; min-width: 298px; }
+table[data-list-layout="kicad"] th:nth-child(6), table[data-list-layout="kicad"] td:nth-child(6) { width: 556px; min-width: 556px; }
+table[data-list-layout="kicad"] th:nth-child(7), table[data-list-layout="kicad"] td:nth-child(7) { width: 160px; min-width: 160px; }
+
+/* generated list widths: end */

@@ -1,0 +1,16 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="procurement"] { table-layout: fixed; width: max(100%, 1116px); min-width: 1116px; }
+table[data-list-layout="procurement"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="procurement"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="procurement"] .d-flex, table[data-list-layout="procurement"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="procurement"] th:nth-child(1), table[data-list-layout="procurement"] td:nth-child(1) { width: 240px; min-width: 240px; }
+table[data-list-layout="procurement"] th:nth-child(2), table[data-list-layout="procurement"] td:nth-child(2) { width: 125px; min-width: 125px; }
+table[data-list-layout="procurement"] th:nth-child(3), table[data-list-layout="procurement"] td:nth-child(3) { width: 157px; min-width: 157px; }
+table[data-list-layout="procurement"] th:nth-child(4), table[data-list-layout="procurement"] td:nth-child(4) { width: 134px; min-width: 134px; }
+table[data-list-layout="procurement"] th:nth-child(5), table[data-list-layout="procurement"] td:nth-child(5) { width: 136px; min-width: 136px; }
+table[data-list-layout="procurement"] th:nth-child(6), table[data-list-layout="procurement"] td:nth-child(6) { width: 165px; min-width: 165px; }
+table[data-list-layout="procurement"] th:nth-child(7), table[data-list-layout="procurement"] td:nth-child(7) { width: 159px; min-width: 159px; }
+
+/* generated list widths: end */

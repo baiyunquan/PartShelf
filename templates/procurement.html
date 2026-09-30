@@ -7,6 +7,8 @@
     <link href="/static/css/bootstrap.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+      <link href="/static/css/procurement.css" rel="stylesheet">
+      <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     <!-- Navbar -->
@@ -24,15 +26,15 @@
       <!-- Pure Data Table Card -->
       <div class="card shadow-sm border-0">
         <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle mb-0 bg-white">
+          <table class="table table-striped table-hover align-middle mb-0 bg-white" data-list-layout="procurement">
             <thead class="table-dark">
               <tr>
                 <th scope="col">{{ t('procurement.th_part_name') }}</th>
-                <th scope="col" style="width: 120px;">{{ t('procurement.th_package') }}</th>
+                <th scope="col">{{ t('procurement.th_package') }}</th>
                 <th scope="col">{{ t('procurement.th_type') }}</th>
-                <th scope="col" style="width: 130px;" class="text-center">{{ t('procurement.th_available') }}</th>
-                <th scope="col" style="width: 130px;" class="text-center">{{ t('procurement.th_total_needed') }}</th>
-                <th scope="col" style="width: 130px;" class="text-center text-warning fw-bold">{{ t('procurement.th_shortage') }}</th>
+                <th scope="col" class="text-center">{{ t('procurement.th_available') }}</th>
+                <th scope="col" class="text-center">{{ t('procurement.th_total_needed') }}</th>
+                <th scope="col" class="text-center text-warning fw-bold">{{ t('procurement.th_shortage') }}</th>
                 <th scope="col">{{ t('procurement.th_projects') }}</th>
               </tr>
             </thead>
@@ -49,5 +51,6 @@
     <!-- Translations & Script -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/procurement.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

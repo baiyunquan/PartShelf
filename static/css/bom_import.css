@@ -1,0 +1,43 @@
+.bom-import-page {
+  max-width: 1800px;
+}
+
+#bomStage2,
+#btnBomBack,
+#btnBomConfirmImport {
+  display: none;
+}
+
+#bomPreviewTable td {
+  vertical-align: top;
+}
+
+#bomPreviewTable .row-qty-input {
+  width: 70px;
+  min-width: 70px;
+}
+
+.bom-zero-stock-label {
+  font-size: 0.75rem;
+}
+
+.bom-bind-search-results {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* generated list widths: start */
+table[data-list-layout="bom-preview"] { table-layout: fixed; width: max(100%, 1453px); min-width: 1453px; }
+table[data-list-layout="bom-preview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="bom-preview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="bom-preview"] .d-flex, table[data-list-layout="bom-preview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="bom-preview"] th:nth-child(1), table[data-list-layout="bom-preview"] td:nth-child(1) { width: 77px; min-width: 77px; }
+table[data-list-layout="bom-preview"] th:nth-child(2), table[data-list-layout="bom-preview"] td:nth-child(2) { width: 80px; min-width: 80px; }
+table[data-list-layout="bom-preview"] th:nth-child(3), table[data-list-layout="bom-preview"] td:nth-child(3) { width: 480px; min-width: 480px; }
+table[data-list-layout="bom-preview"] th:nth-child(4), table[data-list-layout="bom-preview"] td:nth-child(4) { width: 111px; min-width: 111px; }
+table[data-list-layout="bom-preview"] th:nth-child(5), table[data-list-layout="bom-preview"] td:nth-child(5) { width: 298px; min-width: 298px; }
+table[data-list-layout="bom-preview"] th:nth-child(6), table[data-list-layout="bom-preview"] td:nth-child(6) { width: 90px; min-width: 90px; }
+table[data-list-layout="bom-preview"] th:nth-child(7), table[data-list-layout="bom-preview"] td:nth-child(7) { width: 125px; min-width: 125px; }
+table[data-list-layout="bom-preview"] th:nth-child(8), table[data-list-layout="bom-preview"] td:nth-child(8) { width: 192px; min-width: 192px; }
+
+/* generated list widths: end */

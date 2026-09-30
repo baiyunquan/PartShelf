@@ -1,0 +1,19 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="jlcparts"] { table-layout: fixed; width: max(100%, 1484px); min-width: 1484px; }
+table[data-list-layout="jlcparts"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="jlcparts"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="jlcparts"] .d-flex, table[data-list-layout="jlcparts"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="jlcparts"] th:nth-child(1), table[data-list-layout="jlcparts"] td:nth-child(1) { width: 104px; min-width: 104px; }
+table[data-list-layout="jlcparts"] th:nth-child(2), table[data-list-layout="jlcparts"] td:nth-child(2) { width: 323px; min-width: 323px; }
+table[data-list-layout="jlcparts"] th:nth-child(3), table[data-list-layout="jlcparts"] td:nth-child(3) { width: 88px; min-width: 88px; }
+table[data-list-layout="jlcparts"] th:nth-child(4), table[data-list-layout="jlcparts"] td:nth-child(4) { width: 135px; min-width: 135px; }
+table[data-list-layout="jlcparts"] th:nth-child(5), table[data-list-layout="jlcparts"] td:nth-child(5) { width: 203px; min-width: 203px; }
+table[data-list-layout="jlcparts"] th:nth-child(6), table[data-list-layout="jlcparts"] td:nth-child(6) { width: 128px; min-width: 128px; }
+table[data-list-layout="jlcparts"] th:nth-child(7), table[data-list-layout="jlcparts"] td:nth-child(7) { width: 101px; min-width: 101px; }
+table[data-list-layout="jlcparts"] th:nth-child(8), table[data-list-layout="jlcparts"] td:nth-child(8) { width: 88px; min-width: 88px; }
+table[data-list-layout="jlcparts"] th:nth-child(9), table[data-list-layout="jlcparts"] td:nth-child(9) { width: 154px; min-width: 154px; }
+table[data-list-layout="jlcparts"] th:nth-child(10), table[data-list-layout="jlcparts"] td:nth-child(10) { width: 160px; min-width: 160px; }
+
+/* generated list widths: end */

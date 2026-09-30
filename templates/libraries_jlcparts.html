@@ -7,6 +7,8 @@
     <link href="/static/css/bootstrap.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+      <link href="/static/css/libraries_jlcparts.css" rel="stylesheet">
+      <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     {% set active_page = 'lib_jlcparts' %}
@@ -78,19 +80,19 @@
 
       <!-- Parts Table -->
       <div class="table-responsive shadow-sm rounded bg-white">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" data-list-layout="jlcparts">
           <thead class="table-dark">
             <tr>
-              <th scope="col" style="width: 70px;">{{ t('libraries_jlcparts.th_image') }}</th>
-              <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_specs') }}</th>
-              <th scope="col" style="min-width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
-              <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_mfr') }}</th>
-              <th scope="col" style="min-width: 170px;">{{ t('libraries_jlcparts.th_category') }}</th>
-              <th scope="col" style="min-width: 120px;">{{ t('libraries_jlcparts.th_manufacturer') }}</th>
-              <th scope="col" style="min-width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
-              <th scope="col" style="width: 100px;">{{ t('libraries_jlcparts.th_stock') }}</th>
-              <th scope="col" style="min-width: 120px;">{{ t('libraries_jlcparts.th_price') }}</th>
-              <th scope="col" style="min-width: 140px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
+              <th scope="col" data-sortable="false">{{ t('libraries_jlcparts.th_image') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_specs') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_package') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_mfr') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_category') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_manufacturer') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_lcsc') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_stock') }}</th>
+              <th scope="col">{{ t('libraries_jlcparts.th_price') }}</th>
+              <th scope="col" class="text-end" data-sortable="false">{{ t('libraries_jlcparts.th_actions') }}</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -117,5 +119,6 @@
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script src="/static/js/libraries_jlcparts.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

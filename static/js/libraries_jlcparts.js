@@ -133,8 +133,8 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
                 C${item.lcsc}
               </a>
             </td>
-            <td><span class="${stockClass}">${stockText}</span></td>
-            <td><small class="text-dark fw-bold">${priceText}</small></td>
+            <td data-sort-value="${item.stock < 0 ? '' : item.stock}"><span class="${stockClass}">${stockText}</span></td>
+            <td data-sort-value="${item.price_breaks?.[0]?.price ?? ''}"><small class="text-dark fw-bold">${priceText}</small></td>
             <td class="text-end">
               <div class="d-inline-flex gap-1">
                 <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('jlcparts', '${item.lcsc}', 'C${item.lcsc} (${escapeHtml(item.mfr || '')})', '${escapeHtml(item.package || '')} | ${escapeHtml(item.category || '')}')">

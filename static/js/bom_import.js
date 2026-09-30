@@ -11,8 +11,9 @@
   let _preselectedProjectId = null;
 
   // DOM Elements
-  const modalEl = document.getElementById("bomImportModal");
-  if (!modalEl) return;
+  const pageEl = document.getElementById("bomImportPage");
+  if (!pageEl) return;
+  const preselectedProjectId = pageEl.dataset.projectId || null;
 
   const stage1 = document.getElementById("bomStage1");
   const stage2 = document.getElementById("bomStage2");
@@ -95,44 +96,20 @@
   // Target radio toggle
   targetNewRadio.addEventListener("change", () => {
     if (targetNewRadio.checked) {
-      newFields.style.display = "block";
-      existingFields.style.display = "none";
+      newFields.hidden = false;
+      existingFields.hidden = true;
     }
   });
 
   targetExistingRadio.addEventListener("change", () => {
     if (targetExistingRadio.checked) {
-      newFields.style.display = "none";
-      existingFields.style.display = "block";
+      newFields.hidden = true;
+      existingFields.hidden = false;
       loadExistingProjects();
     }
   });
 
-  // Global helper to open import modal
-  window.openBomImportModal = function (preselectProjectId = null) {
-    _preselectedProjectId = preselectProjectId;
-    resetModal();
-
-    if (_preselectedProjectId) {
-      targetExistingRadio.checked = true;
-      newFields.style.display = "none";
-      existingFields.style.display = "block";
-      loadExistingProjects().then(() => {
-        existingSelect.value = String(_preselectedProjectId);
-        existingSelect.disabled = true; // Lock when opened from project details
-      });
-    } else {
-      targetNewRadio.checked = true;
-      newFields.style.display = "block";
-      existingFields.style.display = "none";
-      existingSelect.disabled = false;
-    }
-
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
-  };
-
-  function resetModal() {
+  function initializeImportPage() {
     _parsedData = null;
     stage1.style.display = "block";
     stage2.style.display = "none";
@@ -144,7 +121,25 @@
     projectNameInput.value = "";
     projectDescInput.value = "";
     tbody.innerHTML = "";
+
+    if (preselectedProjectId) {
+      _preselectedProjectId = preselectedProjectId;
+      targetExistingRadio.checked = true;
+      newFields.hidden = true;
+      existingFields.hidden = false;
+      loadExistingProjects().then(() => {
+        existingSelect.value = String(_preselectedProjectId);
+        existingSelect.disabled = false;
+      });
+    } else {
+      targetNewRadio.checked = true;
+      newFields.hidden = false;
+      existingFields.hidden = true;
+      existingSelect.disabled = false;
+    }
   }
+
+  initializeImportPage();
 
   // Parse & Preview button
   btnParse.addEventListener("click", async () => {
@@ -207,10 +202,12 @@
 
     // Target text
     if (targetNewRadio.checked) {
-      targetSummaryText.textContent = `Target: [New Project] ${projectNameInput.value.trim()}`;
+      targetSummaryText.textContent = (getI18n().target_summary_new || "New project: {name}")
+        .replace("{name}", projectNameInput.value.trim());
     } else {
       const opt = existingSelect.options[existingSelect.selectedIndex];
-      targetSummaryText.textContent = `Target: [Existing Project] ${opt ? opt.text : ""}`;
+      targetSummaryText.textContent = (getI18n().target_summary_existing || "Existing project: {name}")
+        .replace("{name}", opt ? opt.text : "");
     }
 
     renderTableRows();
@@ -299,7 +296,7 @@
             ${(item.conflicts || []).length ? `<div class="small text-danger">${escapeHtml(item.conflicts.map((name) => getI18n()[`conflict_${name}`] || name).join("; "))}</div>` : ""}
             <div class="form-check mt-1 mb-0">
               <input class="form-check-input row-zero-stock-cb" type="checkbox" id="cb-zero-${idx}" ${item.auto_create_zero_stock ? "checked" : ""}>
-              <label class="form-check-label text-muted" style="font-size: 0.75rem;" for="cb-zero-${idx}">
+              <label class="form-check-label text-muted bom-zero-stock-label" for="cb-zero-${idx}">
                 ${getI18n().auto_create_zero_stock_hint || "Auto create 0-stock record"}
               </label>
             </div>
@@ -341,7 +338,7 @@
         <td class="text-center">
           <input class="form-check-input row-select-cb" type="checkbox" data-idx="${idx}" ${item.selected ? "checked" : ""} ${item.status === "unmatched" && !item.is_custom ? "disabled" : ""}>
         </td>
-        <td class="text-muted small">${item.row_index}</td>
+        <td class="text-muted small" data-sort-value="${item.row_index}">${item.row_index}</td>
         <td>
           <div class="fw-bold text-dark">${escapeHtml(item.value || item.comment || item.manufacturer_part || "-")}</div>
           ${item.value && item.comment && item.value !== item.comment ? `<small class="d-block text-muted">${getI18n().label_comment || "Comment"}: ${escapeHtml(item.comment)}</small>` : ""}
@@ -350,8 +347,8 @@
         </td>
         <td><code>${escapeHtml(item.designator || "-")}</code></td>
         <td><code>${escapeHtml(item.footprint || "-")}</code></td>
-        <td>
-          <input type="number" min="1" class="form-control form-control-sm text-center row-qty-input" data-idx="${idx}" value="${item.quantity}" style="width: 70px;">
+        <td data-sort-value="${item.quantity}">
+          <input type="number" min="1" class="form-control form-control-sm text-center row-qty-input" data-idx="${idx}" value="${item.quantity}">
         </td>
         <td>${statusBadge}</td>
         <td>${matchedInfoHtml}</td>

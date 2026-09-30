@@ -1,0 +1,16 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="fasteners"] { table-layout: fixed; width: max(100%, 1221px); min-width: 1221px; }
+table[data-list-layout="fasteners"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="fasteners"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="fasteners"] .d-flex, table[data-list-layout="fasteners"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="fasteners"] th:nth-child(1), table[data-list-layout="fasteners"] td:nth-child(1) { width: 244px; min-width: 244px; }
+table[data-list-layout="fasteners"] th:nth-child(2), table[data-list-layout="fasteners"] td:nth-child(2) { width: 102px; min-width: 102px; }
+table[data-list-layout="fasteners"] th:nth-child(3), table[data-list-layout="fasteners"] td:nth-child(3) { width: 168px; min-width: 168px; }
+table[data-list-layout="fasteners"] th:nth-child(4), table[data-list-layout="fasteners"] td:nth-child(4) { width: 142px; min-width: 142px; }
+table[data-list-layout="fasteners"] th:nth-child(5), table[data-list-layout="fasteners"] td:nth-child(5) { width: 283px; min-width: 283px; }
+table[data-list-layout="fasteners"] th:nth-child(6), table[data-list-layout="fasteners"] td:nth-child(6) { width: 142px; min-width: 142px; }
+table[data-list-layout="fasteners"] th:nth-child(7), table[data-list-layout="fasteners"] td:nth-child(7) { width: 140px; min-width: 140px; }
+
+/* generated list widths: end */

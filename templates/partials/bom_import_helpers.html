@@ -1,0 +1,57 @@
+<div class="modal fade" id="bomSearchBindModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white">
+        <h6 class="modal-title fw-bold">{{ t('bom_import.search_modal_title') }}</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="input-group mb-3">
+          <input type="text" class="form-control" id="bomBindSearchInput" placeholder="{{ t('bom_import.search_placeholder') }}">
+          <button class="btn btn-primary" type="button" id="bomBindSearchBtn">{{ t('libraries_common.btn_search') }}</button>
+        </div>
+        <div id="bomBindSearchResults" class="border rounded p-2 bg-light bom-bind-search-results">
+          <div class="text-muted text-center py-4">{{ t('libraries_common.no_data') }}</div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ t('libraries_common.btn_cancel') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="bomCustomPartModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-dark text-white">
+        <h6 class="modal-title fw-bold">{{ t('bom_import.custom_modal_title') }}</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('app.close') }}"></button>
+      </div>
+      <div class="modal-body p-3">
+        <form id="bomCustomPartForm">
+          <div class="mb-2">
+            <label class="form-label small fw-bold">{{ t('bom_import.custom_name') }} <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="bomCustomName" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-bold">{{ t('bom_import.custom_mfr') }}</label>
+            <input type="text" class="form-control form-control-sm" id="bomCustomMfr" value="Generic">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-bold">{{ t('bom_import.custom_package') }}</label>
+            <input type="text" class="form-control form-control-sm" id="bomCustomPackage" value="Standard">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">{{ t('bom_import.custom_desc') }}</label>
+            <input type="text" class="form-control form-control-sm" id="bomCustomDesc">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ t('libraries_common.btn_cancel') }}</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnBomSaveCustom">{{ t('bom_import.btn_save_custom') }}</button>
+      </div>
+    </div>
+  </div>
+</div>

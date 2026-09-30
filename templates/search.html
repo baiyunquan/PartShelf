@@ -8,6 +8,7 @@
     <script src="/static/js/bootstrap.bundle.js"></script>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link href="/static/css/search.css" rel="stylesheet">
+    <link href="/static/css/list_sorting.css" rel="stylesheet">
   </head>
   <body class="bg-light pb-5">
     <!-- Navbar -->
@@ -119,15 +120,15 @@
               </a>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
+              <table class="table table-hover align-middle mb-0" data-list-layout="search-inventory-overview">
                 <thead class="table-light">
                   <tr>
-                    <th style="width: 70px;">{{ t('inventory.th_id') }}</th>
+                    <th>{{ t('inventory.th_id') }}</th>
                     <th>{{ t('inventory.th_name') }}</th>
-                    <th style="width: 140px;">{{ t('inventory.th_package') }}</th>
-                    <th style="width: 130px;">{{ t('inventory.th_location') }}</th>
-                    <th style="width: 100px;">{{ t('inventory.th_quantity') }}</th>
-                    <th style="width: 90px;" class="text-end">{{ t('inventory.th_actions') }}</th>
+                    <th>{{ t('inventory.th_package') }}</th>
+                    <th>{{ t('inventory.th_location') }}</th>
+                    <th>{{ t('inventory.th_quantity') }}</th>
+                    <th class="text-end" data-sortable="false">{{ t('inventory.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-inventory-body">
@@ -150,19 +151,19 @@
               </a>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
+              <table class="table table-hover align-middle mb-0" data-list-layout="search-jlcparts-overview">
                 <thead class="table-light">
                   <tr>
-                    <th style="width: 60px;">{{ t('libraries_jlcparts.th_image') }}</th>
-                    <th style="min-width: 150px;">{{ t('libraries_jlcparts.th_specs') }}</th>
-                    <th style="width: 110px;">{{ t('libraries_jlcparts.th_package') }}</th>
+                    <th data-sortable="false">{{ t('libraries_jlcparts.th_image') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_specs') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_package') }}</th>
                     <th>{{ t('libraries_jlcparts.th_mfr') }}</th>
-                    <th style="min-width: 140px;">{{ t('libraries_jlcparts.th_category') }}</th>
-                    <th style="min-width: 110px;">{{ t('libraries_jlcparts.th_manufacturer') }}</th>
-                    <th style="width: 100px;">{{ t('libraries_jlcparts.th_lcsc') }}</th>
-                    <th style="width: 90px;">{{ t('libraries_jlcparts.th_stock') }}</th>
-                    <th style="width: 90px;">{{ t('libraries_jlcparts.th_price') }}</th>
-                    <th style="width: 150px;" class="text-end">{{ t('libraries_jlcparts.th_actions') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_category') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_manufacturer') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_lcsc') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_stock') }}</th>
+                    <th>{{ t('libraries_jlcparts.th_price') }}</th>
+                    <th class="text-end" data-sortable="false">{{ t('libraries_jlcparts.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-jlcparts-body">
@@ -185,16 +186,16 @@
               </a>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
+              <table class="table table-hover align-middle mb-0" data-list-layout="search-altium-overview">
                 <thead class="table-light">
                   <tr>
-                    <th style="min-width: 160px;">{{ t('libraries_altium.th_specs') }}</th>
-                    <th style="width: 110px;">{{ t('libraries_altium.th_package') }}</th>
+                    <th>{{ t('libraries_altium.th_specs') }}</th>
+                    <th>{{ t('libraries_altium.th_package') }}</th>
                     <th>{{ t('libraries_altium.th_lib_ref') }}</th>
-                    <th style="min-width: 130px;">{{ t('libraries_altium.th_category') }}</th>
-                    <th style="min-width: 120px;">{{ t('libraries_altium.th_manufacturer') }}</th>
-                    <th style="width: 110px;">{{ t('libraries_altium.th_lcsc_part') }}</th>
-                    <th style="width: 150px;" class="text-end">{{ t('libraries_altium.th_actions') }}</th>
+                    <th>{{ t('libraries_altium.th_category') }}</th>
+                    <th>{{ t('libraries_altium.th_manufacturer') }}</th>
+                    <th>{{ t('libraries_altium.th_lcsc_part') }}</th>
+                    <th class="text-end" data-sortable="false">{{ t('libraries_altium.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-altium-body">
@@ -217,13 +218,13 @@
               </a>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
+              <table class="table table-hover align-middle mb-0" data-list-layout="search-kicad-overview">
                 <thead class="table-light">
                   <tr>
                     <th>{{ t('libraries_kicad.th_name') }}</th>
-                    <th style="width: 180px;">{{ t('libraries_kicad.th_library') }}</th>
-                    <th style="width: 200px;">{{ t('libraries_kicad.th_footprint') }}</th>
-                    <th style="width: 160px;" class="text-end">{{ t('libraries_kicad.th_actions') }}</th>
+                    <th>{{ t('libraries_kicad.th_library') }}</th>
+                    <th>{{ t('libraries_kicad.th_footprint') }}</th>
+                    <th class="text-end" data-sortable="false">{{ t('libraries_kicad.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-kicad-body">
@@ -246,14 +247,14 @@
               </a>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
+              <table class="table table-hover align-middle mb-0" data-list-layout="search-fasteners-overview">
                 <thead class="table-light">
                   <tr>
-                    <th style="min-width: 140px;">{{ t('libraries_fasteners.th_code') }}</th>
-                    <th style="min-width: 100px;">{{ t('libraries_fasteners.th_authority') }}</th>
-                    <th style="min-width: 140px;">{{ t('libraries_fasteners.th_category') }}</th>
+                    <th>{{ t('libraries_fasteners.th_code') }}</th>
+                    <th>{{ t('libraries_fasteners.th_authority') }}</th>
+                    <th>{{ t('libraries_fasteners.th_category') }}</th>
                     <th>{{ t('libraries_fasteners.th_description') }}</th>
-                    <th style="width: 140px;" class="text-end">{{ t('libraries_fasteners.th_actions') }}</th>
+                    <th class="text-end" data-sortable="false">{{ t('libraries_fasteners.th_actions') }}</th>
                   </tr>
                 </thead>
                 <tbody id="overview-fasteners-body">
@@ -282,7 +283,7 @@
               </div>
             </div>
             <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0" id="singleViewTable">
+              <table class="table table-hover align-middle mb-0" id="singleViewTable" data-list-layout="search-inventory-single">
                 <thead class="table-dark" id="singleTableHeader">
                   <!-- Injected based on active tab -->
                 </thead>
@@ -310,5 +311,6 @@
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/import_to_inventory_modal.js"></script>
     <script src="/static/js/search.js"></script>
+    <script src="/static/js/list_sorting.js"></script>
   </body>
 </html>

@@ -43,12 +43,12 @@ function renderTable(parts) {
 
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td><span class="badge bg-light text-dark border">#${part.id}</span></td>
+      <td data-sort-value="${part.id}"><span class="badge bg-light text-dark border">#${part.id}</span></td>
       <td>
         <a href="/component_details?part_id=${part.id}" class="fw-bold text-decoration-none text-primary">
           ${escapeHtml(part.name || '-')}
         </a>
-        ${part.note ? `<small class="d-block text-muted text-truncate" style="max-width: 250px;">${escapeHtml(part.note)}</small>` : ''}
+        ${part.note ? `<small class="d-block text-muted inventory-note">${escapeHtml(part.note)}</small>` : ''}
       </td>
       <td>${getSourceBadge(part.library_source)}</td>
       <td>
@@ -64,7 +64,7 @@ function renderTable(parts) {
         </span>
         ${part.warehouse_box_id ? `<small class="d-block text-muted">${escapeHtml(I18N.warehouse_box || 'Box')} ${escapeHtml(part.warehouse_box_id)} / ${escapeHtml(I18N.warehouse_drawer || 'Drawer')} ${escapeHtml(part.warehouse_drawer_code || '')}</small>` : ''}
       </td>
-      <td>
+      <td data-sort-value="${part.quantity !== null && part.quantity !== undefined ? part.quantity : 0}">
         <span class="badge ${part.quantity > 0 ? 'bg-success' : 'bg-danger'}">
           ${part.quantity !== null && part.quantity !== undefined ? part.quantity : 0}
         </span>

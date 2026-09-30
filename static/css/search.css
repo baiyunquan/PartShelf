@@ -16,3 +16,121 @@
         object-fit: contain;
         background: #fff;
       }
+
+/* generated list widths: start */
+table[data-list-layout="search-inventory-overview"] { table-layout: fixed; width: max(100%, 766px); min-width: 766px; }
+table[data-list-layout="search-inventory-overview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-inventory-overview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-inventory-overview"] .d-flex, table[data-list-layout="search-inventory-overview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(1), table[data-list-layout="search-inventory-overview"] td:nth-child(1) { width: 72px; min-width: 72px; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(2), table[data-list-layout="search-inventory-overview"] td:nth-child(2) { width: 240px; min-width: 240px; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(3), table[data-list-layout="search-inventory-overview"] td:nth-child(3) { width: 125px; min-width: 125px; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(4), table[data-list-layout="search-inventory-overview"] td:nth-child(4) { width: 127px; min-width: 127px; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(5), table[data-list-layout="search-inventory-overview"] td:nth-child(5) { width: 102px; min-width: 102px; }
+table[data-list-layout="search-inventory-overview"] th:nth-child(6), table[data-list-layout="search-inventory-overview"] td:nth-child(6) { width: 100px; min-width: 100px; }
+
+table[data-list-layout="search-jlcparts-overview"] { table-layout: fixed; width: max(100%, 1484px); min-width: 1484px; }
+table[data-list-layout="search-jlcparts-overview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-jlcparts-overview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-jlcparts-overview"] .d-flex, table[data-list-layout="search-jlcparts-overview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(1), table[data-list-layout="search-jlcparts-overview"] td:nth-child(1) { width: 104px; min-width: 104px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(2), table[data-list-layout="search-jlcparts-overview"] td:nth-child(2) { width: 323px; min-width: 323px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(3), table[data-list-layout="search-jlcparts-overview"] td:nth-child(3) { width: 88px; min-width: 88px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(4), table[data-list-layout="search-jlcparts-overview"] td:nth-child(4) { width: 135px; min-width: 135px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(5), table[data-list-layout="search-jlcparts-overview"] td:nth-child(5) { width: 203px; min-width: 203px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(6), table[data-list-layout="search-jlcparts-overview"] td:nth-child(6) { width: 128px; min-width: 128px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(7), table[data-list-layout="search-jlcparts-overview"] td:nth-child(7) { width: 101px; min-width: 101px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(8), table[data-list-layout="search-jlcparts-overview"] td:nth-child(8) { width: 88px; min-width: 88px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(9), table[data-list-layout="search-jlcparts-overview"] td:nth-child(9) { width: 154px; min-width: 154px; }
+table[data-list-layout="search-jlcparts-overview"] th:nth-child(10), table[data-list-layout="search-jlcparts-overview"] td:nth-child(10) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-altium-overview"] { table-layout: fixed; width: max(100%, 1116px); min-width: 1116px; }
+table[data-list-layout="search-altium-overview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-altium-overview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-altium-overview"] .d-flex, table[data-list-layout="search-altium-overview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-altium-overview"] th:nth-child(1), table[data-list-layout="search-altium-overview"] td:nth-child(1) { width: 204px; min-width: 204px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(2), table[data-list-layout="search-altium-overview"] td:nth-child(2) { width: 85px; min-width: 85px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(3), table[data-list-layout="search-altium-overview"] td:nth-child(3) { width: 170px; min-width: 170px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(4), table[data-list-layout="search-altium-overview"] td:nth-child(4) { width: 168px; min-width: 168px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(5), table[data-list-layout="search-altium-overview"] td:nth-child(5) { width: 215px; min-width: 215px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(6), table[data-list-layout="search-altium-overview"] td:nth-child(6) { width: 114px; min-width: 114px; }
+table[data-list-layout="search-altium-overview"] th:nth-child(7), table[data-list-layout="search-altium-overview"] td:nth-child(7) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-kicad-overview"] { table-layout: fixed; width: max(100%, 1135px); min-width: 1135px; }
+table[data-list-layout="search-kicad-overview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-kicad-overview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-kicad-overview"] .d-flex, table[data-list-layout="search-kicad-overview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-kicad-overview"] th:nth-child(1), table[data-list-layout="search-kicad-overview"] td:nth-child(1) { width: 549px; min-width: 549px; }
+table[data-list-layout="search-kicad-overview"] th:nth-child(2), table[data-list-layout="search-kicad-overview"] td:nth-child(2) { width: 128px; min-width: 128px; }
+table[data-list-layout="search-kicad-overview"] th:nth-child(3), table[data-list-layout="search-kicad-overview"] td:nth-child(3) { width: 298px; min-width: 298px; }
+table[data-list-layout="search-kicad-overview"] th:nth-child(4), table[data-list-layout="search-kicad-overview"] td:nth-child(4) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-fasteners-overview"] { table-layout: fixed; width: max(100%, 1066px); min-width: 1066px; }
+table[data-list-layout="search-fasteners-overview"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-fasteners-overview"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-fasteners-overview"] .d-flex, table[data-list-layout="search-fasteners-overview"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-fasteners-overview"] th:nth-child(1), table[data-list-layout="search-fasteners-overview"] td:nth-child(1) { width: 244px; min-width: 244px; }
+table[data-list-layout="search-fasteners-overview"] th:nth-child(2), table[data-list-layout="search-fasteners-overview"] td:nth-child(2) { width: 102px; min-width: 102px; }
+table[data-list-layout="search-fasteners-overview"] th:nth-child(3), table[data-list-layout="search-fasteners-overview"] td:nth-child(3) { width: 160px; min-width: 160px; }
+table[data-list-layout="search-fasteners-overview"] th:nth-child(4), table[data-list-layout="search-fasteners-overview"] td:nth-child(4) { width: 420px; min-width: 420px; }
+table[data-list-layout="search-fasteners-overview"] th:nth-child(5), table[data-list-layout="search-fasteners-overview"] td:nth-child(5) { width: 140px; min-width: 140px; }
+
+table[data-list-layout="search-inventory-single"] { table-layout: fixed; width: max(100%, 766px); min-width: 766px; }
+table[data-list-layout="search-inventory-single"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-inventory-single"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-inventory-single"] .d-flex, table[data-list-layout="search-inventory-single"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-inventory-single"] th:nth-child(1), table[data-list-layout="search-inventory-single"] td:nth-child(1) { width: 72px; min-width: 72px; }
+table[data-list-layout="search-inventory-single"] th:nth-child(2), table[data-list-layout="search-inventory-single"] td:nth-child(2) { width: 240px; min-width: 240px; }
+table[data-list-layout="search-inventory-single"] th:nth-child(3), table[data-list-layout="search-inventory-single"] td:nth-child(3) { width: 125px; min-width: 125px; }
+table[data-list-layout="search-inventory-single"] th:nth-child(4), table[data-list-layout="search-inventory-single"] td:nth-child(4) { width: 127px; min-width: 127px; }
+table[data-list-layout="search-inventory-single"] th:nth-child(5), table[data-list-layout="search-inventory-single"] td:nth-child(5) { width: 102px; min-width: 102px; }
+table[data-list-layout="search-inventory-single"] th:nth-child(6), table[data-list-layout="search-inventory-single"] td:nth-child(6) { width: 100px; min-width: 100px; }
+
+table[data-list-layout="search-jlcparts-single"] { table-layout: fixed; width: max(100%, 1484px); min-width: 1484px; }
+table[data-list-layout="search-jlcparts-single"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-jlcparts-single"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-jlcparts-single"] .d-flex, table[data-list-layout="search-jlcparts-single"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(1), table[data-list-layout="search-jlcparts-single"] td:nth-child(1) { width: 104px; min-width: 104px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(2), table[data-list-layout="search-jlcparts-single"] td:nth-child(2) { width: 323px; min-width: 323px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(3), table[data-list-layout="search-jlcparts-single"] td:nth-child(3) { width: 88px; min-width: 88px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(4), table[data-list-layout="search-jlcparts-single"] td:nth-child(4) { width: 135px; min-width: 135px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(5), table[data-list-layout="search-jlcparts-single"] td:nth-child(5) { width: 203px; min-width: 203px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(6), table[data-list-layout="search-jlcparts-single"] td:nth-child(6) { width: 128px; min-width: 128px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(7), table[data-list-layout="search-jlcparts-single"] td:nth-child(7) { width: 101px; min-width: 101px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(8), table[data-list-layout="search-jlcparts-single"] td:nth-child(8) { width: 88px; min-width: 88px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(9), table[data-list-layout="search-jlcparts-single"] td:nth-child(9) { width: 154px; min-width: 154px; }
+table[data-list-layout="search-jlcparts-single"] th:nth-child(10), table[data-list-layout="search-jlcparts-single"] td:nth-child(10) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-altium-single"] { table-layout: fixed; width: max(100%, 1116px); min-width: 1116px; }
+table[data-list-layout="search-altium-single"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-altium-single"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-altium-single"] .d-flex, table[data-list-layout="search-altium-single"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-altium-single"] th:nth-child(1), table[data-list-layout="search-altium-single"] td:nth-child(1) { width: 204px; min-width: 204px; }
+table[data-list-layout="search-altium-single"] th:nth-child(2), table[data-list-layout="search-altium-single"] td:nth-child(2) { width: 85px; min-width: 85px; }
+table[data-list-layout="search-altium-single"] th:nth-child(3), table[data-list-layout="search-altium-single"] td:nth-child(3) { width: 170px; min-width: 170px; }
+table[data-list-layout="search-altium-single"] th:nth-child(4), table[data-list-layout="search-altium-single"] td:nth-child(4) { width: 168px; min-width: 168px; }
+table[data-list-layout="search-altium-single"] th:nth-child(5), table[data-list-layout="search-altium-single"] td:nth-child(5) { width: 215px; min-width: 215px; }
+table[data-list-layout="search-altium-single"] th:nth-child(6), table[data-list-layout="search-altium-single"] td:nth-child(6) { width: 114px; min-width: 114px; }
+table[data-list-layout="search-altium-single"] th:nth-child(7), table[data-list-layout="search-altium-single"] td:nth-child(7) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-kicad-single"] { table-layout: fixed; width: max(100%, 1135px); min-width: 1135px; }
+table[data-list-layout="search-kicad-single"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-kicad-single"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-kicad-single"] .d-flex, table[data-list-layout="search-kicad-single"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-kicad-single"] th:nth-child(1), table[data-list-layout="search-kicad-single"] td:nth-child(1) { width: 549px; min-width: 549px; }
+table[data-list-layout="search-kicad-single"] th:nth-child(2), table[data-list-layout="search-kicad-single"] td:nth-child(2) { width: 128px; min-width: 128px; }
+table[data-list-layout="search-kicad-single"] th:nth-child(3), table[data-list-layout="search-kicad-single"] td:nth-child(3) { width: 298px; min-width: 298px; }
+table[data-list-layout="search-kicad-single"] th:nth-child(4), table[data-list-layout="search-kicad-single"] td:nth-child(4) { width: 160px; min-width: 160px; }
+
+table[data-list-layout="search-fasteners-single"] { table-layout: fixed; width: max(100%, 1116px); min-width: 1116px; }
+table[data-list-layout="search-fasteners-single"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="search-fasteners-single"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="search-fasteners-single"] .d-flex, table[data-list-layout="search-fasteners-single"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(1), table[data-list-layout="search-fasteners-single"] td:nth-child(1) { width: 244px; min-width: 244px; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(2), table[data-list-layout="search-fasteners-single"] td:nth-child(2) { width: 102px; min-width: 102px; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(3), table[data-list-layout="search-fasteners-single"] td:nth-child(3) { width: 160px; min-width: 160px; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(4), table[data-list-layout="search-fasteners-single"] td:nth-child(4) { width: 328px; min-width: 328px; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(5), table[data-list-layout="search-fasteners-single"] td:nth-child(5) { width: 142px; min-width: 142px; }
+table[data-list-layout="search-fasteners-single"] th:nth-child(6), table[data-list-layout="search-fasteners-single"] td:nth-child(6) { width: 140px; min-width: 140px; }
+
+/* generated list widths: end */

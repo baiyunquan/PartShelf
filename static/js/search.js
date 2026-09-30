@@ -109,14 +109,14 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           invItems.forEach(item => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td><span class="badge bg-light text-dark border">#${item.id}</span></td>
+              <td data-sort-value="${item.id}"><span class="badge bg-light text-dark border">#${item.id}</span></td>
               <td>
                 <a href="${item.url}" class="fw-bold text-decoration-none text-primary">${escapeHtml(item.name)}</a>
                 <small class="text-muted d-block">${escapeHtml(item.manufacturer || '-')}</small>
               </td>
               <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td><span class="badge bg-light text-dark border">${escapeHtml(item.storage_location || 'Default Storage')}</span></td>
-              <td><span class="badge ${item.quantity > 0 ? 'bg-success' : 'bg-danger'}">${item.quantity}</span></td>
+              <td data-sort-value="${item.quantity}"><span class="badge ${item.quantity > 0 ? 'bg-success' : 'bg-danger'}">${item.quantity}</span></td>
               <td class="text-end">
                 <a href="${item.url}" class="btn btn-outline-primary btn-sm">${I18N.btn_details || 'Details'}</a>
               </td>
@@ -152,8 +152,8 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               </td>
               <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
               <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
-              <td><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
-              <td><small class="fw-bold text-dark">${price}</small></td>
+              <td data-sort-value="${item.stock}"><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
+              <td data-sort-value="${item.price_breaks?.[0]?.price ?? ''}"><small class="fw-bold text-dark">${price}</small></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1">
                   <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('jlcparts', '${item.lcsc}', 'C${item.lcsc} (${escapeHtml(item.mfr || '')})', '${escapeHtml(item.package || '')}')">
@@ -271,6 +271,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
         const total = data.total || 0;
         document.getElementById('singleViewBadge').textContent = total.toLocaleString();
 
+        document.getElementById('singleViewTable').dataset.listLayout = `search-${activeTab}-single`;
         const thead = document.getElementById('singleTableHeader');
         const tbody = document.getElementById('singleTableBody');
         tbody.innerHTML = '';
@@ -285,25 +286,25 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           document.getElementById('singleViewTitle').textContent = I18N.tab_inventory || 'My Inventory';
           thead.innerHTML = `
             <tr>
-              <th style="width: 70px;">${I18N.th_id || 'ID'}</th>
+              <th>${I18N.th_id || 'ID'}</th>
               <th>${I18N.th_name || 'Part Name'}</th>
-              <th style="width: 140px;">${I18N.th_package || 'Package'}</th>
-              <th style="width: 130px;">${I18N.th_location || 'Location'}</th>
-              <th style="width: 100px;">${I18N.th_quantity || 'Quantity'}</th>
-              <th style="width: 90px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th>${I18N.th_package || 'Package'}</th>
+              <th>${I18N.th_location || 'Location'}</th>
+              <th>${I18N.th_quantity || 'Quantity'}</th>
+              <th class="text-end" data-sortable="false">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td><span class="badge bg-light text-dark border">#${item.id}</span></td>
+              <td data-sort-value="${item.id}"><span class="badge bg-light text-dark border">#${item.id}</span></td>
               <td>
                 <a href="${item.url}" class="fw-bold text-decoration-none text-primary">${escapeHtml(item.name)}</a>
                 <small class="text-muted d-block">${escapeHtml(item.manufacturer || '-')}</small>
               </td>
               <td><code>${escapeHtml(item.package || '-')}</code></td>
               <td><span class="badge bg-light text-dark border">${escapeHtml(item.storage_location || 'Default Storage')}</span></td>
-              <td><span class="badge ${item.quantity > 0 ? 'bg-success' : 'bg-danger'}">${item.quantity}</span></td>
+              <td data-sort-value="${item.quantity}"><span class="badge ${item.quantity > 0 ? 'bg-success' : 'bg-danger'}">${item.quantity}</span></td>
               <td class="text-end">
                 <a href="${item.url}" class="btn btn-outline-primary btn-sm">${I18N.btn_details || 'Details'}</a>
               </td>
@@ -314,16 +315,16 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           document.getElementById('singleViewTitle').textContent = I18N.tab_jlcparts || 'JLCPCB Parts';
           thead.innerHTML = `
             <tr>
-              <th style="width: 60px;">${I18N.th_image || 'Image'}</th>
-              <th style="min-width: 150px;">${I18N.th_specs || 'Specs'}</th>
-              <th style="width: 110px;">${I18N.th_package || 'Package'}</th>
+              <th data-sortable="false">${I18N.th_image || 'Image'}</th>
+              <th>${I18N.th_specs || 'Specs'}</th>
+              <th>${I18N.th_package || 'Package'}</th>
               <th>${I18N.th_mfr || 'Part Number'}</th>
-              <th style="min-width: 140px;">${I18N.th_category || 'Category'}</th>
-              <th style="min-width: 110px;">${I18N.th_manufacturer || 'Manufacturer'}</th>
-              <th style="width: 100px;">${I18N.th_lcsc || 'LCSC #'}</th>
-              <th style="width: 90px;">${I18N.th_stock || 'Stock'}</th>
-              <th style="width: 90px;">${I18N.th_price || 'Price'}</th>
-              <th style="width: 150px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th>${I18N.th_category || 'Category'}</th>
+              <th>${I18N.th_manufacturer || 'Manufacturer'}</th>
+              <th>${I18N.th_lcsc || 'LCSC #'}</th>
+              <th>${I18N.th_stock || 'Stock'}</th>
+              <th>${I18N.th_price || 'Price'}</th>
+              <th class="text-end" data-sortable="false">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
@@ -346,8 +347,8 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               </td>
               <td><small class="text-muted">${escapeHtml(item.manufacturer || '-')}</small></td>
               <td><a href="/libraries/jlcparts/${item.lcsc}" class="badge bg-light text-dark border text-decoration-none fw-bold">C${item.lcsc}</a></td>
-              <td><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
-              <td><small class="fw-bold text-dark">${price}</small></td>
+              <td data-sort-value="${item.stock}"><span class="${item.stock > 0 ? 'text-success fw-bold' : 'text-muted'}">${item.stock > 0 ? item.stock.toLocaleString() : '0'}</span></td>
+              <td data-sort-value="${item.price_breaks?.[0]?.price ?? ''}"><small class="fw-bold text-dark">${price}</small></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1">
                   <button class="btn btn-outline-success btn-sm text-nowrap" onclick="openImportModal('jlcparts', '${item.lcsc}', 'C${item.lcsc} (${escapeHtml(item.mfr || '')})', '${escapeHtml(item.package || '')}')">
@@ -369,13 +370,13 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           document.getElementById('singleViewTitle').textContent = I18N.tab_altium || 'Altium Libraries';
           thead.innerHTML = `
             <tr>
-              <th style="min-width: 160px;">${I18N.th_specs || 'Specs'}</th>
-              <th style="width: 110px;">${I18N.th_package || 'Package'}</th>
+              <th>${I18N.th_specs || 'Specs'}</th>
+              <th>${I18N.th_package || 'Package'}</th>
               <th>${I18N.th_lib_ref || 'Library Ref'}</th>
-              <th style="min-width: 130px;">${I18N.th_category || 'Category'}</th>
-              <th style="min-width: 120px;">${I18N.th_manufacturer || 'Manufacturer'}</th>
-              <th style="width: 110px;">${I18N.th_lcsc_part || 'LCSC Part'}</th>
-              <th style="width: 150px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th>${I18N.th_category || 'Category'}</th>
+              <th>${I18N.th_manufacturer || 'Manufacturer'}</th>
+              <th>${I18N.th_lcsc_part || 'LCSC Part'}</th>
+              <th class="text-end" data-sortable="false">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
@@ -405,9 +406,9 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           thead.innerHTML = `
             <tr>
               <th>${I18N.th_name || 'Symbol'}</th>
-              <th style="width: 180px;">${I18N.th_library || 'Library'}</th>
-              <th style="width: 200px;">${I18N.th_footprint || 'Footprint'}</th>
-              <th style="width: 160px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th>${I18N.th_library || 'Library'}</th>
+              <th>${I18N.th_footprint || 'Footprint'}</th>
+              <th class="text-end" data-sortable="false">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
@@ -434,12 +435,12 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           document.getElementById('singleViewTitle').textContent = I18N.tab_fasteners || 'Fasteners Library';
           thead.innerHTML = `
             <tr>
-              <th style="min-width: 140px;">${I18N.th_code || 'Standard Code'}</th>
-              <th style="min-width: 100px;">${I18N.th_authority || 'Authority'}</th>
-              <th style="min-width: 140px;">${I18N.th_category || 'Category'}</th>
+              <th>${I18N.th_code || 'Standard Code'}</th>
+              <th>${I18N.th_authority || 'Authority'}</th>
+              <th>${I18N.th_category || 'Category'}</th>
               <th>${I18N.th_description || 'Description'}</th>
-              <th style="width: 110px;" class="text-center">${I18N.th_has_length || 'Length'}</th>
-              <th style="width: 140px;" class="text-end">${I18N.th_actions || 'Actions'}</th>
+              <th class="text-center">${I18N.th_has_length || 'Length'}</th>
+              <th class="text-end" data-sortable="false">${I18N.th_actions || 'Actions'}</th>
             </tr>
           `;
           data.items.forEach(item => {
@@ -461,7 +462,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
                 <div class="text-muted">${escapeHtml(item.description || '')}</div>
                 <small class="text-muted">${escapeHtml(item.param_table_name || '')}</small>
               </td>
-              <td class="text-center">${lengthBadge}</td>
+              <td class="text-center" data-sort-value="${item.has_length ? 1 : 0}">${lengthBadge}</td>
               <td class="text-end">
                 <a href="/libraries/fasteners/${encodeURIComponent(item.standard_code)}" class="btn btn-outline-primary btn-sm">详情</a>
               </td>

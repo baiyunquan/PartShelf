@@ -1,0 +1,18 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="inventory"] { table-layout: fixed; width: max(100%, 1171px); min-width: 1171px; }
+table[data-list-layout="inventory"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="inventory"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="inventory"] .d-flex, table[data-list-layout="inventory"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="inventory"] th:nth-child(1), table[data-list-layout="inventory"] td:nth-child(1) { width: 72px; min-width: 72px; }
+table[data-list-layout="inventory"] th:nth-child(2), table[data-list-layout="inventory"] td:nth-child(2) { width: 240px; min-width: 240px; }
+table[data-list-layout="inventory"] th:nth-child(3), table[data-list-layout="inventory"] td:nth-child(3) { width: 108px; min-width: 108px; }
+table[data-list-layout="inventory"] th:nth-child(4), table[data-list-layout="inventory"] td:nth-child(4) { width: 88px; min-width: 88px; }
+table[data-list-layout="inventory"] th:nth-child(5), table[data-list-layout="inventory"] td:nth-child(5) { width: 127px; min-width: 127px; }
+table[data-list-layout="inventory"] th:nth-child(6), table[data-list-layout="inventory"] td:nth-child(6) { width: 240px; min-width: 240px; }
+table[data-list-layout="inventory"] th:nth-child(7), table[data-list-layout="inventory"] td:nth-child(7) { width: 102px; min-width: 102px; }
+table[data-list-layout="inventory"] th:nth-child(8), table[data-list-layout="inventory"] td:nth-child(8) { width: 94px; min-width: 94px; }
+table[data-list-layout="inventory"] th:nth-child(9), table[data-list-layout="inventory"] td:nth-child(9) { width: 100px; min-width: 100px; }
+
+/* generated list widths: end */

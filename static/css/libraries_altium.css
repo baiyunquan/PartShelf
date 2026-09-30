@@ -1,0 +1,17 @@
+
+
+/* generated list widths: start */
+table[data-list-layout="altium"] { table-layout: fixed; width: max(100%, 1116px); min-width: 1116px; }
+table[data-list-layout="altium"] td { white-space: normal; overflow-wrap: anywhere; }
+table[data-list-layout="altium"] .text-truncate { max-width: none !important; overflow: visible; text-overflow: clip; white-space: normal; }
+table[data-list-layout="altium"] .d-flex, table[data-list-layout="altium"] .d-inline-flex { flex-wrap: wrap; min-width: 0; }
+table[data-list-layout="altium"] th:nth-child(1), table[data-list-layout="altium"] td:nth-child(1) { width: 204px; min-width: 204px; }
+table[data-list-layout="altium"] th:nth-child(2), table[data-list-layout="altium"] td:nth-child(2) { width: 85px; min-width: 85px; }
+table[data-list-layout="altium"] th:nth-child(3), table[data-list-layout="altium"] td:nth-child(3) { width: 164px; min-width: 164px; }
+table[data-list-layout="altium"] th:nth-child(4), table[data-list-layout="altium"] td:nth-child(4) { width: 115px; min-width: 115px; }
+table[data-list-layout="altium"] th:nth-child(5), table[data-list-layout="altium"] td:nth-child(5) { width: 149px; min-width: 149px; }
+table[data-list-layout="altium"] th:nth-child(6), table[data-list-layout="altium"] td:nth-child(6) { width: 114px; min-width: 114px; }
+table[data-list-layout="altium"] th:nth-child(7), table[data-list-layout="altium"] td:nth-child(7) { width: 125px; min-width: 125px; }
+table[data-list-layout="altium"] th:nth-child(8), table[data-list-layout="altium"] td:nth-child(8) { width: 160px; min-width: 160px; }
+
+/* generated list widths: end */

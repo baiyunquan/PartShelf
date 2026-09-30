@@ -1,7 +1,12 @@
 const I18N = JSON.parse(document.getElementById('page-translations').textContent);
       const urlParams = new URLSearchParams(window.location.search);
       const projectId = urlParams.get("project_id");
+      const bomImportLink = document.getElementById("importBomButton");
       let isSystemProject = false;
+
+      if (projectId && bomImportLink) {
+        bomImportLink.href = `/bom-import?project_id=${encodeURIComponent(projectId)}`;
+      }
 
       if (!projectId) {
         alert(I18N.missing_project_id);
@@ -53,13 +58,13 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
             <td>${p.manufacturer || '-'}</td>
             <td><code>${p.package || '-'}</code></td>
             <td><span class="badge bg-info text-dark">${p.part_type || '-'}</span></td>
-            <td>
+            <td data-sort-value="${p.quantity_available}">
               <span class="badge ${p.quantity_available > 0 ? 'bg-success' : 'bg-danger'}">
                 ${p.quantity_available}
               </span>
             </td>
-            <td class="fw-bold text-primary">${p.quantity_needed || 0}</td>
-            <td>
+            <td class="fw-bold text-primary" data-sort-value="${p.quantity_needed || 0}">${p.quantity_needed || 0}</td>
+            <td data-sort-value="${p.shortage || 0}">
               <span class="badge ${p.shortage > 0 ? 'bg-danger' : 'bg-success'}">
                 ${p.shortage > 0 ? `缺 ${p.shortage}` : '充足'}
               </span>
@@ -98,9 +103,9 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           row.innerHTML = `
             <td><a href="/component_details?part_id=${p.part_id}" class="fw-bold text-decoration-none">${p.part_name}</a></td>
             <td><code>${p.package || '-'}</code></td>
-            <td><span class="badge bg-secondary">${p.quantity_available}</span></td>
-            <td>${p.quantity_needed || 0}</td>
-            <td class="text-danger fw-bold fs-6">-${p.shortage}</td>
+            <td data-sort-value="${p.quantity_available}"><span class="badge bg-secondary">${p.quantity_available}</span></td>
+            <td data-sort-value="${p.quantity_needed || 0}">${p.quantity_needed || 0}</td>
+            <td class="text-danger fw-bold fs-6" data-sort-value="${p.shortage}">-${p.shortage}</td>
           `;
           tbody.appendChild(row);
         });

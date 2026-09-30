@@ -411,6 +411,10 @@
   },
   "bom_import": {
     "btn_import_bom": "Import BOM",
+    "page_heading": "Import and Review BOM",
+    "back_to_source": "Return to source page",
+    "target_summary_new": "New project: {name}",
+    "target_summary_existing": "Existing project: {name}",
     "modal_title": "Import BOM (CSV / XLSX)",
     "step_upload": "1. Upload File & Target Setup",
     "step_preview": "2. Parsing & Match Confirmation",

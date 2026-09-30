@@ -155,7 +155,7 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
                 <div class="text-muted">${escapeHtml(item.description || '')}</div>
                 <small class="text-muted">${escapeHtml(item.param_table_name || '')}</small>
               </td>
-              <td class="text-center">${lengthBadge}</td>
+              <td class="text-center" data-sort-value="${item.has_length ? 1 : 0}">${lengthBadge}</td>
               <td class="text-end">
                 <a href="/libraries/fasteners/${encodeURIComponent(item.standard_code)}" class="btn btn-sm btn-outline-primary">
                   ${i18n['libraries_common.view_details'] || '查看详情'}
