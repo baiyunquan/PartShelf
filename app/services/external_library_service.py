@@ -29,7 +29,7 @@ from app.i18n.fastener_aliases import (
 from app.services import component_search_service
 from app.services import search_alias_service
 from app.services.numeric_alias_index import prepare_numeric_aliases
-from app.services.numeric_alias_query import build_numeric_sql
+from app.services.numeric_alias_query import build_numeric_sql, parse_numeric_query
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
@@ -683,6 +683,40 @@ def extract_jlcparts_specs(category: str, subcategory: str, attrs_dict: Dict[str
     return (description[:35] + "...") if description and len(description) > 35 else (description or "-")
 
 
+def _numeric_component_priority_sql(parsed_query) -> str:
+    """Prefer primary passive categories and then non-chip records for C/R/L values."""
+    if not parsed_query:
+        return "0"
+    category_terms = {
+        "capacitance": ("capacitor", "capacitors"),
+        "resistance": ("resistor", "resistors"),
+        "inductance": ("inductor", "inductors"),
+    }
+    passive_matches = []
+    for kind in {quantity.kind for quantity in parsed_query.quantities}:
+        for term in category_terms.get(kind, ()):
+            passive_matches.extend((
+                f"lower(coalesce(j.category, '')) LIKE '%{term}%'",
+                f"lower(coalesce(j.subcategory, '')) LIKE '%{term}%'",
+            ))
+    if not passive_matches:
+        return "0"
+    chip_terms = (
+        "integrated circuit", "power management", "pmic", "interface", "memory",
+        "logic", "processor", "controller", "motor driver", "amplifier",
+        "comparator", "rf and wireless", "data acquisition", "clock/timing",
+        "signal isolation", "optoisolator",
+    )
+    chip_matches = []
+    for term in chip_terms:
+        chip_matches.extend((
+            f"lower(coalesce(j.category, '')) LIKE '%{term}%'",
+            f"lower(coalesce(j.subcategory, '')) LIKE '%{term}%'",
+        ))
+    return "CASE WHEN " + " OR ".join(passive_matches) + " THEN 0 " \
+           "WHEN " + " OR ".join(chip_matches) + " THEN 2 ELSE 1 END"
+
+
 def search_jlcparts(
     query: str = "",
     category: Optional[str] = None,
@@ -722,7 +756,9 @@ def search_jlcparts(
     jlc_search_fields = tuple(
         f"j.{field}" for field in search_alias_service.searchable_fields("jlcparts")
     ) + ("('C' || j.lcsc)",)
+    parsed_numeric_query = parse_numeric_query(q)
     numeric = build_numeric_sql(conn, "jlcparts", q, jlc_search_fields, "j.lcsc")
+    component_priority_sql = _numeric_component_priority_sql(parsed_numeric_query)
     if numeric:
         params.update(numeric.params)
     alias_lcsc_codes = []
@@ -857,17 +893,18 @@ def search_jlcparts(
         sql = f"""
         WITH {ranked_prefix} ranked AS (
             SELECT j.lcsc, j.stock, j.preferred, {rank_sql} AS relevance,
+                   {component_priority_sql} AS component_priority,
                    count(*) OVER() AS search_total
             {candidate_from}
             {where_sql}
-            ORDER BY relevance, j.stock DESC, j.preferred DESC, j.lcsc ASC
+            ORDER BY relevance, component_priority, j.stock DESC, j.preferred DESC, j.lcsc ASC
             LIMIT :page_size OFFSET :offset
         )
         SELECT {row_columns}, ranked.search_total
         FROM ranked
         JOIN jlc_components j ON j.lcsc = ranked.lcsc
         LEFT JOIN lcsc_components l ON j.lcsc = l.lcsc
-        ORDER BY ranked.relevance, ranked.stock DESC,
+        ORDER BY ranked.relevance, ranked.component_priority, ranked.stock DESC,
                  ranked.preferred DESC, ranked.lcsc ASC
         """
     else:

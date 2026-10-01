@@ -59,8 +59,31 @@ def test_exact_capacitance_precedes_stock_and_text_matches(jlc_library):
 
     assert result["total"] == 8
     assert [item["lcsc"] for item in result["items"]] == [
-        108, 103, 102, 107, 101, 106, 105, 104
+        108, 103, 102, 101, 107, 106, 105, 104
     ]
+
+
+def test_resistor_shorthand_prefers_primary_resistors_over_sensor_values(jlc_library):
+    conn = sqlite3.connect(jlc_library)
+    conn.executemany(
+        """
+        INSERT INTO jlc_components
+        (lcsc, mfr, category, subcategory, package, joints, manufacturer,
+         library_type, preferred, stock, price, description, attributes, rohs)
+        VALUES (?, ?, ?, '', '0402', 2, 'Fixture', 'expand', 0, ?, '', ?, '{}', 1)
+        """,
+        [
+            (109, "NTC-10K", "Sensors", 9000, "10kΩ NTC thermistor"),
+            (110, "RES-10K", "Resistors", 0, "10kΩ resistor"),
+            (111, "PMIC-10K", "Power Management (PMIC)", 12000, "10kΩ input resistance"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    result = libraries.search_jlcparts("10KR 0402", page_size=10)
+
+    assert [item["lcsc"] for item in result["items"][:3]] == [110, 109, 111]
 
 
 def test_spaced_capacitance_finds_attribute_only_parts(jlc_library):
@@ -76,8 +99,34 @@ def test_spaced_capacitance_finds_attribute_only_parts(jlc_library):
 
     assert result["total"] == 8
     assert [item["lcsc"] for item in result["items"]] == [
-        108, 103, 102, 107, 101, 106, 105, 104
+        108, 103, 102, 101, 107, 106, 105, 104
     ]
+
+
+def test_capacitor_and_inductor_shorthand_prefer_primary_categories(jlc_library):
+    conn = sqlite3.connect(jlc_library)
+    conn.executemany(
+        """
+        INSERT INTO jlc_components
+        (lcsc, mfr, category, subcategory, package, joints, manufacturer,
+         library_type, preferred, stock, price, description, attributes, rohs)
+        VALUES (?, ?, ?, '', '0402', 2, 'Fixture', 'expand', 0, ?, '', ?, '{}', 1)
+        """,
+        [
+            (112, "CAP-SENSOR", "Sensors", 9000, "2.7nF sensor"),
+            (113, "CAP-MLCC", "Capacitors", 0, "2.7nF capacitor"),
+            (114, "PMIC-1MH", "Power Management (PMIC)", 9000, "1mH input inductance"),
+            (115, "IND-1MH", "Inductors, Coils, Chokes", 0, "1mH inductor"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    capacitance = libraries.search_jlcparts("2.7nF 0402", page_size=5)
+    inductance = libraries.search_jlcparts("1mH 0402", page_size=5)
+
+    assert capacitance["items"][0]["lcsc"] == 113
+    assert inductance["items"][0]["lcsc"] == 115
 
 
 def test_exact_model_and_lcsc_code_win(jlc_library):
@@ -147,5 +196,5 @@ def test_pagination_and_empty_page_preserve_total(jlc_library):
     assert first["total"] == second["total"] == beyond["total"] == 8
     assert first["total_pages"] == second["total_pages"] == beyond["total_pages"] == 3
     assert [item["lcsc"] for item in first["items"]] == [108, 103, 102]
-    assert [item["lcsc"] for item in second["items"]] == [107, 101, 106]
+    assert [item["lcsc"] for item in second["items"]] == [101, 107, 106]
     assert beyond["items"] == []
