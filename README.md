@@ -32,7 +32,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 - **项目与 BOM**：创建项目、维护项目用量，上传 CSV 或 Excel BOM，预览元件匹配结果并导入新项目或已有项目。
 - **采购缺料**：按项目或汇总视图查看需求量、库存量和缺料数量。
 - **仓储视图**：按柜体和抽屉展示已有库存位置，并查看已入库及未定位元件。
-- **搜索与列表操作**：全局搜索；点击表头在当前页面对列表排序；宽表格可横向滚动。
+- **搜索与列表操作**：全局搜索支持 C/R/L 单位等值及组合搜索（如 `电容 2700pf 0603`）；等值结果优先，原文字模糊结果保留；点击表头在当前页面对列表排序；宽表格可横向滚动。
 - **协作历史**：记录项目元件的新增、数量变更和移除，可按成员或元件筛选。
 - **中英文界面**：界面支持简体中文和英语。
 
@@ -60,7 +60,7 @@ PartShelf/
 ├── db/                 # 数据库连接、初始化和维护逻辑
 ├── data/
 │   └── libraries/      # 本地参考元件库数据库（需单独提供，不纳入 Git）
-├── scripts/            # 数据转换、导入、维护和列表列宽辅助脚本
+├── scripts/            # 数据转换、导入、数值别名索引和列表列宽辅助脚本
 ├── static/
 │   ├── css/            # 页面样式
 │   ├── js/             # 页面交互脚本
@@ -99,6 +99,15 @@ python run.py
 
 ### 开发与验证
 
+电容、电阻、电感的派生别名索引首次启动时自动构建；目录数据变更后，参数搜索前按变更记录更新。也可以提前生成或完整重建，减少首次启动等待：
+
+```bash
+python scripts/rebuild_numeric_aliases.py --source all
+python scripts/rebuild_numeric_aliases.py --source jlcparts --incremental
+```
+
+脚本支持 `--library-dir` 和 `--batch-size`，输出扫描数、别名数及未发现可解析 C/R/L 参数的记录数。只更新派生表，保留原目录参数。首次构建较大的目录需要时间；数据库及所在目录需要可写，部署说明见 [DEPLOY.md](DEPLOY.md)。
+
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
@@ -120,7 +129,7 @@ python scripts/generate_list_widths.py --write
 - **Projects and BOMs**: Create projects, maintain required quantities, upload CSV or Excel BOMs, review matching results, and import into a new or existing project.
 - **Procurement**: Review required, available, and shortage quantities per project or across projects.
 - **Warehouse view**: View existing cabinet/drawer placements and review placed or unplaced parts.
-- **Search and list controls**: Search across the application; click table headers to sort the current list; wide tables can scroll horizontally.
+- **Search and list controls**: Search across the application with C/R/L unit equivalence and combined keywords; equivalent parameters precede retained text matches. Click table headers to sort the current list; wide tables can scroll horizontally.
 - **Activity history**: Track project component additions, quantity changes, and removals, with filters for members and components.
 - **Bilingual interface**: The web interface supports Simplified Chinese and English.
 
@@ -147,7 +156,7 @@ PartShelf/
 │   └── user_identity.py  # Browser username cookie handling
 ├── db/                 # Database connection, initialization, and maintenance
 ├── data/libraries/     # Local reference catalog databases (provided separately)
-├── scripts/            # Catalog conversion, import, maintenance, and list-width tools
+├── scripts/            # Catalog conversion, import, numeric aliases, and list-width tools
 ├── static/css/         # Page stylesheets
 ├── static/js/          # Page scripts
 ├── templates/          # Jinja2 page templates
@@ -183,6 +192,15 @@ Open <http://127.0.0.1:8000>. In Windows PowerShell, activate the environment wi
 - On first visit, the browser prompts for a non-empty username. It is used for activity attribution and is not an account or authentication mechanism.
 
 ### Development and verification
+
+Derived capacitance, resistance, and inductance aliases are built at startup and refreshed from changed records before parameter searches. Rebuild them ahead of startup when preparing a large catalog:
+
+```bash
+python scripts/rebuild_numeric_aliases.py --source all
+python scripts/rebuild_numeric_aliases.py --source jlcparts --incremental
+```
+
+The helper accepts `--library-dir` and `--batch-size`, reporting scanned records, aliases, and records without parseable C/R/L values. It writes derived tables while preserving original parameters. Catalog files and their directory must be writable. Search supports equivalent units (`2700pF = 2.7nF`), resistor shorthand (`4k7 = 4.7kΩ`), and combined keywords; equivalent results precede retained text matches. Note that `2700000pF = 2.7uF`, and `m` and `M` represent different prefixes. Bare numbers and model fragments are not converted.
 
 ```bash
 python -m pip install -r requirements-dev.txt

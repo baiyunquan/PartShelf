@@ -59,7 +59,7 @@ def test_exact_capacitance_precedes_stock_and_text_matches(jlc_library):
 
     assert result["total"] == 8
     assert [item["lcsc"] for item in result["items"]] == [
-        108, 103, 102, 101, 106, 105, 104, 107
+        108, 103, 102, 107, 101, 106, 105, 104
     ]
 
 
@@ -76,7 +76,7 @@ def test_spaced_capacitance_finds_attribute_only_parts(jlc_library):
 
     assert result["total"] == 8
     assert [item["lcsc"] for item in result["items"]] == [
-        108, 103, 102, 101, 106, 105, 104, 107
+        108, 103, 102, 107, 101, 106, 105, 104
     ]
 
 
@@ -147,5 +147,5 @@ def test_pagination_and_empty_page_preserve_total(jlc_library):
     assert first["total"] == second["total"] == beyond["total"] == 8
     assert first["total_pages"] == second["total_pages"] == beyond["total_pages"] == 3
     assert [item["lcsc"] for item in first["items"]] == [108, 103, 102]
-    assert [item["lcsc"] for item in second["items"]] == [101, 106, 105]
+    assert [item["lcsc"] for item in second["items"]] == [107, 101, 106]
     assert beyond["items"] == []

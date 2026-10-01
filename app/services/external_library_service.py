@@ -28,6 +28,8 @@ from app.i18n.fastener_aliases import (
 )
 from app.services import component_search_service
 from app.services import search_alias_service
+from app.services.numeric_alias_index import prepare_numeric_aliases
+from app.services.numeric_alias_query import build_numeric_sql
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "libraries"
@@ -147,6 +149,14 @@ def ensure_libraries_on_startup() -> Dict[str, Any]:
     else:
         status["fasteners"] = {"imported": False, "exists": True}
 
+    for source, path in (("jlcparts", JLCPARTS_DB_PATH), ("altium", ALTIUM_DB_PATH),
+                         ("kicad", KICAD_DB_PATH)):
+        conn = get_connection(path)
+        if conn:
+            try:
+                status[source]["numeric_aliases_ready"] = prepare_numeric_aliases(conn, source)
+            finally:
+                conn.close()
     return status
 
 
@@ -293,6 +303,7 @@ def search_altium(
     q = query_terms[0] if query_terms else q
     alias_keys = search_alias_service.record_keys_for_query("altium", q)
     text_fields = search_alias_service.searchable_fields("altium")
+    numeric = build_numeric_sql(conn, "altium", q, (*text_fields, "category"), "id")
     original_match = "(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")"
     original_params = [f"%{q}%"] * len(text_fields) if q else []
     if q:
@@ -305,7 +316,12 @@ def search_altium(
             if separator:
                 term_matches.append("(lower(source_file) = lower(?) AND lower(lib_reference) = lower(?))")
                 params.extend([source_file, lib_reference])
-        conditions.append("(" + " OR ".join(term_matches) + ")")
+        if numeric:
+            numeric_condition, numeric_params = numeric.positional(numeric.condition)
+            conditions.append(numeric_condition)
+            params = numeric_params
+        else:
+            conditions.append("(" + " OR ".join(term_matches) + ")")
 
     if category:
         conditions.append("category = ?")
@@ -328,6 +344,13 @@ def search_altium(
 
     # Data
     relevance_order = f"CASE WHEN {original_match} THEN 0 ELSE 1 END, id" if q else "id"
+    if numeric:
+        numeric_exact, exact_params = numeric.positional(numeric.exact)
+        relevance_order = (
+            "CASE WHEN lower(lib_reference)=lower(?) OR lower(mfr_part_number)=lower(?) THEN 0 "
+            f"WHEN {numeric_exact} THEN 1 WHEN {original_match} THEN 2 ELSE 3 END, id"
+        )
+        original_params = [q, q] + exact_params + original_params
     sql = f"""
     SELECT id, lib_reference, lcsc_part, category, package, manufacturer,
            mfr_part_number, basic_part, description, resistance, capacitance,
@@ -438,6 +461,7 @@ def search_kicad(
     q = query_terms[0] if query_terms else q
     alias_keys = search_alias_service.record_keys_for_query("kicad", q)
     text_fields = search_alias_service.searchable_fields("kicad")
+    numeric = build_numeric_sql(conn, "kicad", q, text_fields, "id")
     original_match = "(" + " OR ".join(f"{field} LIKE ?" for field in text_fields) + ")"
     original_params = [f"%{q}%"] * len(text_fields) if q else []
     if q:
@@ -450,7 +474,12 @@ def search_kicad(
             if separator:
                 term_matches.append("(lower(library) = lower(?) AND lower(name) = lower(?))")
                 params.extend([alias_library, name])
-        conditions.append("(" + " OR ".join(term_matches) + ")")
+        if numeric:
+            numeric_condition, numeric_params = numeric.positional(numeric.condition)
+            conditions.append(numeric_condition)
+            params = numeric_params
+        else:
+            conditions.append("(" + " OR ".join(term_matches) + ")")
 
     if library:
         conditions.append("library = ?")
@@ -464,6 +493,13 @@ def search_kicad(
 
     # Data (omitting heavy raw_sexpr in list view for performance)
     relevance_order = f"CASE WHEN {original_match} THEN 0 ELSE 1 END, library, name" if q else "library, name"
+    if numeric:
+        numeric_exact, exact_params = numeric.positional(numeric.exact)
+        relevance_order = (
+            "CASE WHEN lower(name)=lower(?) THEN 0 "
+            f"WHEN {numeric_exact} THEN 1 WHEN {original_match} THEN 2 ELSE 3 END, library, name"
+        )
+        original_params = [q] + exact_params + original_params
     sql = f"""
     SELECT id, library, name, extends, reference, value, footprint,
            datasheet, description, keywords, fp_filters, in_bom, on_board,
@@ -686,6 +722,9 @@ def search_jlcparts(
     jlc_search_fields = tuple(
         f"j.{field}" for field in search_alias_service.searchable_fields("jlcparts")
     ) + ("('C' || j.lcsc)",)
+    numeric = build_numeric_sql(conn, "jlcparts", q, jlc_search_fields, "j.lcsc")
+    if numeric:
+        params.update(numeric.params)
     alias_lcsc_codes = []
     for key in alias_keys:
         normalized_code = re.sub(r"^c", "", str(key).strip(), flags=re.IGNORECASE)
@@ -733,7 +772,7 @@ def search_jlcparts(
             if alias_lcsc_codes:
                 target_names = [f":alias_lcsc_{index}" for index in range(len(alias_lcsc_codes))]
                 matches.append("j.lcsc IN (" + ", ".join(target_names) + ")")
-            conditions.append("(" + " OR ".join(matches) + ")")
+            conditions.append(numeric.condition if numeric else "(" + " OR ".join(matches) + ")")
 
     if category:
         conditions.append("j.category = :category")
@@ -780,7 +819,9 @@ def search_jlcparts(
 
     if q:
         rank = ["WHEN j.lcsc = :code OR lower(j.mfr) = :query_lower THEN 0"]
-        if capacitance is not None:
+        if numeric:
+            rank.append(f"WHEN {numeric.exact} THEN 1")
+        elif capacitance is not None:
             rank.append(f"WHEN {capacitance_sql} = :capacitance THEN 1")
         rank.extend([
             "WHEN lower(j.mfr) LIKE lower(:prefix) THEN 2",

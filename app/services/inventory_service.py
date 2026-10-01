@@ -20,6 +20,9 @@ from app.schemas.inventory import (
 )
 from app.services.external_library_service import resolve_part_summary, resolve_part_full
 from app.services import search_alias_service
+from app.services.numeric_alias_query import (
+    inventory_match_rank, inventory_measurements, parse_numeric_query,
+)
 from app.user_identity import require_project_history_username
 
 
@@ -230,6 +233,24 @@ class InventoryService:
 
         # Get all parts and filter dynamically against hydrated attributes or storage location / note
         all_parts = cls.get_parts_inventory_list(db, lang=lang, warehouse_status=warehouse_status)
+        numeric = parse_numeric_query(q)
+        if numeric:
+            from app.services import external_library_service as libraries
+
+            records = [p.dict() if hasattr(p, "dict") else p if isinstance(p, dict) else vars(p)
+                       for p in all_parts]
+            quantities = inventory_measurements(records, {
+                "jlcparts": libraries.JLCPARTS_DB_PATH,
+                "altium": libraries.ALTIUM_DB_PATH,
+                "kicad": libraries.KICAD_DB_PATH,
+            })
+            matched = []
+            for part, record in zip(all_parts, records):
+                rank = inventory_match_rank(numeric, record, quantities.get(record.get("id"), set()))
+                if rank is not None:
+                    matched.append((rank, part))
+            matched.sort(key=lambda item: item[0])
+            return [part for _, part in matched]
         query_terms = search_alias_service.expand_query(q, "inventory")
         normalized_query = search_alias_service.normalize_alias_text(q)
         matched = []

@@ -184,6 +184,17 @@ class SearchAliasRegistry:
                 matched.append(self._record_key_names[source][key])
         return tuple(matched[:100])
 
+    def record_keys_matching_text(self, source: str, text: str) -> Tuple[str, ...]:
+        """Find curated aliases containing one keyword of a compound search."""
+        normalized = normalize_alias_text(text)
+        if not normalized:
+            return ()
+        return tuple(
+            self._record_key_names[source][key]
+            for key, values in self.record_aliases.get(source, {}).items()
+            if any(normalized in normalize_alias_text(value) for value in values)
+        )
+
     def aliases_for_record(self, source: str, record: Dict[str, Any]) -> Tuple[str, ...]:
         """Return deduplicated native and curated alias text for one source record."""
         values = list(self.native_aliases_for_record(source, record))
@@ -230,6 +241,10 @@ def expand_query(query: str, source: Optional[str] = None) -> Tuple[str, ...]:
 
 def record_keys_for_query(source: str, query: str) -> Tuple[str, ...]:
     return search_aliases.record_keys_for_query(source, query)
+
+
+def record_keys_matching_text(source: str, text: str) -> Tuple[str, ...]:
+    return search_aliases.record_keys_matching_text(source, text)
 
 
 def aliases_for_record(source: str, record: Dict[str, Any]) -> Tuple[str, ...]:
