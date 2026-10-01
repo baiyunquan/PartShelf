@@ -70,6 +70,20 @@ def group_for_record(source: str, external_id: str, record: dict) -> StorageGrou
                         ("part_type", "category", "subcategory", "library", "category_group", "category_group_zh"))
     category = category.replace("_", " ")
     reference = _normalized(record.get("reference")).upper()
+    passive_kinds = {kind for kind, pattern in _PASSIVES.items() if re.search(pattern, category, re.I)}
+    measured_kinds = set()
+    for field in ("value", "name"):
+        value = _normalized(record.get(field))
+        parsed = parse_measurements(value)
+        if len(parsed) == 1 and parsed[0].start == 0 and parsed[0].end == len(value):
+            measured_kinds.add(parsed[0].kind)
+    electrical_marker = bool(passive_kinds or measured_kinds or reference in {"C", "R", "L", "U"} or re.search(_IC, category, re.I))
+    if source == "fasteners" or (not electrical_marker and any(re.search(pattern, category, re.I) for pattern in _FAMILIES.values())) or (not electrical_marker and re.search(
+        r"\b(?:mechanical|fasteners?|hardware)\b|机械|紧固件|标准件|五金", category, re.I
+    )):
+        # Physical mechanical slots count complete specifications, not families.
+        return _group("mechanical", [source, str(external_id)],
+                      str(record.get("name") or record.get("standard_name") or external_id))
     is_chip = reference == "U" or bool(re.search(_IC, category, re.I))
     if is_chip:
         properties = record.get("properties") or record.get("properties_json") or {}
@@ -89,16 +103,12 @@ def group_for_record(source: str, external_id: str, record: dict) -> StorageGrou
         base = CHIP_MODEL_ALIASES.get(model, model)
         return _group("chip", base, base)
 
-    kinds = {kind for kind, pattern in _PASSIVES.items() if re.search(pattern, category, re.I)}
+    kinds = passive_kinds
     if reference in {"C", "R", "L"}:
         kinds.add({"C": "capacitance", "R": "resistance", "L": "inductance"}[reference])
     # A complete numeric name is sufficient when a generic custom type is used.
     if not kinds:
-        for field in ("value", "name"):
-            value = _normalized(record.get(field))
-            parsed = parse_measurements(value)
-            if len(parsed) == 1 and parsed[0].start == 0 and parsed[0].end == len(value):
-                kinds.add(parsed[0].kind)
+        kinds.update(measured_kinds)
     if len(kinds) == 1 and not re.search(r"\b(?:array|network)s?\b|排阻|阵列", category, re.I):
         kind = next(iter(kinds))
         values = {value for dimension, value in measurements_for_record(source, record) if dimension == kind}
@@ -110,9 +120,8 @@ def group_for_record(source: str, external_id: str, record: dict) -> StorageGrou
     if kinds:
         return fallback
 
-    family = mechanical_family(_normalized(record.get("standard_name"))) or mechanical_family(category)
-    if family:
-        return _group("mechanical", family, family)
+    if mechanical_family(_normalized(record.get("standard_name"))):
+        return _group("mechanical", [source, str(external_id)], str(record["standard_name"]))
     return fallback
 
 
@@ -128,7 +137,8 @@ def native_record(db: Session, source: str, external_id: str) -> dict:
     if source == "fasteners":
         from app.services.fastener_variant_service import get_fastener_variant
         variant = get_fastener_variant(external_id)
-        return variant.get("standard", {}) if variant else {}
+        return {**variant["standard"], "name": variant["summary"]["name"],
+                "package": variant["summary"]["package"]} if variant else {}
     sources = {
         "jlcparts": (catalog.JLCPARTS_DB_PATH, ("jlc_components", "lcsc_components"), "lcsc"),
         "altium": (catalog.ALTIUM_DB_PATH, ("altium_components",), "id"),

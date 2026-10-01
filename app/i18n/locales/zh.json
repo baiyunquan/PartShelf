@@ -97,7 +97,11 @@
     "quick_add_success": "已成功添加到库存！",
     "quick_add_failed": "添加到库存失败",
     "warehouse_place": "入库",
-    "warehouse_view": "查看仓位"
+    "warehouse_view": "查看仓位",
+    "warehouse_recommendation_heading": "自动仓位推荐",
+    "warehouse_recommendation_help": "推荐不会占位，也不会覆盖手写存储位置。保存库存后，可前往仓储页上传照片并确认入库。",
+    "warehouse_continue": "继续入库",
+    "warehouse_added": "已添加 {name}，可继续上传照片并确认入库。"
   },
   "details": {
     "title": "元器件详情 - PartShelf",
@@ -618,20 +622,19 @@
     "drawer_row": "第 {row} 行",
     "drawer_column": "第 {column} 列",
     "placement_heading": "实物入库",
-    "placement_help": "选择有库存的元件和抽屉类型，核对推荐位置并上传照片。确认代表元件已实际放入抽屉；推荐本身不占位。",
+    "placement_help": "选择有库存的元件，系统默认推荐小抽屉，也可切换大抽屉。核对位置、放入实物并上传照片后再确认；推荐本身不占位。",
     "part_search": "搜索未入库元件",
     "search_parts": "搜索",
     "part_select": "库存元件",
     "choose_part": "请选择元件",
-    "choose_drawer_type": "请选择小抽屉或大抽屉",
-    "choose_part_type": "请选择元件和抽屉类型。",
+    "choose_part_type": "请选择元件以自动推荐仓位。",
     "placement_target": "推荐及可选仓位",
     "placement_photo": "实物照片（必填）",
     "photo_help": "支持 PNG、JPEG、WebP，最大 10 MiB。",
     "placement_confirm": "确认已放入该抽屉",
     "placement_loading": "正在计算推荐仓位…",
     "placement_group": "混放分组",
-    "placement_compatible": "优先使用同组已有抽屉",
+    "placement_compatible": "兼容已有抽屉",
     "placement_empty": "空抽屉",
     "placement_no_available_drawer": "所选类型没有兼容或空闲抽屉，元件保持未入库。",
     "placement_already_placed": "该元件已有仓位。如需移动，请先确认移出。",
@@ -643,6 +646,7 @@
     "placement_saved": "已保存仓位和照片。",
     "remove_part": "移出仓库",
     "remove_confirm": "确认该元件已从抽屉取走？此操作删除仓位和入库照片，不修改库存数量。",
-    "placement_removed": "已移出仓库，库存数量不变。"
+    "placement_removed": "已移出仓库，库存数量不变。",
+    "placement_target_changed": "原推荐仓位已不可用，已改用最新推荐。"
   }
 }

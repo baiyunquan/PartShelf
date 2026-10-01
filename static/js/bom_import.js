@@ -265,7 +265,7 @@
         statusBadge = `<span class="badge bg-success">${getI18n().status_in_inventory || "In Inventory"}</span>`;
         matchedInfoHtml = `
           <div class="small">
-            <strong class="text-dark">${escapeHtml(item.matched_part_name || "-")}</strong>
+            ${window.ComponentLinks.renderNameLink(item, item.matched_part_name || "-")}
             <span class="text-muted ms-1">(${escapeHtml(item.matched_manufacturer || "-")})</span>
             <span class="badge bg-light text-dark border ms-1">Stock: ${item.inventory_quantity || 0}</span>
           </div>
@@ -289,7 +289,7 @@
             <div class="d-flex justify-content-between align-items-center">
               <div>
                 <span class="badge bg-dark me-1">${libName}</span>
-                <strong class="text-dark">${escapeHtml(item.matched_part_name || "-")}</strong>
+                ${window.ComponentLinks.renderNameLink(item, item.matched_part_name || "-")}
               </div>
               <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="window.openSearchBindModal(${idx})">Rebind</button>
             </div>
@@ -312,7 +312,7 @@
           <div class="d-flex justify-content-between align-items-center small border-top py-1 gap-2">
             <span class="text-truncate">
               <strong>${escapeHtml(librarySourceName(candidate.library_source))}</strong>
-              ${escapeHtml(candidate.name)}
+              ${window.ComponentLinks.renderNameLink(candidate, candidate.name)}
               <span class="text-muted">${escapeHtml([candidate.value, candidate.package, candidate.voltage, candidate.tolerance].filter(Boolean).join(" | "))}</span>
             </span>
             <button type="button" class="btn btn-outline-primary btn-sm row-suggestion-btn" data-idx="${idx}" data-candidate="${candidateIndex}">${getI18n().btn_select_part || "Select"}</button>
@@ -461,7 +461,7 @@
         <div class="me-2 text-truncate">
           <div class="d-flex align-items-center gap-1">
             <span class="badge bg-dark">${escapeHtml(sourceName)}</span>
-            <strong class="text-dark">${escapeHtml(it.name)}</strong>
+            ${window.ComponentLinks.renderNameLink(it, it.name)}
           </div>
           <small class="text-muted d-block text-truncate">${escapeHtml(meta)}</small>
           ${conflicts ? `<small class="text-danger d-block">${escapeHtml(conflicts)}</small>` : ""}

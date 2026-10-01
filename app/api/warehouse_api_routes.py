@@ -10,8 +10,16 @@ from db.database import get_db
 router = APIRouter()
 
 
+@router.get("/suggestion")
+def preview_warehouse_suggestion(library_source: str, external_part_id: str,
+                                 quantity: int = Query(1, ge=0),
+                                 drawer_type: str = Query("S", pattern="^[SL]$"),
+                                 db: Session = Depends(get_db)):
+    return WarehouseService.suggest_component(db, library_source, external_part_id, quantity, drawer_type)
+
+
 @router.get("/parts/{part_id}/suggestion")
-def get_warehouse_suggestion(part_id: int, drawer_type: str = Query(..., pattern="^[SL]$"),
+def get_warehouse_suggestion(part_id: int, drawer_type: str = Query("S", pattern="^[SL]$"),
                              db: Session = Depends(get_db)):
     return WarehouseService.suggest(db, part_id, drawer_type)
 

@@ -97,7 +97,11 @@
     "quick_add_success": "Added to inventory successfully!",
     "quick_add_failed": "Failed to add to inventory",
     "warehouse_place": "Place in warehouse",
-    "warehouse_view": "View placement"
+    "warehouse_view": "View placement",
+    "warehouse_recommendation_heading": "Automatic drawer suggestion",
+    "warehouse_recommendation_help": "Suggestions do not reserve drawers or overwrite your storage label. After saving inventory, continue to the warehouse to upload a photo and confirm placement.",
+    "warehouse_continue": "Continue to placement",
+    "warehouse_added": "Added {name}. You can continue to upload a photo and confirm placement. "
   },
   "details": {
     "title": "Component Details - PartShelf",
@@ -618,20 +622,19 @@
     "drawer_row": "Row {row}",
     "drawer_column": "Column {column}",
     "placement_heading": "Physical placement",
-    "placement_help": "Choose a stocked part and drawer type, review the suggested location and upload a photo. Confirm only after physically placing the part; suggestions do not reserve drawers.",
+    "placement_help": "Select a stocked part to get a small-drawer suggestion, or switch to large drawers. Review the location, physically place the part and upload a photo before confirming; suggestions do not reserve drawers.",
     "part_search": "Search unplaced parts",
     "search_parts": "Search",
     "part_select": "Inventory part",
     "choose_part": "Choose a part",
-    "choose_drawer_type": "Choose small or large drawers",
-    "choose_part_type": "Choose a part and drawer type.",
+    "choose_part_type": "Choose a part to get an automatic drawer suggestion.",
     "placement_target": "Suggested and alternative locations",
     "placement_photo": "Photo of the placed part (required)",
     "photo_help": "PNG, JPEG or WebP, up to 10 MiB.",
     "placement_confirm": "Confirm placement in this drawer",
     "placement_loading": "Finding suitable drawers…",
     "placement_group": "Storage group",
-    "placement_compatible": "Prefer an occupied drawer with the same group",
+    "placement_compatible": "Compatible occupied drawer",
     "placement_empty": "Empty drawer",
     "placement_no_available_drawer": "No compatible or empty drawer of this type. The part remains unplaced.",
     "placement_already_placed": "This part is already placed. Remove it before moving.",
@@ -643,6 +646,7 @@
     "placement_saved": "Placement and photo saved.",
     "remove_part": "Remove from warehouse",
     "remove_confirm": "Confirm this part has been physically removed? This deletes its placement and photo without changing stock quantity.",
-    "placement_removed": "Placement removed. Stock quantity is unchanged."
+    "placement_removed": "Placement removed. Stock quantity is unchanged.",
+    "placement_target_changed": "The original location is no longer available. The current suggestion is selected."
   }
 }

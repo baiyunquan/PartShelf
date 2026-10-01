@@ -224,7 +224,7 @@ function renderExternalSearchResults(data, target) {
       <div class="me-2 text-truncate">
         <div class="d-flex align-items-center gap-1">
           ${badge}
-          <strong class="text-dark">${escapeHtml(title)}</strong>
+          ${window.ComponentLinks.renderNameLink(item, title)}
         </div>
         <small class="text-secondary d-block text-truncate">${escapeHtml(meta)}</small>
       </div>
@@ -255,6 +255,7 @@ function selectExternalPart(source, extId, title, meta) {
   document.getElementById('previewPartMeta').textContent = meta;
   document.getElementById('previewPartBadge').innerHTML = getSourceBadge(source);
   selectedPartPreview.style.display = 'block';
+  document.dispatchEvent(new Event('inventory:component-selected'));
 
   savePartBtn.disabled = false;
 }
@@ -328,6 +329,7 @@ document.getElementById('addPartInventoryForm').addEventListener('submit', async
   const quantity = parseInt(document.getElementById('inputQuantity').value || '1', 10);
   const location = document.getElementById('inputLocation').value.trim();
   const note = document.getElementById('inputNote').value.trim();
+  const recommendationContext = window.InventoryRecommendation.snapshot();
 
   // Checkboxes
   const projectCheckboxes = document.querySelectorAll('#project-checkboxes-container input[type="checkbox"]:checked');
@@ -354,6 +356,11 @@ document.getElementById('addPartInventoryForm').addEventListener('submit', async
       throw new Error(err.detail || 'Failed to add part');
     }
     
+    const createdPart = await res.json();
+    document.dispatchEvent(new CustomEvent('inventory:added', {detail: {
+      part: createdPart, recommendation: recommendationContext
+    }}));
+
     // Close modal
     const modalEl = document.getElementById('addComponentModal');
     const modal = bootstrap.Modal.getInstance(modalEl);

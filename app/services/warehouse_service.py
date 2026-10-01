@@ -6,7 +6,7 @@ from app.models.inventory import Inventory
 from app.models.warehouse_drawer import WarehouseDrawer
 from app.models.warehouse_placement import WarehousePlacement
 from app.services.external_library_service import resolve_part_summary
-from app.services.warehouse_grouping import group_for_part
+from app.services.warehouse_grouping import group_for_part, group_for_record, native_record
 from app.warehouse_config import get_cabinet_config
 
 
@@ -43,41 +43,74 @@ class WarehouseService:
         occupants = {}
         for placement in query.all():
             if placement.part is not None:
-                occupants.setdefault((placement.cabinet_id, placement.drawer_code), set()).add(
-                    group_for_part(db, placement.part).key)
+                group = group_for_part(db, placement.part)
+                occupants.setdefault((placement.cabinet_id, placement.drawer_code), {})[group.key] = group
         return occupants
 
     @staticmethod
-    def suggest(db: Session, part_id: int, drawer_type: str) -> dict:
+    def _compatible_priority(group, occupants):
+        if not occupants:
+            return 2
+        if group.kind == "mechanical":
+            if len(occupants) > 2 or any(item.kind != "mechanical" for item in occupants.values()):
+                return None
+            if group.key in occupants:
+                return 0
+            return 1 if len(occupants) == 1 else None
+        return 0 if set(occupants) == {group.key} else None
+
+    @staticmethod
+    def _suggest_group(db, group, drawer_type, part_id=None, quantity=1):
         if drawer_type not in {"S", "L"}:
             raise HTTPException(422, "Drawer type must be S or L")
-        part = WarehouseService._part(db, part_id)
-        group = group_for_part(db, part)
         result = {"part_id": part_id, "drawer_type": drawer_type, "group": group.as_dict(),
                   "recommended": None, "candidates": [], "reason": "no_available_drawer"}
-        placement = db.get(WarehousePlacement, part_id, options=[load_only(
-            WarehousePlacement.part_id, WarehousePlacement.cabinet_id, WarehousePlacement.drawer_code)])
-        if placement:
-            result.update(reason="already_placed", placement={"cabinet_id": placement.cabinet_id,
-                          "drawer_code": placement.drawer_code})
-            return result
-        inventory = db.get(Inventory, part_id)
-        if inventory is None or inventory.quantity_available <= 0:
+        if quantity <= 0:
             result["reason"] = "no_stock"
             return result
         occupants = WarehouseService._occupants(db)
-        compatible, empty = [], []
+        buckets = [[], [], []]
         for drawer in WarehouseService._drawers(drawer_type):
-            keys = occupants.get((drawer["cabinet_id"], drawer["drawer_code"]), set())
-            if keys == {group.key}:
-                compatible.append({**drawer, "state": "compatible"})
-            elif not keys:
-                empty.append({**drawer, "state": "empty"})
-        candidates = compatible + empty
+            groups = occupants.get((drawer["cabinet_id"], drawer["drawer_code"]), {})
+            priority = WarehouseService._compatible_priority(group, groups)
+            if priority is not None:
+                buckets[priority].append({**drawer, "state": "empty" if priority == 2 else "compatible"})
+        candidates = [drawer for bucket in buckets for drawer in bucket]
         result["candidates"] = candidates
         if candidates:
             result.update(recommended=candidates[0], reason=candidates[0]["state"])
         return result
+
+    @staticmethod
+    def suggest(db: Session, part_id: int, drawer_type: str = "S") -> dict:
+        part = WarehouseService._part(db, part_id)
+        group = group_for_part(db, part)
+        placement = db.get(WarehousePlacement, part_id, options=[load_only(
+            WarehousePlacement.part_id, WarehousePlacement.cabinet_id, WarehousePlacement.drawer_code)])
+        inventory = db.get(Inventory, part_id)
+        quantity = inventory.quantity_available or 0 if inventory else 0
+        result = WarehouseService._suggest_group(db, group, drawer_type, part_id, 0 if placement else quantity)
+        if placement:
+            result.update(reason="already_placed", placement={"cabinet_id": placement.cabinet_id,
+                          "drawer_code": placement.drawer_code})
+        return result
+
+    @staticmethod
+    def suggest_component(db: Session, library_source: str, external_part_id: str,
+                          quantity: int = 1, drawer_type: str = "S") -> dict:
+        if library_source not in {"jlcparts", "altium", "kicad", "fasteners", "custom"} or quantity < 0:
+            raise HTTPException(422, "Invalid component source or quantity")
+        record = native_record(db, library_source, external_part_id)
+        if not record:
+            raise HTTPException(404, "Component not found in the local catalog")
+        group = group_for_record(library_source, external_part_id, record)
+        return WarehouseService._suggest_group(db, group, drawer_type, quantity=quantity)
+
+    @staticmethod
+    def _set_drawer_group(drawer, occupants):
+        group = next(iter(occupants.values())) if len(occupants) == 1 else None
+        drawer.group_key = group.key if group else None
+        drawer.group_label = group.label if group else None
 
     @staticmethod
     def _begin_write(db):
@@ -142,12 +175,13 @@ class WarehouseService:
                 raise HTTPException(409, "Positive stock is required for physical placement")
             drawer = WarehouseService._lock_drawer(db, cabinet_id, drawer_code)
             group = group_for_part(db, part)
-            keys = WarehouseService._occupants(db, cabinet_id, drawer_code).get((cabinet_id, drawer_code), set())
-            if keys and keys != {group.key}:
+            groups = WarehouseService._occupants(db, cabinet_id, drawer_code).get((cabinet_id, drawer_code), {})
+            if WarehouseService._compatible_priority(group, groups) is None:
                 raise HTTPException(409, "Drawer is occupied by an incompatible group; request a new suggestion")
             db.add(WarehousePlacement(part_id=part_id, cabinet_id=cabinet_id, drawer_code=drawer_code,
                                       photo_data=photo_data, photo_mime_type=photo_mime_type))
-            drawer.group_key, drawer.group_label = group.key, group.label
+            groups[group.key] = group
+            WarehouseService._set_drawer_group(drawer, groups)
             part.storage_location = f"{cabinet_id} / {drawer_code}"
             db.commit()
             return {"part_id": part_id, "cabinet_id": cabinet_id, "drawer_code": drawer_code,
@@ -176,9 +210,8 @@ class WarehouseService:
             db.delete(placement)
             db.flush()
             if drawer:
-                keys = WarehouseService._occupants(db, cabinet_id, drawer_code).get((cabinet_id, drawer_code), set())
-                drawer.group_key = next(iter(keys)) if len(keys) == 1 else None
-                drawer.group_label = None
+                groups = WarehouseService._occupants(db, cabinet_id, drawer_code).get((cabinet_id, drawer_code), {})
+                WarehouseService._set_drawer_group(drawer, groups)
             db.commit()
             return {"part_id": part_id, "removed": True}
         except Exception:

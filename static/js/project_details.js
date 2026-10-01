@@ -3,6 +3,18 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
       const projectId = urlParams.get("project_id");
       const bomImportLink = document.getElementById("importBomButton");
       let isSystemProject = false;
+      let selectableInventoryParts = [];
+
+      function updateSelectedPartLink() {
+        const selectedId = document.getElementById("partSelect").value;
+        const part = selectableInventoryParts.find(item => String(item.id) === selectedId);
+        const link = document.getElementById("project-selected-part-link");
+        link.hidden = !part;
+        if (part) {
+          link.textContent = part.name;
+          link.href = window.ComponentLinks.detailUrl({part_id: part.id});
+        } else link.removeAttribute("href");
+      }
 
       if (projectId && bomImportLink) {
         bomImportLink.href = `/bom-import?project_id=${encodeURIComponent(projectId)}`;
@@ -115,6 +127,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
         fetch("/api/inventory/get_parts_inventory")
           .then(res => res.json())
           .then(parts => {
+            selectableInventoryParts = parts;
             const select = document.getElementById("partSelect");
             select.innerHTML = '<option value="">-- 请选择 / Select --</option>';
             parts.forEach(p => {
@@ -123,6 +136,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
               opt.textContent = `${p.name} (${p.package || '-'}, 库存: ${p.quantity})`;
               select.appendChild(opt);
             });
+            updateSelectedPartLink();
           })
           .catch(err => console.error("Error loading inventory for select:", err));
       }
@@ -151,6 +165,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
           const modal = bootstrap.Modal.getInstance(modalEl);
           if (modal) modal.hide();
           document.getElementById("addPartForm").reset();
+          updateSelectedPartLink();
           loadProjectDetails();
         })
         .catch(err => {
@@ -203,6 +218,7 @@ const I18N = JSON.parse(document.getElementById('page-translations').textContent
         });
       }
 
+      document.getElementById("partSelect").addEventListener("change", updateSelectedPartLink);
       document.addEventListener("DOMContentLoaded", () => {
         loadProjectDetails();
         loadInventoryForSelect();

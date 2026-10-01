@@ -119,6 +119,7 @@
                   <select class="form-select" id="partSelect" required>
                     <option value="">-- 请选择 / Select --</option>
                   </select>
+                  <a id="project-selected-part-link" class="mt-2" target="_blank" rel="noopener noreferrer" hidden></a>
                 </div>
                 <div class="mb-3">
                   <label for="neededQuantity" class="form-label fw-bold">{{ t('project_details.label_quantity_needed') }}</label>
@@ -141,6 +142,7 @@
 
     <!-- Translations & Script -->
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
+    <script src="/static/js/component_links.js"></script>
     <script src="/static/js/project_details.js"></script>
     <script src="/static/js/list_sorting.js"></script>
   </body>

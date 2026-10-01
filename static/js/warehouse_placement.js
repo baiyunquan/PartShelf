@@ -4,6 +4,13 @@
   const form = document.getElementById("warehouse-placement-form");
   const partSelect = document.getElementById("warehouse-part-select");
   const typeSelect = document.getElementById("warehouse-drawer-type");
+  const pageParams = new URLSearchParams(window.location.search);
+  const initialPartId = pageParams.get("part_id") || "";
+  const initialType = pageParams.get("drawer_type") === "L" ? "L" : "S";
+  typeSelect.value = initialType;
+  let preferredTarget = pageParams.get("cabinet_id") && pageParams.get("drawer_code") ? {
+    cabinet_id: pageParams.get("cabinet_id"), drawer_code: pageParams.get("drawer_code"),
+  } : null;
   const targetSelect = document.getElementById("warehouse-placement-target");
   const photo = document.getElementById("warehouse-photo");
   const preview = document.getElementById("warehouse-photo-preview");
@@ -63,8 +70,13 @@
       }
       targetSelect.disabled = candidates.length === 0;
       if (candidates.length) {
-        targetSelect.value = "0";
+        const prefer = preferredTarget && partSelect.value === initialPartId && typeSelect.value === initialType;
+        const preferredIndex = prefer ? candidates.findIndex(target =>
+          target.cabinet_id === preferredTarget.cabinet_id && target.drawer_code === preferredTarget.drawer_code) : -1;
+        targetSelect.value = String(preferredIndex >= 0 ? preferredIndex : 0);
         message.textContent = `${text("placement_group")}: ${result.group.label}. ${text(`placement_${result.reason}`)}`;
+        if (prefer && preferredIndex < 0) message.textContent += ` ${text("placement_target_changed")}`;
+        preferredTarget = null;
         showTarget();
       } else {
         showMessage(`placement_${result.reason}`, true);
@@ -105,8 +117,8 @@
       if (version === searchVersion) showMessage("placement_error", true);
     }
   }
-  partSelect.addEventListener("change", suggest);
-  typeSelect.addEventListener("change", suggest);
+  partSelect.addEventListener("change", () => { preferredTarget = null; suggest(); });
+  typeSelect.addEventListener("change", () => { preferredTarget = null; suggest(); });
   targetSelect.addEventListener("change", showTarget);
   photo.addEventListener("change", () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
@@ -163,5 +175,5 @@
       showMessage("placement_error", true);
     }
   });
-  loadParts(new URLSearchParams(window.location.search).get("part_id") || "");
+  loadParts(initialPartId);
 })();

@@ -20,7 +20,8 @@ class DetailEvent extends Event {
   constructor(type, options) { super(type); this.detail = options.detail; }
 }
 
-function setup({placed = false, conflict = false, delayedSuggestions = false, empty = false, noStock = false} = {}) {
+function setup({placed = false, conflict = false, delayedSuggestions = false, empty = false, noStock = false,
+  search = "?part_id=7", excludePreferred = false} = {}) {
   const ids = ["page-translations", "warehouse-placement-form", "warehouse-part-select", "warehouse-drawer-type",
     "warehouse-placement-target", "warehouse-photo", "warehouse-photo-preview", "warehouse-placement-message",
     "warehouse-placement-confirm", "warehouse-part-search", "warehouse-part-search-button", "warehouse-drawer-parts"];
@@ -37,7 +38,7 @@ function setup({placed = false, conflict = false, delayedSuggestions = false, em
   const response = (body, status = 200) => ({ok: status === 200, status, json: async () => body});
   const suggestion = url => {
     const drawerType = url.includes("drawer_type=L") ? "L" : "S";
-    return response({group: {label: "0.0000001 F"}, reason: "empty", candidates: [1, 2].map(index => ({
+    return response({group: {label: "0.0000001 F"}, reason: "empty", candidates: (excludePreferred ? [1] : [1, 2]).map(index => ({
       cabinet_id: "BOX-000", drawer_code: `${drawerType}-0${index}`, state: "empty",
     }))});
   };
@@ -52,7 +53,7 @@ function setup({placed = false, conflict = false, delayedSuggestions = false, em
     return response(placed || empty ? [] : [part]);
   };
   vm.runInNewContext(source, {
-    document, fetch, window: {location: {search: empty || noStock ? "" : "?part_id=7"}, confirm: () => true},
+    document, fetch, window: {location: {search: empty || noStock ? "" : search}, confirm: () => true},
     Option: function(label, value) { this.text = label; this.value = value; },
     Event, CustomEvent: DetailEvent, URLSearchParams, FormData,
     URL: {createObjectURL: () => "blob:photo", revokeObjectURL() {}},
@@ -73,13 +74,13 @@ async function uploadPhoto(fixture) {
   await settle();
 }
 
-test("requires a drawer type and photo, then submits the chosen alternative", async () => {
+test("automatically recommends small drawers and requires photo before confirmation", async () => {
   const fixture = setup();
   await settle();
   assert.equal(fixture.elements["warehouse-part-select"].value, "7");
   assert.equal(fixture.elements["warehouse-placement-confirm"].disabled, true);
-  assert.equal(fixture.calls.filter(call => call.url.includes("suggestion")).length, 0);
-  await selectType(fixture);
+  assert.equal(fixture.elements["warehouse-drawer-type"].value, "S");
+  assert.equal(fixture.calls.filter(call => call.url.includes("suggestion")).length, 1);
   assert.equal(fixture.elements["warehouse-placement-confirm"].disabled, true);
   await uploadPhoto(fixture);
   assert.equal(fixture.elements["warehouse-placement-confirm"].disabled, false);
@@ -97,7 +98,6 @@ test("requires a drawer type and photo, then submits the chosen alternative", as
 test("a stale suggestion cannot replace the newly selected drawer type", async () => {
   const fixture = setup({delayedSuggestions: true});
   await settle();
-  await selectType(fixture, "S");
   await selectType(fixture, "L");
   fixture.pending[1]();
   await settle();
@@ -109,13 +109,26 @@ test("a stale suggestion cannot replace the newly selected drawer type", async (
 test("conflict refreshes suggestions and reports the changed state", async () => {
   const fixture = setup({conflict: true});
   await settle();
-  await selectType(fixture);
   await uploadPhoto(fixture);
   fixture.elements["warehouse-placement-form"].dispatchEvent(new Event("submit", {cancelable: true}));
   await settle();
   assert.equal(fixture.calls.filter(call => call.url.includes("suggestion")).length, 2);
   assert.equal(fixture.elements["warehouse-placement-message"].textContent, translations.placement_conflict);
   assert.equal(fixture.elements["warehouse-placement-confirm"].disabled, false);
+});
+
+test("continuation keeps a valid preferred target and drawer type", async () => {
+  const fixture = setup({search: "?part_id=7&drawer_type=L&cabinet_id=BOX-000&drawer_code=L-02"});
+  await settle();
+  assert.equal(fixture.elements["warehouse-drawer-type"].value, "L");
+  assert.equal(fixture.elements["warehouse-placement-target"].value, "1");
+});
+
+test("an unavailable preferred target uses the current recommendation", async () => {
+  const fixture = setup({search: "?part_id=7&cabinet_id=BOX-000&drawer_code=S-02", excludePreferred: true});
+  await settle();
+  assert.equal(fixture.elements["warehouse-placement-target"].value, "0");
+  assert.ok(fixture.elements["warehouse-placement-message"].textContent.includes(translations.placement_target_changed));
 });
 
 test("existing placement opens the drawer immediately from the details link", async () => {

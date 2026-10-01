@@ -189,7 +189,6 @@ def test_failed_write_rolls_back_placement_and_location(engine, monkeypatch):
     ("Resistor", "4k7", "4700Ω"),
     ("Inductor", "1000uH", "1mH"),
     ("IC", "LM358DR", "LM358P"),
-    ("Screw", "M3 x 8", "M4 x 20"),
 ])
 def test_grouping_equivalence(kind, a, b):
     from app.services.warehouse_grouping import group_for_record
@@ -322,14 +321,14 @@ def test_native_chip_categories_and_model_spacing(record):
     assert group.label == "LM358"
 
 
-def test_specific_mechanical_title_resolves_broad_family(engine):
+def test_specific_mechanical_title_recognizes_mechanical_spec(engine):
     from app.services.warehouse_grouping import group_for_record
     group = group_for_record("fasteners", "1", {
         "category_group": "Special Head Bolts", "category_group_zh": "特殊头型螺栓/螺钉",
         "standard_name": "Eye bolts",
     })
     assert group.kind == "mechanical"
-    assert group.label == "bolt"
+    assert group.label == "Eye bolts"
 
 
 def test_mysql_photo_type_can_store_full_upload():

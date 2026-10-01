@@ -68,6 +68,10 @@ PARTSHELF_TEST_MODE=false
 
 可在 `app/warehouse_grouping_config.py` 中维护芯片完整型号到基础型号的明确映射，修改后重启服务。单位解析共用 `app/services/electrical_value_service.py`，仓位分组读取原始元件资料，不依赖搜索别名索引。新增映射前应检查已有抽屉；不同组已经混放的抽屉不会参与推荐。
 
+库存添加预览使用只读 `GET /api/warehouse/suggestion`，参数为 `library_source`、`external_part_id`、`quantity`（默认 1）和 `drawer_type`（默认 `S`）；按库存 ID 推荐接口的抽屉类型也默认 `S`。元件资料必须存在于本地目录，预览不会创建库存、仓位或联网抓取资料，查询失败不会阻止用户只保存库存。
+
+机械件策略为任意两种完整规格混放，按来源和完整元件编号去重；正式确认会在事务锁内重新检查上限。此次调整不改变表结构，不会自动移动旧仓位；超过两种机械规格的旧抽屉会保留，但不会参与新分配。
+
 ## 4. 准备参考元件库
 
 应用的四个外部元件参考库以独立 SQLite 文件保存在：
