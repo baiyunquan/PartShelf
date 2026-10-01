@@ -336,6 +336,10 @@ fetch(`/api/inventory/get_part_by_id?part_id=${partId}`)
     document.getElementById("part-type").textContent = data.part_type || '-';
     document.getElementById("part-package").textContent = data.package || '-';
     document.getElementById("part-quantity").textContent = (data.quantity !== null && data.quantity !== undefined) ? data.quantity : 0;
+    const warehouseLink = document.getElementById("warehouse-placement-link");
+    warehouseLink.href = `/warehouse?part_id=${encodeURIComponent(partId)}`;
+    warehouseLink.classList.toggle("d-none", data.quantity <= 0 && data.warehouse_status !== "in_warehouse");
+    warehouseLink.textContent = data.warehouse_status === "in_warehouse" ? I18N.warehouse_view : I18N.warehouse_place;
     document.getElementById("part-description").textContent = data.description || (I18N.no_description || 'No description provided.');
     
     // Storage location & note

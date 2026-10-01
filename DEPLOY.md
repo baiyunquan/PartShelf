@@ -62,7 +62,11 @@ PARTSHELF_TEST_MODE=false
 
 如果口令包含 `@`、`/`、`#` 等 URL 保留字符，应先进行 URL 编码。确保数据库账号对该数据库具有建表、查询和写入权限。
 
-应用启动时会创建缺少的业务表，并初始化“散件”系统项目；这不是完整的数据库迁移框架。升级前请备份，遇到跨版本结构变更时按项目迁移脚本及版本说明操作。
+应用启动时会创建缺少的业务表，并初始化“散件”系统项目和 117 个固定抽屉身份。新增的 `warehouse_drawers` 表用于仓位事务锁及分组元数据，实际占用以 `warehouse_placements` 为准；重复启动不会覆盖已有分组元数据，也不会移动已有仓位或照片。这不是完整的数据库迁移框架，升级前请备份。
+
+仓位确认在 SQLite 中使用写事务锁，在 MySQL 中使用元件和抽屉的行锁，并为该写事务设置 `READ COMMITTED`，让等待抽屉锁后的占用查询读取最新提交的数据（参见 [MySQL 官方事务隔离说明](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html)）。照片最大 10 MiB，MySQL 的照片列会兼容升级为 `MEDIUMBLOB`；升级时数据库账号需要修改表结构权限。新增接口：`GET /api/warehouse/parts/{part_id}/suggestion?drawer_type=S|L`、带照片的 multipart `POST /api/warehouse/parts/{part_id}/placement` 和 `DELETE /api/warehouse/parts/{part_id}/placement`。读取推荐不会预留仓位。
+
+可在 `app/warehouse_grouping_config.py` 中维护芯片完整型号到基础型号的明确映射，修改后重启服务。单位解析共用 `app/services/electrical_value_service.py`，仓位分组读取原始元件资料，不依赖搜索别名索引。新增映射前应检查已有抽屉；不同组已经混放的抽屉不会参与推荐。
 
 ## 4. 准备参考元件库
 
@@ -191,6 +195,7 @@ server {
 - `data/libraries/` 下四个参考元件库。
 - `.env`（单独安全保存，不要公开其中的密码）。
 - 仓储元件照片保存在业务数据库的 `warehouse_placements` 表中，随业务数据库一并备份。
+- 仓储分组与固定抽屉身份保存在同一业务数据库的 `warehouse_drawers` 表中，也需要备份。
 
 更新前先备份数据库与本地数据；更新后安装依赖、重启服务并检查首页、参考库状态和关键业务流程。SQLite 在线备份应使用 SQLite 备份工具或停写后复制，避免只复制正在使用的数据库主文件而遗漏 WAL 数据。
 

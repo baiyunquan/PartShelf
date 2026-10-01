@@ -95,7 +95,9 @@
     "badge_loose_part": "Loose Part",
     "quick_add_title": "Add to My Inventory",
     "quick_add_success": "Added to inventory successfully!",
-    "quick_add_failed": "Failed to add to inventory"
+    "quick_add_failed": "Failed to add to inventory",
+    "warehouse_place": "Place in warehouse",
+    "warehouse_view": "View placement"
   },
   "details": {
     "title": "Component Details - PartShelf",
@@ -145,7 +147,9 @@
     "export_coming_soon": "Export details feature is under development",
     "missing_part_id": "Missing part_id parameter",
     "external_specs_header": "External Library Specifications",
-    "view_in_library": "View in External Reference Library"
+    "view_in_library": "View in External Reference Library",
+    "warehouse_place": "Place in warehouse",
+    "warehouse_view": "View placement"
   },
   "projects": {
     "title": "My Projects - PartShelf",
@@ -612,6 +616,33 @@
     "print_note": "Two A4 pages for 39 QR labels; each label is 46×32mm.",
     "cabinet_number": "Box",
     "drawer_row": "Row {row}",
-    "drawer_column": "Column {column}"
+    "drawer_column": "Column {column}",
+    "placement_heading": "Physical placement",
+    "placement_help": "Choose a stocked part and drawer type, review the suggested location and upload a photo. Confirm only after physically placing the part; suggestions do not reserve drawers.",
+    "part_search": "Search unplaced parts",
+    "search_parts": "Search",
+    "part_select": "Inventory part",
+    "choose_part": "Choose a part",
+    "choose_drawer_type": "Choose small or large drawers",
+    "choose_part_type": "Choose a part and drawer type.",
+    "placement_target": "Suggested and alternative locations",
+    "placement_photo": "Photo of the placed part (required)",
+    "photo_help": "PNG, JPEG or WebP, up to 10 MiB.",
+    "placement_confirm": "Confirm placement in this drawer",
+    "placement_loading": "Finding suitable drawers…",
+    "placement_group": "Storage group",
+    "placement_compatible": "Prefer an occupied drawer with the same group",
+    "placement_empty": "Empty drawer",
+    "placement_no_available_drawer": "No compatible or empty drawer of this type. The part remains unplaced.",
+    "placement_already_placed": "This part is already placed. Remove it before moving.",
+    "placement_no_stock": "Positive stock is required for placement.",
+    "placement_no_parts": "No stocked unplaced parts. Add stock first.",
+    "placement_error": "The request failed. Please try again.",
+    "placement_upload_error": "Placement failed. Check the photo format and size, then retry.",
+    "placement_conflict": "The drawer or stock changed. Suggestions have been refreshed; review them and retry.",
+    "placement_saved": "Placement and photo saved.",
+    "remove_part": "Remove from warehouse",
+    "remove_confirm": "Confirm this part has been physically removed? This deletes its placement and photo without changing stock quantity.",
+    "placement_removed": "Placement removed. Stock quantity is unchanged."
   }
 }

@@ -3,7 +3,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.models.project import Project
-from db.schema_migrations import LOOSE_PARTS_INTERNAL_NAME, LOOSE_PARTS_SYSTEM_KEY, initialize_main_database
+from db.schema_migrations import LOOSE_PARTS_INTERNAL_NAME, LOOSE_PARTS_SYSTEM_KEY, initialize_main_database, ensure_warehouse_drawers
 from db.database import Base
 
 
@@ -21,4 +21,5 @@ def reset_main_database_data(engine: Engine) -> dict[str, int]:
     with Session(engine) as db:
         db.add(Project(name=LOOSE_PARTS_INTERNAL_NAME, system_key=LOOSE_PARTS_SYSTEM_KEY))
         db.commit()
+    ensure_warehouse_drawers(engine)
     return removed

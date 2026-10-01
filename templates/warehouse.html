@@ -32,6 +32,42 @@
 
       <section id="warehouse-summary" class="warehouse-summary" aria-live="polite"></section>
 
+      <section class="warehouse-placement-card" aria-labelledby="warehouse-placement-heading">
+        <h2 id="warehouse-placement-heading">{{ t('warehouse.placement_heading') }}</h2>
+        <p class="text-muted">{{ t('warehouse.placement_help') }}</p>
+        <form id="warehouse-placement-form">
+          <div class="warehouse-placement-grid">
+            <div>
+              <label for="warehouse-part-search" class="form-label">{{ t('warehouse.part_search') }}</label>
+              <div class="input-group">
+                <input id="warehouse-part-search" type="search" class="form-control">
+                <button id="warehouse-part-search-button" type="button" class="btn btn-outline-secondary">{{ t('warehouse.search_parts') }}</button>
+              </div>
+              <label for="warehouse-part-select" class="form-label mt-2">{{ t('warehouse.part_select') }}</label>
+              <select id="warehouse-part-select" class="form-select" required></select>
+            </div>
+            <div>
+              <label for="warehouse-drawer-type" class="form-label">{{ t('warehouse.drawer_type_label') }}</label>
+              <select id="warehouse-drawer-type" class="form-select" required>
+                <option value="">{{ t('warehouse.choose_drawer_type') }}</option>
+                <option value="S">{{ t('warehouse.drawer_type_small') }}</option>
+                <option value="L">{{ t('warehouse.drawer_type_large') }}</option>
+              </select>
+              <label for="warehouse-placement-target" class="form-label mt-2">{{ t('warehouse.placement_target') }}</label>
+              <select id="warehouse-placement-target" class="form-select" required disabled></select>
+            </div>
+            <div>
+              <label for="warehouse-photo" class="form-label">{{ t('warehouse.placement_photo') }}</label>
+              <input id="warehouse-photo" type="file" class="form-control" accept="image/png,image/jpeg,image/webp" required>
+              <p class="form-text">{{ t('warehouse.photo_help') }}</p>
+              <img id="warehouse-photo-preview" class="warehouse-photo-preview" alt="{{ t('warehouse.placement_photo') }}" hidden>
+            </div>
+          </div>
+          <p id="warehouse-placement-message" class="mt-3 mb-2" role="status" aria-live="polite"></p>
+          <button id="warehouse-placement-confirm" class="btn btn-primary" type="submit" disabled>{{ t('warehouse.placement_confirm') }}</button>
+        </form>
+      </section>
+
       <div class="warehouse-layout">
         <section class="warehouse-box-card" aria-label="{{ t('warehouse.heading') }}">
           <div id="warehouse-box-meta" class="warehouse-box-meta"></div>
@@ -77,5 +113,6 @@
     <script id="warehouse-cabinet-config" type="application/json">{{ warehouse_cabinets | tojson }}</script>
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/warehouse.js"></script>
+    <script src="/static/js/warehouse_placement.js"></script>
   </body>
 </html>

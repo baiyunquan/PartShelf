@@ -275,6 +275,24 @@
   overflow-wrap: anywhere;
 }
 
+.warehouse-placement-card {
+  background: white;
+  border: 1px solid #dce2e8;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin: 1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.warehouse-placement-card h2 { font-size: 1.25rem; }
+.warehouse-placement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+.warehouse-placement-grid > div { min-width: 0; }
+.warehouse-photo-preview { max-width: 100%; max-height: 10rem; object-fit: contain; }
+
 #warehouse-print-sheet {
   display: none;
 }

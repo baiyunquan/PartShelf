@@ -71,6 +71,7 @@ function renderTable(parts) {
       </td>
       <td>${projectBadges}</td>
       <td class="text-end">
+        ${part.quantity > 0 || part.warehouse_status === 'in_warehouse' ? `<a href="/warehouse?part_id=${part.id}" class="btn btn-outline-success btn-sm">${escapeHtml(part.warehouse_status === 'in_warehouse' ? I18N.warehouse_view : I18N.warehouse_place)}</a>` : ''}
         <a href="/component_details?part_id=${part.id}" class="btn btn-outline-primary btn-sm text-nowrap">
           ${I18N.btn_details || 'Details'}
         </a>

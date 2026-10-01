@@ -95,7 +95,9 @@
     "badge_loose_part": "散件",
     "quick_add_title": "添加到我的库存",
     "quick_add_success": "已成功添加到库存！",
-    "quick_add_failed": "添加到库存失败"
+    "quick_add_failed": "添加到库存失败",
+    "warehouse_place": "入库",
+    "warehouse_view": "查看仓位"
   },
   "details": {
     "title": "元器件详情 - PartShelf",
@@ -145,7 +147,9 @@
     "export_coming_soon": "详情导出功能正在开发中",
     "missing_part_id": "缺少 part_id 参数",
     "external_specs_header": "外部库完整规格与参数",
-    "view_in_library": "在外部参考库中查阅"
+    "view_in_library": "在外部参考库中查阅",
+    "warehouse_place": "入库",
+    "warehouse_view": "查看仓位"
   },
   "projects": {
     "title": "我的项目 - PartShelf",
@@ -612,6 +616,33 @@
     "print_note": "A4打印；本箱39枚二维码标签分2页输出，尺寸46×32mm。",
     "cabinet_number": "箱号",
     "drawer_row": "第 {row} 行",
-    "drawer_column": "第 {column} 列"
+    "drawer_column": "第 {column} 列",
+    "placement_heading": "实物入库",
+    "placement_help": "选择有库存的元件和抽屉类型，核对推荐位置并上传照片。确认代表元件已实际放入抽屉；推荐本身不占位。",
+    "part_search": "搜索未入库元件",
+    "search_parts": "搜索",
+    "part_select": "库存元件",
+    "choose_part": "请选择元件",
+    "choose_drawer_type": "请选择小抽屉或大抽屉",
+    "choose_part_type": "请选择元件和抽屉类型。",
+    "placement_target": "推荐及可选仓位",
+    "placement_photo": "实物照片（必填）",
+    "photo_help": "支持 PNG、JPEG、WebP，最大 10 MiB。",
+    "placement_confirm": "确认已放入该抽屉",
+    "placement_loading": "正在计算推荐仓位…",
+    "placement_group": "混放分组",
+    "placement_compatible": "优先使用同组已有抽屉",
+    "placement_empty": "空抽屉",
+    "placement_no_available_drawer": "所选类型没有兼容或空闲抽屉，元件保持未入库。",
+    "placement_already_placed": "该元件已有仓位。如需移动，请先确认移出。",
+    "placement_no_stock": "库存数量必须大于零才能入库。",
+    "placement_no_parts": "没有可入库的元件，请先增加库存数量。",
+    "placement_error": "加载或操作失败，请重试。",
+    "placement_upload_error": "入库失败，请检查照片格式与大小后重试。",
+    "placement_conflict": "仓位或库存状态已变化，已重新获取推荐，请核对后重试。",
+    "placement_saved": "已保存仓位和照片。",
+    "remove_part": "移出仓库",
+    "remove_confirm": "确认该元件已从抽屉取走？此操作删除仓位和入库照片，不修改库存数量。",
+    "placement_removed": "已移出仓库，库存数量不变。"
   }
 }

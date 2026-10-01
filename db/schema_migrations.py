@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.models import WarehousePlacement  # noqa: F401 - register model metadata
 from app.models.project import Project
+from app.models.warehouse_drawer import WarehouseDrawer
+from app.warehouse_config import get_cabinet_config
 from db.database import Base
 
 
@@ -25,7 +27,35 @@ def initialize_main_database(engine: Engine) -> None:
     # The old table column is added before create_all so its declared unique
     # index can be created on both fresh and upgraded SQLite databases.
     Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "mysql":
+        from sqlalchemy.dialects.mysql import MEDIUMBLOB, LONGBLOB
+        photo_column = next(column for column in inspect(engine).get_columns("warehouse_placements")
+                            if column["name"] == "photo_data")
+        if not isinstance(photo_column["type"], (MEDIUMBLOB, LONGBLOB)):
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE warehouse_placements MODIFY photo_data MEDIUMBLOB NOT NULL"))
     ensure_loose_parts_project(engine)
+    ensure_warehouse_drawers(engine)
+
+
+def ensure_warehouse_drawers(engine: Engine) -> None:
+    """Seed stable identities without changing existing occupancy metadata."""
+    values = [
+        {"cabinet_id": cabinet["id"], "drawer_code": drawer["code"], "drawer_type": group["typeCode"]}
+        for cabinet in get_cabinet_config()
+        for group in cabinet["drawerGroups"] for drawer in group["drawers"]
+    ]
+    if engine.dialect.name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+        statement = insert(WarehouseDrawer).values(values).on_conflict_do_nothing()
+    elif engine.dialect.name == "mysql":
+        from sqlalchemy.dialects.mysql import insert
+        statement = insert(WarehouseDrawer).values(values)
+        statement = statement.on_duplicate_key_update(cabinet_id=statement.inserted.cabinet_id)
+    else:
+        raise ValueError("Warehouse allocation supports SQLite and MySQL")
+    with engine.begin() as connection:
+        connection.execute(statement)
 
 
 def ensure_loose_parts_project(engine: Engine) -> Project:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, File, Form, UploadFile, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,25 @@ from db.database import get_db
 
 
 router = APIRouter()
+
+
+@router.get("/parts/{part_id}/suggestion")
+def get_warehouse_suggestion(part_id: int, drawer_type: str = Query(..., pattern="^[SL]$"),
+                             db: Session = Depends(get_db)):
+    return WarehouseService.suggest(db, part_id, drawer_type)
+
+
+@router.post("/parts/{part_id}/placement")
+def confirm_warehouse_placement(part_id: int, cabinet_id: str = Form(...),
+                                      drawer_code: str = Form(...), photo: UploadFile = File(...),
+                                      db: Session = Depends(get_db)):
+    photo_data = photo.file.read(10 * 1024 * 1024 + 1)
+    return WarehouseService.place(db, part_id, cabinet_id, drawer_code, photo_data, photo.content_type)
+
+
+@router.delete("/parts/{part_id}/placement")
+def remove_warehouse_placement(part_id: int, db: Session = Depends(get_db)):
+    return WarehouseService.remove(db, part_id)
 
 
 @router.get("/contents")

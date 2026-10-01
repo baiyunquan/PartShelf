@@ -150,6 +150,12 @@
       const quantity = document.createElement("span");
       quantity.textContent = `${translation("part_quantity")}: ${part.quantity}`;
       content.append(name, metadata, quantity);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-outline-danger btn-sm d-block mt-2";
+      remove.dataset.removePartId = part.id;
+      remove.textContent = translation("remove_part");
+      content.appendChild(remove);
       card.append(photo, content);
       drawerParts.appendChild(card);
     }
@@ -243,10 +249,14 @@
       const payload = await response.json();
       cabinets = payload.cabinets || [];
       unplacedPartCount = payload.unplaced_part_count || 0;
+      const selectedCode = selectedDrawerNode && selectedDrawerNode.dataset.drawerCode;
       const selected = cabinets.find(item => item.id === cabinetSelect.value) || cabinets[0];
       if (selected) {
         cabinetSelect.value = selected.id;
         renderCabinet(selected);
+        const node = Array.from(visual.querySelectorAll("[data-drawer-code]"))
+          .find(item => item.dataset.drawerCode === selectedCode);
+        if (node) node.dispatchEvent(new Event("click"));
       }
     } catch (error) {
       console.error(error);
@@ -292,6 +302,16 @@
   }
 
   addCabinetOptions();
+  document.addEventListener("warehouse:refresh", loadWarehouseContents);
+  document.addEventListener("warehouse:show-drawer", (event) => {
+    const cabinet = cabinets.find(item => item.id === event.detail.cabinet_id);
+    if (!cabinet) return;
+    cabinetSelect.value = cabinet.id;
+    renderCabinet(cabinet);
+    const node = Array.from(visual.querySelectorAll("[data-drawer-code]"))
+      .find(item => item.dataset.drawerCode === event.detail.drawer_code);
+    if (node) node.dispatchEvent(new Event("click"));
+  });
   cabinetSelect.addEventListener("change", () => {
     const cabinet = cabinets.find((item) => item.id === cabinetSelect.value);
     if (cabinet) {

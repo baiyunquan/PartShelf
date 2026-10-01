@@ -31,7 +31,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 - **元件参考库**：查询 JLCParts、Altium、KiCad 和紧固件/机械标准件目录。
 - **项目与 BOM**：创建项目、维护项目用量，上传 CSV 或 Excel BOM，预览元件匹配结果并导入新项目或已有项目。
 - **采购缺料**：按项目或汇总视图查看需求量、库存量和缺料数量。
-- **仓储视图**：按柜体和抽屉展示已有库存位置，并查看已入库及未定位元件。
+- **仓储管理**：选择小/大抽屉，自动推荐兼容仓位，上传实物照片并确认入库；支持移出和打印标签。C/R/L 按单位换算后的主值混放，芯片按明确型号映射混放，机械件按同类混放。
 - **搜索与列表操作**：全局搜索支持 C/R/L 单位等值及组合搜索（如 `电容 2700pf 0603`）；等值结果优先，原文字模糊结果保留；点击表头在当前页面对列表排序；宽表格可横向滚动。
 - **协作历史**：记录项目元件的新增、数量变更和移除，可按成员或元件筛选。
 - **中英文界面**：界面支持简体中文和英语。
@@ -56,6 +56,8 @@ PartShelf/
 │   ├── schemas/        # API 请求和响应结构
 │   ├── services/       # BOM、搜索、元件库、库存、项目和仓库业务逻辑
 │   ├── main.py         # FastAPI 应用入口及启动初始化
+│   ├── warehouse_config.py # 柜体及抽屉几何配置
+│   ├── warehouse_grouping_config.py # 芯片基础型号的明确映射
 │   └── user_identity.py  # 浏览器用户名 Cookie 处理
 ├── db/                 # 数据库连接、初始化和维护逻辑
 ├── data/
@@ -128,7 +130,7 @@ python scripts/generate_list_widths.py --write
 - **Component catalogs**: Search JLCParts, Altium, KiCad, and fastener/mechanical standards.
 - **Projects and BOMs**: Create projects, maintain required quantities, upload CSV or Excel BOMs, review matching results, and import into a new or existing project.
 - **Procurement**: Review required, available, and shortage quantities per project or across projects.
-- **Warehouse view**: View existing cabinet/drawer placements and review placed or unplaced parts.
+- **Warehouse management**: Choose small or large drawers, receive compatible suggestions, upload a photo and confirm physical placement; remove placements and print labels. C/R/L groups use equivalent main values, chips use explicit model mappings, and mechanical parts share drawers within their family.
 - **Search and list controls**: Search across the application with C/R/L unit equivalence and combined keywords; equivalent parameters precede retained text matches. Click table headers to sort the current list; wide tables can scroll horizontally.
 - **Activity history**: Track project component additions, quantity changes, and removals, with filters for members and components.
 - **Bilingual interface**: The web interface supports Simplified Chinese and English.
@@ -153,6 +155,8 @@ PartShelf/
 │   ├── schemas/        # API request and response schemas
 │   ├── services/       # BOM, search, catalog, inventory, project, and warehouse logic
 │   ├── main.py         # FastAPI entry point and startup initialization
+│   ├── warehouse_config.py # Cabinet and drawer geometry
+│   ├── warehouse_grouping_config.py # Explicit chip base-model mappings
 │   └── user_identity.py  # Browser username cookie handling
 ├── db/                 # Database connection, initialization, and maintenance
 ├── data/libraries/     # Local reference catalog databases (provided separately)

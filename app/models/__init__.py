@@ -8,6 +8,7 @@ from app.models.project import Project
 from app.models.project_part import ProjectPart
 from app.models.custom_component import CustomComponent
 from app.models.warehouse_placement import WarehousePlacement
+from app.models.warehouse_drawer import WarehouseDrawer
 from app.models.project_component_history import ProjectComponentHistory
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "ProjectPart",
     "CustomComponent",
     "WarehousePlacement",
+    "WarehouseDrawer",
     "ProjectComponentHistory",
 ]
