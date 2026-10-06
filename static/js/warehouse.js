@@ -304,13 +304,24 @@
   addCabinetOptions();
   document.addEventListener("warehouse:refresh", loadWarehouseContents);
   document.addEventListener("warehouse:show-drawer", (event) => {
+    if (!event.detail) return;
     const cabinet = cabinets.find(item => item.id === event.detail.cabinet_id);
     if (!cabinet) return;
+    if (!cabinet.drawerGroups.some(group => group.drawers.some(drawer => drawer.code === event.detail.drawer_code))) return;
     cabinetSelect.value = cabinet.id;
     renderCabinet(cabinet);
     const node = Array.from(visual.querySelectorAll("[data-drawer-code]"))
       .find(item => item.dataset.drawerCode === event.detail.drawer_code);
-    if (node) node.dispatchEvent(new Event("click"));
+    if (node) {
+      node.dispatchEvent(new Event("click"));
+      if (event.detail.scroll_to_drawer) {
+        window.requestAnimationFrame(() => {
+          const panel = document.getElementById("warehouse-drawer-details");
+          panel.focus({preventScroll: true});
+          panel.scrollIntoView({behavior: "smooth", block: "start"});
+        });
+      }
+    }
   });
   cabinetSelect.addEventListener("change", () => {
     const cabinet = cabinets.find((item) => item.id === cabinetSelect.value);

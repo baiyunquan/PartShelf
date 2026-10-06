@@ -24,6 +24,9 @@
             <label for="warehouse-cabinet-select">{{ t('warehouse.box_select_label') }}</label>
             <select id="warehouse-cabinet-select" class="form-select" aria-label="{{ t('warehouse.box_select_label') }}"></select>
           </div>
+          <button id="warehouse-scan-button" class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#warehouse-scan-modal">
+            {{ t('warehouse.scan_drawer') }}
+          </button>
           <button id="warehouse-print-button" class="btn btn-outline-primary" type="button">
             {{ t('warehouse.print_labels') }}
           </button>
@@ -74,7 +77,7 @@
           <p class="warehouse-print-note">{{ t('warehouse.print_note') }}</p>
         </section>
 
-        <aside id="warehouse-drawer-details" class="warehouse-details-card" aria-live="polite">
+        <aside id="warehouse-drawer-details" class="warehouse-details-card" aria-live="polite" tabindex="-1">
           <h2>{{ t('warehouse.drawer_panel_title') }}</h2>
           <p id="warehouse-drawer-placeholder" class="warehouse-drawer-placeholder">
             {{ t('warehouse.drawer_select_hint') }}
@@ -107,11 +110,47 @@
       <div id="warehouse-print-sheet" aria-hidden="true"></div>
     </main>
 
+    <div id="warehouse-scan-modal" class="modal fade" tabindex="-1" aria-labelledby="warehouse-scan-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="warehouse-scan-title" class="modal-title fs-5">{{ t('warehouse.scan_drawer') }}</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('warehouse.scan_close') }}"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted">{{ t('warehouse.scan_help') }}</p>
+            <video id="warehouse-scan-video" class="warehouse-scan-video" autoplay muted playsinline hidden></video>
+            <div class="warehouse-scan-controls mt-3">
+              <div>
+                <label for="warehouse-scan-camera" class="form-label">{{ t('warehouse.scan_camera') }}</label>
+                <select id="warehouse-scan-camera" class="form-select" disabled></select>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button id="warehouse-scan-start" class="btn btn-outline-primary" type="button">{{ t('warehouse.scan_start') }}</button>
+                <button id="warehouse-scan-stop" class="btn btn-outline-secondary" type="button" disabled>{{ t('warehouse.scan_stop') }}</button>
+              </div>
+              <div>
+                <label for="warehouse-scan-image" class="form-label">{{ t('warehouse.scan_upload') }}</label>
+                <input id="warehouse-scan-image" class="form-control" type="file" accept="image/jpeg,image/png,image/webp">
+              </div>
+            </div>
+            <p id="warehouse-scan-message" class="mt-3 mb-0 text-secondary" role="status" aria-live="polite"></p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('warehouse.scan_close') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     {% include 'partials/footer.html' %}
 
     <script id="warehouse-cabinet-config" type="application/json">{{ warehouse_cabinets | tojson }}</script>
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/warehouse.js"></script>
     <script src="/static/js/warehouse_placement.js"></script>
+    <script src="/static/js/vendor/zxing-wasm/reader.js"></script>
+    <script src="/static/js/scan_decoder.js"></script>
+    <script src="/static/js/warehouse_scan.js"></script>
   </body>
 </html>

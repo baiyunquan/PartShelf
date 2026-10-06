@@ -27,7 +27,20 @@
   display: flex;
   align-items: end;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
+
+.warehouse-scan-video {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: #111827;
+}
+
+.warehouse-scan-video[hidden] { display: none; }
+.warehouse-scan-controls { display: grid; gap: 0.75rem; }
 
 .warehouse-cabinet-picker {
   min-width: 10rem;
@@ -157,6 +170,7 @@
 
 .warehouse-details-card {
   padding: 1.25rem;
+  scroll-margin-top: 7rem;
 }
 
 .warehouse-details-card h2 {
