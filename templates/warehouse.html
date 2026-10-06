@@ -27,7 +27,7 @@
           <button id="warehouse-scan-button" class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#warehouse-scan-modal">
             {{ t('warehouse.scan_drawer') }}
           </button>
-          <button id="warehouse-print-button" class="btn btn-outline-primary" type="button">
+          <button id="warehouse-print-button" class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#warehouse-print-modal">
             {{ t('warehouse.print_labels') }}
           </button>
         </div>
@@ -109,6 +109,37 @@
 
       <div id="warehouse-print-sheet" aria-hidden="true"></div>
     </main>
+
+    <div id="warehouse-print-modal" class="modal fade" tabindex="-1" aria-labelledby="warehouse-print-title" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <form id="warehouse-print-form" class="modal-content">
+          <div class="modal-header">
+            <h2 id="warehouse-print-title" class="modal-title fs-5">{{ t('warehouse.print_labels') }}</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('warehouse.print_cancel') }}"></button>
+          </div>
+          <div class="modal-body">
+            <fieldset>
+              <legend class="fs-6">{{ t('warehouse.print_scope') }}</legend>
+              <div class="form-check mb-3">
+                <input id="warehouse-print-current" class="form-check-input" type="radio" name="warehouse-print-scope" value="current" checked>
+                <label class="form-check-label" for="warehouse-print-current">
+                  {{ t('warehouse.print_current') }} <span id="warehouse-print-current-box" class="text-muted"></span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input id="warehouse-print-all" class="form-check-input" type="radio" name="warehouse-print-scope" value="all">
+                <label class="form-check-label" for="warehouse-print-all">{{ t('warehouse.print_all') }}</label>
+              </div>
+            </fieldset>
+            <p class="text-muted small mt-3 mb-0">{{ t('warehouse.print_note') }}</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('warehouse.print_cancel') }}</button>
+            <button id="warehouse-print-confirm" type="submit" class="btn btn-primary">{{ t('warehouse.print_confirm') }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div id="warehouse-scan-modal" class="modal fade" tabindex="-1" aria-labelledby="warehouse-scan-title" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">

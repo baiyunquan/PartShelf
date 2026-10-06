@@ -284,17 +284,17 @@
     return label;
   }
 
-  function preparePrintSheet(cabinet) {
+  function preparePrintSheet(selectedCabinets) {
     printSheet.replaceChildren();
-    const drawers = cabinet.drawerGroups.flatMap((group) =>
-      group.drawers.map((drawer) => ({ group, drawer })),
-    );
+    const drawers = selectedCabinets.flatMap(cabinet => cabinet.drawerGroups.flatMap(group =>
+      group.drawers.map(drawer => ({cabinet, group, drawer})),
+    ));
     const labelsPerPage = 32;
     for (let offset = 0; offset < drawers.length; offset += labelsPerPage) {
       const page = document.createElement("section");
       page.className = "warehouse-label-page";
-      page.setAttribute("aria-label", `${cabinet.id}, ${Math.floor(offset / labelsPerPage) + 1}`);
-      for (const { group, drawer } of drawers.slice(offset, offset + labelsPerPage)) {
+      page.setAttribute("aria-label", `${translation("print_labels")}, ${Math.floor(offset / labelsPerPage) + 1}`);
+      for (const { cabinet, group, drawer } of drawers.slice(offset, offset + labelsPerPage)) {
         page.appendChild(makeLabel(cabinet, group, drawer));
       }
       printSheet.appendChild(page);
@@ -329,12 +329,36 @@
       renderCabinet(cabinet);
     }
   });
-  document.getElementById("warehouse-print-button").addEventListener("click", () => {
+  const printModalNode = document.getElementById("warehouse-print-modal");
+  const printModal = bootstrap.Modal.getOrCreateInstance(printModalNode);
+  const printCurrent = document.getElementById("warehouse-print-current");
+  const printAll = document.getElementById("warehouse-print-all");
+  const printConfirm = document.getElementById("warehouse-print-confirm");
+  let printRequested = false;
+  printModalNode.addEventListener("show.bs.modal", () => {
+    printRequested = false;
     const cabinet = cabinets.find((item) => item.id === cabinetSelect.value);
-    if (!cabinet) {
-      return;
-    }
-    preparePrintSheet(cabinet);
+    setText("warehouse-print-current-box", cabinet ? `(${cabinet.displayNumber} / ${cabinet.id})` : "");
+    printCurrent.disabled = !cabinet;
+    printCurrent.checked = !!cabinet;
+    printAll.disabled = !cabinets.length;
+    printAll.checked = !cabinet && !!cabinets.length;
+    printConfirm.disabled = !cabinets.length;
+  });
+  document.getElementById("warehouse-print-form").addEventListener("submit", event => {
+    event.preventDefault();
+    if (printRequested) return;
+    const cabinet = cabinets.find((item) => item.id === cabinetSelect.value);
+    const selectedCabinets = printAll.checked ? cabinets : cabinet ? [cabinet] : [];
+    if (!selectedCabinets.length) return;
+    preparePrintSheet(selectedCabinets);
+    printRequested = true;
+    printConfirm.disabled = true;
+    printModal.hide();
+  });
+  printModalNode.addEventListener("hidden.bs.modal", () => {
+    if (!printRequested) return;
+    printRequested = false;
     window.requestAnimationFrame(() => window.print());
   });
 

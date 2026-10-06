@@ -84,7 +84,7 @@ def test_warehouse_page_exposes_local_qr_controls_and_a4_print_resources():
     assert not re.search(r'<script[^>]+src=["\']https?://', response.text)
     assert translations_match
     translations = json.loads(translations_match.group(1))
-    assert translations["print_labels"] == "Print labels for this box"
+    assert translations["print_labels"] == "Print QR labels"
 
     stylesheet = client.get("/static/css/warehouse.css")
     assert stylesheet.status_code == 200
