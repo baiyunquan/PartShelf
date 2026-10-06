@@ -33,6 +33,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
         "project_details.html": "project_details",
         "project_history.html": "project_history",
         "bom_import.html": "bom_import",
+        "scan_import.html": "scan_import",
         "procurement.html": "procurement",
         "warehouse.html": "warehouse",
         "libraries_jlcparts.html": "libraries_jlcparts",
@@ -96,6 +97,13 @@ def get_home_template(request: Request):
 @router.get("/inventory", response_class=HTMLResponse)
 def get_inventory_template(request: Request):
     return render_template(request=request, name="inventory.html", context={"active_page": "inventory"})
+
+
+@router.get("/scan-import", response_class=HTMLResponse)
+def get_scan_import_template(request: Request, project_id: int | None = None):
+    return render_template(request=request, name="scan_import.html", context={
+        "active_page": "scan_import", "project_id": project_id if project_id and project_id > 0 else None,
+    })
 
 @router.get("/component_details", response_class=HTMLResponse)
 def get_component_details_template(request: Request):

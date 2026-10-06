@@ -20,6 +20,7 @@ sudo mkdir -p /opt/partshelf
 sudo chown "$USER":"$USER" /opt/partshelf
 git clone https://git.example.com/your-org/PartShelf.git /opt/partshelf
 cd /opt/partshelf
+git submodule update --init vendor/zxing-wasm
 
 python3 -m venv .venv
 . .venv/bin/activate
@@ -101,6 +102,37 @@ PARTSHELF_TEST_MODE=false
 可用 `--source jlcparts`、`--source altium` 或 `--source kicad` 只处理已安装的目录，或用 `--library-dir /path/to/libraries` 指定目录。默认每批 2000 条，可用 `--batch-size` 调整。脚本输出扫描数量、别名数量以及未发现可解析 C/R/L 参数的记录数量；指定的目录缺失或构建失败时退出码非零。
 
 应用启动时检查索引；解析规则或人工别名配置更新并重启服务后，会按新版本或配置重建。较大的目录首次构建可能需要等待；建议在服务停止时提前运行脚本。后续参数搜索仅重新解析触发器登记的变更记录，也可以用 `--incremental` 主动刷新。完整重建和增量刷新均使用事务，原始目录参数不被改写。构建失败会写入日志并保留原文字搜索，应修复目录权限或数据库问题后重建索引。
+
+### 独立 OCR 服务与扫码资源
+
+浏览器二维码读取使用固定版本的 `vendor/zxing-wasm` 子模块。`static/js/vendor/zxing-wasm/` 已包含同版本的 JavaScript、WASM 和许可证，正常部署无需 Node.js 或 CDN。需要重新生成时运行：
+
+```bash
+.venv/bin/python scripts/prepare_scan_assets.py
+```
+
+OCR 不安装到 PartShelf 主环境。独立服务使用 Python 3.11、PaddleOCR 2.9.1 和 PaddlePaddle 2.6.2，可部署到另一台设备。服务源码在 `services/paddleocr_api/`；工作区中同步到 ElectronicQwen 后的安装示例：
+
+```bash
+.venv/bin/python scripts/sync_ocr_api.py --destination ../ElectronicQwen
+cd ../ElectronicQwen
+python3.11 -m venv .venv-ocr
+.venv-ocr/bin/python -m pip install -r ocr_api/requirements.txt
+.venv-ocr/bin/python -m uvicorn ocr_api.server:app --host 127.0.0.1 --port 8010
+```
+
+首次加载会下载 PP-OCRv4 模型。离线模型路径、远程监听、Windows 启动和完整接口说明见 [独立 OCR API 文档](services/paddleocr_api/API.md)。该服务可用独立 systemd 服务管理，工作目录和虚拟环境必须与 PartShelf 分开。
+
+在 PartShelf 的 `.env` 中配置服务根地址：
+
+```dotenv
+PADDLEOCR_API_URL=http://127.0.0.1:8010
+PADDLEOCR_TIMEOUT_SECONDS=60
+```
+
+服务可用状态通过 `GET /health` 检查，OCR 接口为 `POST /v1/ocr`。PartShelf 转发图片，浏览器无需直连 OCR 服务。扫码照片限 JPEG、PNG、WebP，最大 10 MiB、2400 万像素；服务账号需对 `data/scan_uploads/` 有写权限。远程摄像头使用 HTTPS。
+
+升级启动时新增 `scan_sessions` 表及项目稳定标识 `projects.identity_token`，为已有项目补齐标识，保留原业务数据。扫码事务同时保存单包库存、项目元件关联及操作者历史；待核查条目保留原项目快照，项目删除或 ID 被新项目复用时不会误入其他项目。
 
 ## 5. 配置用户名记录模式
 
@@ -185,6 +217,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
     }
 }
 ```
@@ -200,6 +233,7 @@ server {
 - `.env`（单独安全保存，不要公开其中的密码）。
 - 仓储元件照片保存在业务数据库的 `warehouse_placements` 表中，随业务数据库一并备份。
 - 仓储分组与固定抽屉身份保存在同一业务数据库的 `warehouse_drawers` 表中，也需要备份。
+- 扫码凭证和核验结果保存在业务数据库的 `scan_sessions` 表中；原图位于 `data/scan_uploads/`，应与数据库一起备份和恢复。
 
 更新前先备份数据库与本地数据；更新后安装依赖、重启服务并检查首页、参考库状态和关键业务流程。SQLite 在线备份应使用 SQLite 备份工具或停写后复制，避免只复制正在使用的数据库主文件而遗漏 WAL 数据。
 
@@ -210,3 +244,5 @@ server {
 - **数据库不可写**：确认服务账号对 `partshelf.db` 所在目录有写权限；SQLite 创建数据库时需要目录可写。
 - **BOM 上传失败**：页面接受 CSV、XLSX 和 XLS 扩展名，但解析器使用 `openpyxl` 读取 Excel；建议将旧版 XLS 另存为 XLSX，CSV 请使用 UTF-8 或常见中文编码。
 - **用户名反复弹窗或历史记录无操作者**：检查浏览器是否允许 Cookie 和 JavaScript；确认 `PARTSHELF_TEST_MODE=false` 已对服务进程生效，并重新访问页面填写非空用户名。
+- **扫码均进入人工核查**：检查独立 OCR 服务 `/health`、模型文件和 PartShelf 的 `PADDLEOCR_API_URL`；查看核验字段中的缺失或冲突原因。嘉立创远程查询与缓存失败也会阻止自动入库。
+- **无法启动摄像头**：检查摄像头权限和 HTTPS；本机 `localhost` 可使用摄像头，普通远程 HTTP 请使用照片上传。

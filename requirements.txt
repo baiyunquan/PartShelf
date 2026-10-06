@@ -11,3 +11,5 @@ pymysql
 scipy
 pandas
 openpyxl
+Pillow>=10,<13
+httpx>=0.28,<1

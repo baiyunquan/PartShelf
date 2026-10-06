@@ -45,6 +45,9 @@
             </a>
           </li>
           <li class="nav-item mb-2">
+            <a class="nav-link {% if active_page == 'scan_import' %}active{% endif %}" href="/scan-import">{{ t('app.nav_scan_import') }}</a>
+          </li>
+          <li class="nav-item mb-2">
             <a class="nav-link {% if active_page == 'projects' %}active{% endif %}" {% if active_page == 'projects' %}aria-current="page"{% endif %} href="/projects">
               {{ t('app.nav_projects') }}
             </a>

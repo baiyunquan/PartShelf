@@ -1,0 +1,3 @@
+[submodule "vendor/zxing-wasm"]
+	path = vendor/zxing-wasm
+	url = https://github.com/Sec-ant/zxing-wasm.git

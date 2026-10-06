@@ -42,6 +42,7 @@ data/*.db
 data/libraries/
 data/cache/
 data/temp/
+data/scan_uploads/
 
 # Large media, downloaded images, and resource assets
 static/images/*

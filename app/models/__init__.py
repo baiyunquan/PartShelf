@@ -10,6 +10,7 @@ from app.models.custom_component import CustomComponent
 from app.models.warehouse_placement import WarehousePlacement
 from app.models.warehouse_drawer import WarehouseDrawer
 from app.models.project_component_history import ProjectComponentHistory
+from app.models.scan_session import ScanSession
 
 __all__ = [
     "Manufacturer",
@@ -24,4 +25,5 @@ __all__ = [
     "WarehousePlacement",
     "WarehouseDrawer",
     "ProjectComponentHistory",
+    "ScanSession",
 ]

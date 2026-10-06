@@ -20,6 +20,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 
 - [部署指南（中文）](DEPLOY.md)
 - [使用指南（中文）](USAGE.md)
+- [独立 OCR 服务 API 与部署说明（中文）](services/paddleocr_api/API.md)
 - [API 文档](http://127.0.0.1:8000/docs)（启动应用后访问 / available after startup）
 - 许可证 / License: [MIT](LICENSE)
 
@@ -28,6 +29,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 ### 功能
 
 - **库存管理**：记录元件来源、编号、数量、存储位置和备注；从元件库快速加入库存。
+- **扫码入库**：独立页面使用本地 ZXing WASM 识别嘉立创包装二维码，调用独立 PaddleOCR 服务核验编号、完整型号和封装。核验一致后按包自动入库存并关联顶部选定项目，无需再次确认；项目选择在连续扫码和刷新后保留。缺失元件通过已有远程查询与缓存补齐，异常进入人工核查，重复包装不会重复入库。
 - **元件参考库**：查询 JLCParts、Altium、KiCad 和紧固件/机械标准件目录。
 - **项目与 BOM**：创建项目、维护项目用量，上传 CSV 或 Excel BOM，预览元件匹配结果并导入新项目或已有项目。
 - **采购缺料**：按项目或汇总视图查看需求量、库存量和缺料数量。
@@ -61,8 +63,11 @@ PartShelf/
 │   └── user_identity.py  # 浏览器用户名 Cookie 处理
 ├── db/                 # 数据库连接、初始化和维护逻辑
 ├── data/
-│   └── libraries/      # 本地参考元件库数据库（需单独提供，不纳入 Git）
+│   ├── libraries/      # 本地参考元件库数据库（需单独提供，不纳入 Git）
+│   └── scan_uploads/   # 扫码原图与待核查照片（运行时生成，不纳入 Git）
 ├── scripts/            # 数据转换、导入、数值别名索引和列表列宽辅助脚本
+├── services/paddleocr_api/ # 独立 OCR HTTP 服务源码、依赖和 API 文档
+├── vendor/zxing-wasm/  # 固定版本的 Sec-ant/zxing-wasm Git 子模块
 ├── static/
 │   ├── css/            # 页面样式
 │   ├── js/             # 页面交互脚本
@@ -96,8 +101,21 @@ python run.py
 
 - `DATABASE_URL` 设置本地业务数据库；默认值为 `sqlite:///./partshelf.db`，相对路径以项目目录为基准。MySQL 示例见部署文档。
 - `PARTSHELF_TEST_MODE` 默认是 `true`。设为 `false` 后，项目元件修改需要非空用户名 Cookie，以便历史记录归属到对应成员。用户名 Cookie 不是身份验证机制。
+- `PADDLEOCR_API_URL` 是独立 OCR 服务的根地址，默认 `http://127.0.0.1:8010`；`PADDLEOCR_TIMEOUT_SECONDS` 默认 `60`。扫码照片最大 10 MiB、2400 万像素，支持 JPEG、PNG、WebP。摄像头远程访问需要 HTTPS，照片上传也可使用 HTTP。
 - 元件参考库文件位于 `data/libraries/`：`jlcparts.db`、`altium_library.db`、`kicad_symbols.db`、`fasteners.db`。这些大文件被 Git 忽略，不随源码仓库分发。启动时应用会尝试初始化缺失的参考库；相应源数据不齐时，部分元件库可能不可用。
 - 首次访问时，浏览器会要求输入非空用户名。该用户名只用于协作记录，不是账号或身份验证。
+
+### 扫码与独立 OCR 服务
+
+扫码页面位于 `/scan-import`，也可从导航菜单或库存页面进入。二维码运行资源已保存在 `static/js/vendor/zxing-wasm/`，浏览器运行时不依赖 CDN。获取子模块源码和重新生成资源：
+
+```bash
+git submodule update --init vendor/zxing-wasm
+python scripts/prepare_scan_assets.py
+python scripts/sync_ocr_api.py --destination ../ElectronicQwen
+```
+
+OCR 使用独立环境，不安装到 PartShelf 主应用。服务可部署在另一台设备；依赖安装、启动命令和 HTTP 契约见 [OCR API 文档](services/paddleocr_api/API.md)。
 
 ### 开发与验证
 
@@ -127,6 +145,7 @@ python scripts/generate_list_widths.py --write
 ### Features
 
 - **Inventory management**: Track catalog source, part identifier, quantity, storage location, and notes; add catalog parts to inventory.
+- **Verified scan import**: A dedicated page reads JLC packaging QR codes with locally hosted ZXing WASM and checks the part number, complete model, and package against an independent PaddleOCR service. Matching bags are added to inventory and the selected project automatically. Project selection persists across scans and reloads; missing catalog entries use the existing remote lookup and cache. Conflicts require review, and repeated bags do not add stock twice.
 - **Component catalogs**: Search JLCParts, Altium, KiCad, and fastener/mechanical standards.
 - **Projects and BOMs**: Create projects, maintain required quantities, upload CSV or Excel BOMs, review matching results, and import into a new or existing project.
 - **Procurement**: Review required, available, and shortage quantities per project or across projects.
@@ -160,7 +179,10 @@ PartShelf/
 │   └── user_identity.py  # Browser username cookie handling
 ├── db/                 # Database connection, initialization, and maintenance
 ├── data/libraries/     # Local reference catalog databases (provided separately)
+├── data/scan_uploads/  # Original scan photographs (generated at runtime, Git-ignored)
 ├── scripts/            # Catalog conversion, import, numeric aliases, and list-width tools
+├── services/paddleocr_api/ # Independent OCR HTTP service, dependencies, and API guide
+├── vendor/zxing-wasm/  # Pinned Sec-ant/zxing-wasm Git submodule
 ├── static/css/         # Page stylesheets
 ├── static/js/          # Page scripts
 ├── templates/          # Jinja2 page templates
@@ -192,8 +214,21 @@ Open <http://127.0.0.1:8000>. In Windows PowerShell, activate the environment wi
 
 - `DATABASE_URL` configures the application database. The default is `sqlite:///./partshelf.db`, resolved relative to the project directory. See the deployment guide for a MySQL example.
 - `PARTSHELF_TEST_MODE` defaults to `true`. Set it to `false` to require a non-empty username cookie for project component changes and attribute history entries to a member. The username cookie is not an authentication mechanism.
+- `PADDLEOCR_API_URL` points to the independent OCR service root, defaulting to `http://127.0.0.1:8010`; `PADDLEOCR_TIMEOUT_SECONDS` defaults to `60`. Scan photographs accept JPEG, PNG, and WebP up to 10 MiB and 24 million pixels. Remote camera access requires HTTPS; photograph uploads also work over HTTP.
 - Reference catalogs live under `data/libraries/`: `jlcparts.db`, `altium_library.db`, `kicad_symbols.db`, and `fasteners.db`. These large files are Git-ignored and are not distributed with the source. On startup, the application attempts to initialize missing catalogs; some catalogs may remain unavailable if their source data is not present.
 - On first visit, the browser prompts for a non-empty username. It is used for activity attribution and is not an account or authentication mechanism.
+
+### Scanning and the independent OCR service
+
+Open `/scan-import` through the navigation menu or inventory page. Runtime QR assets are committed under `static/js/vendor/zxing-wasm/` and require no CDN. To obtain the upstream source and regenerate assets:
+
+```bash
+git submodule update --init vendor/zxing-wasm
+python scripts/prepare_scan_assets.py
+python scripts/sync_ocr_api.py --destination ../ElectronicQwen
+```
+
+OCR runs in a separate environment and can be hosted on another device. Its setup commands and HTTP contract are documented in the [OCR API guide](services/paddleocr_api/API.md).
 
 ### Development and verification
 

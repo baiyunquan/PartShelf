@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Index, Integer, String
 from sqlalchemy.orm import relationship
 from db.database import Base
+from uuid import uuid4
 
 class Project(Base):
     __tablename__ = "projects"
@@ -11,5 +12,6 @@ class Project(Base):
     description = Column(String(255), nullable=True)
     # Only system-owned projects receive a key. Existing projects keep NULL.
     system_key = Column(String(32), nullable=True)
+    identity_token = Column(String(36), nullable=True, default=lambda: str(uuid4()))
 
     parts = relationship("ProjectPart", back_populates="project", cascade="all, delete-orphan")
