@@ -293,3 +293,22 @@ def aggregate_search(
     else:
         return {"query": query, "tab": tab, "items": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 1}
 
+
+from pydantic import BaseModel
+from app.services.multi_turn_search_service import multi_turn_service
+
+
+class MultiTurnLabelRequest(BaseModel):
+    ocr_lines: List[str]
+
+
+@router.post("/multi-turn-label")
+def multi_turn_label_search(payload: MultiTurnLabelRequest) -> Dict[str, Any]:
+    """
+    Two-stage Agentic Multi-Turn Search Endpoint:
+    1. Extracts normalized MPN, package, and specifications from label OCR lines.
+    2. Retrieves candidates from Altium / JLCPCB with automatic relaxation.
+    3. Performs expert CoT technical comparison to determine exact match or list ambiguous candidates.
+    """
+    return multi_turn_service.process(payload.ocr_lines)
+
