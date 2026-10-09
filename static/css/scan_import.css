@@ -8,4 +8,6 @@
 .scan-history article, .scan-evidence-line { overflow-wrap: anywhere; }
 .scan-history-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .scan-evidence-line { padding: .4rem 0; border-bottom: 1px solid #eee; }
+.scan-candidate-card { background: #fff; border-radius: .35rem; transition: background-color .15s ease; }
+.scan-candidate-card:hover { background: #f8f9fa; }
 @media (max-width: 767px) { .scan-project-bar { position: static; } .scan-import-page { padding: 5rem .65rem 1rem; } }

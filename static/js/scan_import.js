@@ -97,9 +97,55 @@
     details.append(element("summary", text("ocr")));
     for (const line of (scan.ocr || {}).lines || []) details.append(element("p", `${line.text} (${Math.round(line.confidence * 100)}%)`, "small"));
     evidence.append(details);
+    const aiNote = node("scan-ai-note");
+    if (aiNote) {
+      if (scan.verification && scan.verification.ai_reasoning) {
+        aiNote.hidden = false;
+        aiNote.textContent = `${text("label_ai_reasoning")}: ${scan.verification.ai_reasoning}`;
+      } else {
+        aiNote.hidden = true;
+      }
+    }
+    const candSection = node("scan-candidates-section");
+    const candList = node("scan-candidates-list");
+    if (candSection && candList) {
+      const candidates = (scan.verification && scan.verification.candidates) || [];
+      candSection.hidden = candidates.length === 0;
+      candList.replaceChildren();
+      for (const cand of candidates) {
+        const card = document.createElement("div");
+        card.className = "card p-2 border scan-candidate-card";
+        const title = cand.mfr_part_number || cand.name || cand.external_part_id || "";
+        const sub = `${cand.package || ""} · ${cand.manufacturer || ""} · ${text("stock_label") || "Stock"}: ${cand.stock ?? 0}`;
+        const row = document.createElement("div");
+        row.className = "d-flex justify-content-between align-items-center";
+        const info = document.createElement("div");
+        const titleEl = document.createElement("div");
+        titleEl.className = "fw-bold small";
+        titleEl.textContent = title;
+        const subEl = document.createElement("div");
+        subEl.className = "text-muted small";
+        subEl.textContent = sub;
+        info.append(titleEl, subEl);
+        const selBtn = document.createElement("button");
+        selBtn.type = "button";
+        selBtn.className = "btn btn-outline-primary btn-sm";
+        selBtn.textContent = text("btn_select_candidate") || "Select";
+        selBtn.addEventListener("click", () => {
+          const codeVal = cand.external_part_id ? (cand.source === "jlcparts" ? "C" + cand.external_part_id : cand.external_part_id) : (cand.lcsc ? "C" + cand.lcsc : title);
+          node("scan-review-code").value = codeVal;
+        });
+        row.append(info, selBtn);
+        card.append(row);
+        candList.append(card);
+      }
+    }
     node("scan-review-form").hidden = scan.status === "imported";
-    node("scan-review-code").value = scan.label.pc;
-    node("scan-review-quantity").value = scan.quantity || scan.label.qty;
+    const resolvedCode = (scan.component && (scan.component.lcsc ? "C" + scan.component.lcsc : scan.component.external_part_id))
+      || (scan.label && scan.label.pc)
+      || "";
+    node("scan-review-code").value = resolvedCode;
+    node("scan-review-quantity").value = scan.quantity || (scan.label && scan.label.qty) || 1;
     node("scan-review-note").value = scan.note || "";
     node("scan-new-package").checked = false;
     node("scan-new-package-wrap").hidden = scan.status !== "duplicate";
@@ -111,8 +157,9 @@
     for (const scan of history) {
       const card = document.createElement("article");
       const component = scan.component || {};
-      card.append(element("p", `${scan.label.pc} · ${component.mfr || scan.label.pm} · ${component.package || ""}`, "fw-bold"));
-      card.append(element("p", `${text("quantity")}: ${scan.quantity || scan.label.qty} · ${scan.project_name || text("inventory_only")}`));
+      const cardCode = (component.lcsc ? "C" + component.lcsc : component.external_part_id) || (scan.label && scan.label.pc) || "Part";
+      card.append(element("p", `${cardCode} · ${component.mfr || (scan.label && scan.label.pm) || ""} · ${component.package || ""}`, "fw-bold"));
+      card.append(element("p", `${text("quantity")}: ${scan.quantity || (scan.label && scan.label.qty) || 1} · ${scan.project_name || text("inventory_only")}`));
       card.append(element("p", `${text(`status_${scan.status}`)} · ${new Date(scan.created_at).toLocaleString()} · ${scan.imported_by || scan.username || ""}`, scan.status === "imported" ? "text-success small" : "text-warning-emphasis small"));
       const actions = element("div", "", "scan-history-actions");
       const button = element("button", text("inspect"), "btn btn-outline-secondary btn-sm");
@@ -132,7 +179,9 @@
   async function loadHistory() {
     const result = await request("/api/scan/history");
     history = result.items;
-    for (const scan of history.filter(item => item.status === "imported")) seen.add(labelKey(scan.label));
+    for (const scan of history.filter(item => item.status === "imported")) {
+      if (scan.label && scan.label.pc) seen.add(labelKey(scan.label));
+    }
     renderHistory();
   }
   function receive(scan) {
@@ -156,25 +205,31 @@
       const results = await ScanDecoder.decode(blob);
       const valid = [];
       for (const result of results) {
-        try { valid.push({raw: result.text, label: ScanLabel.parse(result.text)}); } catch (_error) { /* Other QR formats are not JLC labels. */ }
+        try { valid.push({raw: result.text, label: ScanLabel.parse(result.text)}); } catch (_error) { /* Other QR formats. */ }
       }
       const unique = [...new Map(valid.map(item => [labelKey(item.label), item])).values()];
-      if (unique.length !== 1) {
-        if (!fromCamera || unique.length > 1) message(unique.length ? "multiple_codes" : "no_code", true);
+      let rawCandidate = "";
+      if (unique.length === 1) {
+        const candidate = unique[0];
+        const key = labelKey(candidate.label);
+        if (fromCamera && seen.has(key)) { message("duplicate"); return; }
+        seen.add(key);
+        rawCandidate = candidate.raw;
+      } else if (results.length > 0) {
+        rawCandidate = results[0].text;
+      } else if (!fromCamera) {
+        rawCandidate = "";
+      } else {
         return;
       }
-      const candidate = unique[0];
-      const key = labelKey(candidate.label);
-      if (fromCamera && seen.has(key)) { message("duplicate"); return; }
       const requestId = ScanLabel.requestId();
       const body = new FormData();
       body.append("image", blob, "label.jpg");
-      body.append("qr_text", candidate.raw);
+      body.append("qr_text", rawCandidate);
       body.append("request_id", requestId);
       if (project.value) body.append("project_id", project.value);
       message("processing");
       const result = await request("/api/scan/recognize", {method: "POST", body});
-      seen.add(key);
       receive(result);
     } catch (error) {
       stopCamera();
@@ -203,7 +258,12 @@
     const version = ++cameraVersion;
     updateControls();
     try {
-      if (!navigator.mediaDevices || !window.isSecureContext) throw new Error("Secure camera access is unavailable");
+      if (!window.isSecureContext) {
+        throw new Error("insecure_context");
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("no_media_devices");
+      }
       const opened = await navigator.mediaDevices.getUserMedia({video: camera.value ? {deviceId: {exact: camera.value}, width: {ideal: 1920}, height: {ideal: 1080}}
         : {facingMode: {ideal: "environment"}, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false});
       if (version !== cameraVersion) { for (const track of opened.getTracks()) track.stop(); return; }
@@ -220,7 +280,18 @@
       updateControls();
       message("ready");
       cameraFrame();
-    } catch (_error) { stopCamera(); message("camera_error", true); }
+    } catch (err) {
+      stopCamera();
+      if (!window.isSecureContext || (err && err.message === "insecure_context")) {
+        message("camera_insecure_context", true);
+      } else if (err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+        message("camera_permission_denied", true);
+      } else {
+        const detail = err && err.message ? ` (${err.message})` : "";
+        node("scan-message").textContent = `${text("camera_error")}${detail}`;
+        node("scan-message").className = "mt-3 mb-0 text-danger";
+      }
+    }
     finally { starting = false; updateControls(); }
   }
   function stopCamera() {

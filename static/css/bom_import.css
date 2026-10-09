@@ -26,6 +26,15 @@
   overflow-y: auto;
 }
 
+.bom-ai-reasoning {
+  background-color: #f8f9fa;
+  border-left: 3px solid #0d6efd;
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
 /* generated list widths: start */
 table[data-list-layout="bom-preview"] { table-layout: fixed; width: max(100%, 1453px); min-width: 1453px; }
 table[data-list-layout="bom-preview"] td { white-space: normal; overflow-wrap: anywhere; }

@@ -42,10 +42,15 @@
             <h2 class="h5">{{ t('scan_import.review') }}</h2>
             <p id="scan-review-project" class="fw-bold"></p>
             <img id="scan-review-photo" class="scan-review-photo rounded mb-3" alt="{{ t('scan_import.photo') }}">
+            <div id="scan-ai-note" class="alert alert-info py-2 px-3 small mb-3" hidden></div>
             <div id="scan-evidence" class="mb-3"></div>
+            <div id="scan-candidates-section" class="mb-3" hidden>
+              <label class="form-label fw-bold small text-muted">{{ t('scan_import.badge_ai_suggested') }}</label>
+              <div id="scan-candidates-list" class="d-flex flex-column gap-2"></div>
+            </div>
             <form id="scan-review-form">
               <label class="form-label" for="scan-review-code">{{ t('scan_import.number') }}</label>
-              <input id="scan-review-code" class="form-control mb-2" pattern="[Cc][0-9]{3,10}" required>
+              <input id="scan-review-code" class="form-control mb-2" pattern="[A-Za-z0-9._-]{1,64}" required>
               <label class="form-label" for="scan-review-quantity">{{ t('scan_import.quantity') }}</label>
               <input id="scan-review-quantity" class="form-control mb-2" type="number" min="1" max="2147483647" step="1" required>
               <label class="form-label" for="scan-review-note">{{ t('scan_import.note') }}</label>

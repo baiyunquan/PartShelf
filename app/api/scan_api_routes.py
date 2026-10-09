@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 class ScanConfirmation(BaseModel):
-    lcsc_code: str = Field(pattern=r"^[Cc]\d{3,10}$")
+    lcsc_code: str = Field(min_length=1, max_length=64, description="Component LCSC C-code or library identifier")
     quantity: int = Field(ge=1, le=service.MAX_QUANTITY)
     note: str = Field(default="", max_length=500)
     new_package: bool = False

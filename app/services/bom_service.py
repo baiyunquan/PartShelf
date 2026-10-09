@@ -19,6 +19,7 @@ from app.models.inventory import Inventory
 from app.models.custom_component import CustomComponent
 from app.services import component_search_service
 from app.services.bom_matcher import BomMatcher, candidate_conflicts, component_kind, normalized_code, public_candidate, row_conflicts
+from app.services.multi_turn_search_service import multi_turn_service
 
 
 HEADER_ALIASES = {
@@ -348,33 +349,98 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
                     auto_create_zero_stock=not bool(inv_part),
                     selected=True,
                     match_reason="exact_supplier_code",
+                    ai_decision="exact_match",
+                    ai_reasoning="匹配到精确供应商料号或标准编码，直接命中库中元器件。",
                 )
             else:
-                item["match_reason"] = "conflict" if exact or internal_conflicts else (
-                    "original_code_missing" if code else "no_supplier_code")
+                # Check for explicit model matches and conflicts
                 model_matches = matcher.exact_model(row.get("manufacturer_part") or "")
-                if model_matches and all(candidate_conflicts(row, candidate, kind) for candidate in model_matches):
-                    for model_candidate in model_matches:
-                        item["conflicts"] = list(dict.fromkeys(
-                            item["conflicts"] + candidate_conflicts(row, model_candidate, kind)))
-                    item["match_reason"] = "conflict"
-                for candidate in exact_ranked:
-                    conflicts = candidate_conflicts(row, candidate, kind)
-                    item["conflicts"] = list(dict.fromkeys(item["conflicts"] + conflicts))
-                    item["suggestions"].append(public_candidate(candidate, "exact_supplier_code", conflicts))
-                if stale_inventory:
-                    item["match_reason"] = "inventory_reference_missing"
-                    item["conflicts"].append("missing_reference")
-                    item["suggestions"].insert(0, public_candidate({
-                        "library_source": "jlcparts", "external_part_id": str(code),
-                        "lcsc": code, "name": f"C{code}", "package": "",
-                        "stock": (stale_inventory.inventory.quantity_available if stale_inventory.inventory else 0),
-                    }, "inventory_reference", ["missing_reference"]))
-                excluded = {(candidate["library_source"], candidate["external_part_id"]) for candidate in exact}
-                remaining = 10 - len(item["suggestions"])
-                if remaining > 0:
-                    item["suggestions"].extend(matcher.suggestions(row, kind, excluded)[:remaining])
-                item["suggestions"] = item["suggestions"][:10]
+                has_model_conflict = bool(model_matches and all(candidate_conflicts(row, candidate, kind) for candidate in model_matches))
+                has_conflict = bool(exact) or bool(internal_conflicts) or has_model_conflict
+                code_missing = bool(code and not exact)
+
+                # AI Multi-Turn Search matching for ambiguous, missing-code, or un-coded rows
+                ai_res = multi_turn_service.process_bom_row(row)
+                ai_decision = ai_res.get("decision", "no_match")
+                ai_reasoning = ai_res.get("reasoning", "")
+                ai_cand = ai_res.get("selected_component")
+
+                # If there are conflicts or the requested C-code was missing, do not auto-bind
+                cand_conflicts = candidate_conflicts(row, ai_cand, kind) if ai_cand else []
+                can_auto_bind_ai = (
+                    not code_missing
+                    and not has_conflict
+                    and not cand_conflicts
+                    and ai_decision == "exact_match"
+                    and bool(ai_cand)
+                )
+
+                item["ai_decision"] = ai_decision
+                item["ai_reasoning"] = ai_reasoning
+
+                if can_auto_bind_ai:
+                    inv_part = db.query(Part).filter(
+                        Part.library_source == ai_cand.get("library_source", "jlcparts"),
+                        Part.external_part_id == str(ai_cand.get("external_part_id") or ai_cand.get("lcsc") or ""),
+                    ).first()
+                    item.update(
+                        status="in_inventory" if inv_part else "matched_library",
+                        library_source=ai_cand.get("library_source", "jlcparts"),
+                        external_part_id=str(ai_cand.get("external_part_id") or ai_cand.get("lcsc") or ""),
+                        matched_part_name=ai_cand.get("name") or ai_cand.get("mfr_part_number") or "",
+                        matched_manufacturer=ai_cand.get("manufacturer"),
+                        matched_package=ai_cand.get("package"),
+                        matched_stock=ai_cand.get("stock", 0),
+                        inventory_part_id=inv_part.id if inv_part else None,
+                        inventory_quantity=(inv_part.inventory.quantity_available if inv_part and inv_part.inventory else 0),
+                        auto_create_zero_stock=not bool(inv_part),
+                        selected=True,
+                        match_reason="ai_exact_match",
+                    )
+                else:
+                    item["match_reason"] = "conflict" if (exact or internal_conflicts or has_model_conflict or cand_conflicts) else (
+                        "original_code_missing" if code_missing else (
+                            "ai_ambiguous" if ai_decision == "ambiguous" else "no_supplier_code"))
+                    if model_matches and all(candidate_conflicts(row, candidate, kind) for candidate in model_matches):
+                        for model_candidate in model_matches:
+                            item["conflicts"] = list(dict.fromkeys(
+                                item["conflicts"] + candidate_conflicts(row, model_candidate, kind)))
+                        item["match_reason"] = "conflict"
+                    for candidate in exact_ranked:
+                        conflicts = candidate_conflicts(row, candidate, kind)
+                        item["conflicts"] = list(dict.fromkeys(item["conflicts"] + conflicts))
+                        item["suggestions"].append(public_candidate(candidate, "exact_supplier_code", conflicts))
+
+                    # Append AI suggested candidates
+                    for ai_c in ai_res.get("candidate_components", []):
+                        ai_ext_id = str(ai_c.get("external_part_id") or ai_c.get("lcsc") or "")
+                        ai_src = ai_c.get("library_source") or "jlcparts"
+                        if not any(s.get("external_part_id") == ai_ext_id and s.get("library_source") == ai_src for s in item["suggestions"]):
+                            item["suggestions"].append({
+                                "library_source": ai_src,
+                                "external_part_id": ai_ext_id,
+                                "name": ai_c.get("name") or ai_c.get("mfr_part_number") or "",
+                                "package": ai_c.get("package") or "",
+                                "manufacturer": ai_c.get("manufacturer") or "",
+                                "stock": ai_c.get("stock", 0),
+                                "reason": "ai_suggested",
+                                "conflicts": candidate_conflicts(row, ai_c, kind),
+                                "ai_note": ai_c.get("description") or "",
+                            })
+
+                    if stale_inventory:
+                        item["match_reason"] = "inventory_reference_missing"
+                        item["conflicts"].append("missing_reference")
+                        item["suggestions"].insert(0, public_candidate({
+                            "library_source": "jlcparts", "external_part_id": str(code),
+                            "lcsc": code, "name": f"C{code}", "package": "",
+                            "stock": (stale_inventory.inventory.quantity_available if stale_inventory.inventory else 0),
+                        }, "inventory_reference", ["missing_reference"]))
+                    excluded = {(candidate["library_source"], candidate["external_part_id"]) for candidate in exact}
+                    remaining = 10 - len(item["suggestions"])
+                    if remaining > 0:
+                        item["suggestions"].extend(matcher.suggestions(row, kind, excluded)[:remaining])
+                    item["suggestions"] = item["suggestions"][:10]
             preview_items.append(item)
     finally:
         matcher.close()
@@ -450,7 +516,8 @@ def execute_bom_import(
             conflicts = row_conflicts(row, kind)
             if candidate:
                 conflicts.extend(candidate_conflicts(row, candidate, kind))
-            if (not exact_code or conflicts) and not item.get("confirmed_match", False):
+            is_ai_exact = item.get("match_reason") == "ai_exact_match" and not conflicts
+            if (not exact_code and not is_ai_exact or conflicts) and not item.get("confirmed_match", False):
                 raise ValueError(f"Row {item.get('row_index')}: manual confirmation is required for this library match")
     finally:
         matcher.close()

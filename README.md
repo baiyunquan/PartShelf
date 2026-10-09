@@ -117,6 +117,35 @@ python scripts/sync_ocr_api.py --destination ../ElectronicQwen
 
 OCR 使用独立环境，不安装到 PartShelf 主应用。服务可部署在另一台设备；依赖安装、启动命令和 HTTP 契约见 [OCR API 文档](services/paddleocr_api/API.md)。
 
+### AI 智能匹配与 llama.cpp 服务
+
+扫码入库（`/scan-import`）与 BOM 匹配（`/bom-import`）全面支持两阶段大模型交互式检索机制：
+- **Stage 1 (Extractor)**：从标签 OCR 或 BOM 原始文本中抽取标准化 MPN、品牌、封装与关键电气参数。
+- **Stage 2 (Reranker)**：基于本地元器件库（Altium / JLCParts）候选集合，执行基于思维链（CoT）的技术裁决（`exact_match`、`ambiguous`、`no_match`），自动识别旧包装袋复用冲突并给出严谨排他分析。
+
+大模型后端采用本地 `llama.cpp` 原生服务（OpenAI 兼容 `/v1/chat/completions` 接口）：
+- **端口 8081**：Stage 1 Extractor (`ElectronicQwen-Extractor-v1-Q4_K_M.gguf`)
+- **端口 8082**：Stage 2 Reranker (`ElectronicQwen-Reranker-v1-Q4_K_M.gguf`)
+
+服务启停与运维：
+```bash
+# 启动 Extractor 与 Reranker 双服务（后台常驻）
+python scripts/manage_llama_servers.py start
+# 或直接双击 Windows 批处理脚本：
+scripts/start_llama_servers.bat
+
+# 查看服务运行状态与模型加载信息
+python scripts/manage_llama_servers.py status
+
+# 执行全链路连通性与实测推理核验
+python scripts/verify_live_system.py
+
+# 停止服务
+python scripts/manage_llama_servers.py stop
+# 或使用 Windows 批处理：
+scripts/stop_llama_servers.bat
+```
+
 ### 开发与验证
 
 电容、电阻、电感的派生别名索引首次启动时自动构建；目录数据变更后，参数搜索前按变更记录更新。也可以提前生成或完整重建，减少首次启动等待：

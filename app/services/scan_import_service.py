@@ -16,6 +16,7 @@ from app.models import Inventory, Part, Project, ProjectPart, ScanSession
 from app.services import external_library_service as libraries, component_search_service
 from app.services import paddleocr_client as ocr_client
 from app.services.scan_verification import MAX_QUANTITY, parse_label, verify_label
+from app.services.multi_turn_search_service import multi_turn_service
 from app.user_identity import SESSION_USERNAME_KEY, require_project_history_username
 
 
@@ -92,7 +93,9 @@ def import_package(db, scan_id, component, quantity, note="", new_package=False)
         project = _project(db, scan.project_id, importing=True, expected_token=scan.project_token)
         scan.claim_key = None if previous and previous.id != scan.id else scan.fingerprint
         db.flush()  # acquire the unique claim before adding stock
-        part = Part(library_source="jlcparts", external_part_id=str(component["lcsc"]),
+        lib_src = component.get("source") or component.get("library_source") or "jlcparts"
+        ext_id = str(component.get("lcsc") or component.get("external_part_id") or component.get("id") or "")
+        part = Part(library_source=lib_src, external_part_id=ext_id,
                     storage_location="Default Storage", note=note)
         db.add(part)
         db.flush()
@@ -127,9 +130,24 @@ def import_package(db, scan_id, component, quantity, note="", new_package=False)
 def recognize(db, raw, image, project_id, request_id, lang="zh"):
     try:
         request_id = str(UUID(request_id))
-        label = parse_label(raw)
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, str(exc)) from exc
+
+    try:
+        label = parse_label(raw)
+        label["is_jlc_qr"] = True
+    except (ValueError, TypeError) as exc:
+        if not image or len(image) == 0:
+            raise HTTPException(422, str(exc)) from exc
+        clean_raw = str(raw or "").strip()
+        label = {
+            "is_jlc_qr": False,
+            "raw": clean_raw,
+            "pc": None,
+            "pm": clean_raw if clean_raw else "Scanned Part",
+            "qty": 1
+        }
+
     existing = db.query(ScanSession).filter_by(request_id=request_id).first()
     if existing:
         return existing
@@ -181,14 +199,99 @@ def verify_scan(db, scan_id, image, lang="zh"):
     except Exception:
         LOGGER.exception("OCR unavailable for scan %s", scan_id)
         failures.append("ocr_unavailable")
-    try:
-        component = resolve_component(label["pc"], lang)
-        if component is None:
+
+    ocr_lines = []
+    if ocr and "lines" in ocr:
+        ocr_lines = [l["text"] for l in ocr["lines"] if l.get("text")]
+    if not label.get("is_jlc_qr") and label.get("raw") and str(label["raw"]) not in ocr_lines:
+        ocr_lines.insert(0, str(label["raw"]))
+
+    # 1. Fast-path check: standard JLC QR
+    if label.get("is_jlc_qr") is not False and label.get("pc"):
+        try:
+            component = resolve_component(label["pc"], lang)
+            if component is None:
+                failures.append("catalog_unavailable")
+        except Exception:
+            LOGGER.exception("Catalog unavailable for scan %s", scan_id)
             failures.append("catalog_unavailable")
-    except Exception:
-        LOGGER.exception("Catalog unavailable for scan %s", scan_id)
-        failures.append("catalog_unavailable")
-    verification = verify_label(label, component, ocr or {})
+        verification = verify_label(label, component, ocr or {})
+    else:
+        # Non-JLC label / barcode / image only
+        component = None
+        verification = {
+            "verified": False,
+            "fields": {},
+            "reasons": [],
+        }
+
+    # 2. If standard verification did NOT verify or label was non-JLC, invoke AI MultiTurnSearchService
+    if (not verification.get("verified") or label.get("is_jlc_qr") is False) and ocr_lines:
+        try:
+            ai_res = multi_turn_service.process(ocr_lines)
+            decision = ai_res.get("decision", "no_match")
+            verification["ai_decision"] = decision
+            verification["ai_reasoning"] = ai_res.get("reasoning", "")
+            
+            cands = []
+            if ai_res.get("selected_component"):
+                cands.append(ai_res["selected_component"])
+            for c in ai_res.get("candidate_components", []):
+                if not any(str(x.get("external_part_id") or x.get("lcsc")) == str(c.get("external_part_id") or c.get("lcsc")) for x in cands):
+                    cands.append(c)
+            verification["candidates"] = cands
+            verification["match_type"] = f"ai_{decision}"
+
+            if decision == "exact_match" and ai_res.get("selected_component"):
+                sel = ai_res["selected_component"]
+                raw_c = sel.get("raw_item") or sel
+                c_id = sel.get("external_part_id") or raw_c.get("lcsc") or raw_c.get("id")
+                if c_id and sel.get("source") == "jlcparts":
+                    try:
+                        resolved_c = resolve_component(c_id, lang)
+                        component = resolved_c or raw_c
+                    except Exception:
+                        component = raw_c
+                else:
+                    component = raw_c
+            elif decision == "ambiguous":
+                if "ambiguous_candidates" not in verification["reasons"]:
+                    verification["reasons"].append("ambiguous_candidates")
+            elif decision == "no_match":
+                if "ai_no_match" not in verification["reasons"]:
+                    verification["reasons"].append("ai_no_match")
+
+            # If candidates empty, populate from all_retrieved_candidates
+            if not cands and ai_res.get("all_retrieved_candidates"):
+                cands.extend(ai_res["all_retrieved_candidates"])
+                verification["candidates"] = cands
+
+            # Check for reused bag conflict
+            candidate_pc = None
+            if component:
+                candidate_pc = str(component.get("lcsc") or "")
+            elif cands:
+                cand_first = cands[0]
+                raw_cand = cand_first.get("raw_item") or cand_first
+                candidate_pc = str(cand_first.get("external_part_id") or raw_cand.get("lcsc") or raw_cand.get("id") or "")
+            if not candidate_pc and ocr_lines:
+                for line in ocr_lines:
+                    m_c = re.search(r"\bC(\d{4,})\b", line, re.IGNORECASE)
+                    if m_c:
+                        candidate_pc = m_c.group(1)
+                        break
+
+            if label.get("is_jlc_qr") is not False and label.get("pc") and candidate_pc:
+                label_pc = str(label["pc"]).lstrip("Cc")
+                candidate_pc_clean = candidate_pc.lstrip("Cc")
+                if candidate_pc_clean and label_pc and candidate_pc_clean != label_pc:
+                    verification["reused_bag_warning"] = True
+                    if "reused_bag_conflict" not in verification["reasons"]:
+                        verification["reasons"].append("reused_bag_conflict")
+        except Exception as e:
+            LOGGER.exception("MultiTurnSearchService error for scan %s: %s", scan_id, e)
+            verification["ai_error"] = str(e)
+
     _begin_write(db)
     scan = _get(db, scan_id, lock=True)
     if scan.status == "imported":
@@ -250,8 +353,27 @@ def confirm(db, scan_id, code, quantity, note="", new_package=False, lang="zh"):
         raise HTTPException(409, "Confirm this is a different physical package")
     _project(db, scan.project_id, importing=True, expected_token=scan.project_token)
     db.commit()
+    component = None
     try:
-        component = resolve_component(code, lang)
+        if str(code).upper().startswith("C") and str(code)[1:].isdigit():
+            component = resolve_component(code, lang)
+        elif str(code).isdigit():
+            component = resolve_component(f"C{code}", lang)
+
+        # If not resolved via standard C-code, check candidates or scan.component
+        if component is None:
+            cands = (scan.verification or {}).get("candidates", [])
+            for c in cands:
+                c_id = str(c.get("external_part_id") or c.get("lcsc") or "")
+                c_name = str(c.get("mfr_part_number") or c.get("name") or "")
+                if code in (c_id, f"C{c_id}", c_name):
+                    component = c.get("raw_item") or c
+                    break
+        if component is None and scan.component:
+            comp_id = str(scan.component.get("lcsc") or scan.component.get("external_part_id") or "")
+            comp_mfr = str(scan.component.get("mfr") or "")
+            if code in (comp_id, f"C{comp_id}", comp_mfr):
+                component = scan.component
     except Exception as exc:
         raise HTTPException(503, "Catalog lookup or cache unavailable") from exc
     if component is None:

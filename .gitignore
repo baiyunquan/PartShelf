@@ -43,6 +43,8 @@ data/libraries/
 data/cache/
 data/temp/
 data/scan_uploads/
+data/logs/
+data/llama_servers_state.json
 
 # Large media, downloaded images, and resource assets
 static/images/*

@@ -28,4 +28,4 @@ if __name__ == "__main__":
 
     print(f"Starting PartShelf server from: {PARTSHELF_DIR}")
     print(f"Open your browser at: http://127.0.0.1:{port}")
-    uvicorn.run("app.main:app", host="127.0.0.1", port=port, reload=True, app_dir=str(PARTSHELF_DIR))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True, app_dir=str(PARTSHELF_DIR))

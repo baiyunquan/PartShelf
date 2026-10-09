@@ -283,16 +283,20 @@
         `;
       } else if (item.status === "matched_library") {
         const libName = librarySourceName(item.library_source);
+        const isAiMatch = item.match_reason === "ai_exact_match";
+        const aiBadge = isAiMatch ? `<span class="badge bg-primary me-1">${getI18n().badge_ai_matched || "AI Match"}</span>` : "";
         statusBadge = `<span class="badge bg-primary">${getI18n().status_matched_library || "Library Match"}</span>`;
         matchedInfoHtml = `
           <div class="small">
             <div class="d-flex justify-content-between align-items-center">
               <div>
+                ${aiBadge}
                 <span class="badge bg-dark me-1">${libName}</span>
                 ${window.ComponentLinks.renderNameLink(item, item.matched_part_name || "-")}
               </div>
               <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="window.openSearchBindModal(${idx})">Rebind</button>
             </div>
+            ${item.ai_reasoning ? `<div class="bom-ai-reasoning small text-muted"><strong class="text-primary me-1">${getI18n().label_ai_reasoning || "AI Reasoning"}:</strong>${escapeHtml(item.ai_reasoning)}</div>` : ""}
             ${(item.conflicts || []).length ? `<div class="small text-danger">${escapeHtml(item.conflicts.map((name) => getI18n()[`conflict_${name}`] || name).join("; "))}</div>` : ""}
             <div class="form-check mt-1 mb-0">
               <input class="form-check-input row-zero-stock-cb" type="checkbox" id="cb-zero-${idx}" ${item.auto_create_zero_stock ? "checked" : ""}>
@@ -308,18 +312,25 @@
         const reason = getI18n()[`reason_${item.match_reason}`] || item.match_reason || "";
         const conflicts = (item.conflicts || []).map((name) => getI18n()[`conflict_${name}`] || name);
         const missingDimensions = (item.missing_dimensions || []).map((name) => getI18n()[`dimension_${name}`] || name);
-        const suggestions = (item.suggestions || []).slice(0, 3).map((candidate, candidateIndex) => `
+        const suggestions = (item.suggestions || []).slice(0, 3).map((candidate, candidateIndex) => {
+          const isAiCandidate = candidate.reason === "ai_suggested" || candidate.ai_note;
+          const aiCandBadge = isAiCandidate ? `<span class="badge bg-info text-dark me-1">${getI18n().badge_ai_suggested || "AI"}</span>` : "";
+          return `
           <div class="d-flex justify-content-between align-items-center small border-top py-1 gap-2">
             <span class="text-truncate">
+              ${aiCandBadge}
               <strong>${escapeHtml(librarySourceName(candidate.library_source))}</strong>
               ${window.ComponentLinks.renderNameLink(candidate, candidate.name)}
               <span class="text-muted">${escapeHtml([candidate.value, candidate.package, candidate.voltage, candidate.tolerance].filter(Boolean).join(" | "))}</span>
+              ${candidate.ai_note ? `<small class="text-muted d-block">${escapeHtml(candidate.ai_note)}</small>` : ""}
             </span>
             <button type="button" class="btn btn-outline-primary btn-sm row-suggestion-btn" data-idx="${idx}" data-candidate="${candidateIndex}">${getI18n().btn_select_part || "Select"}</button>
           </div>
-        `).join("");
+        `;
+        }).join("");
         matchedInfoHtml = `
           <div class="small text-muted">${escapeHtml(reason)}</div>
+          ${item.ai_reasoning ? `<div class="bom-ai-reasoning small text-muted"><strong class="text-primary me-1">${getI18n().label_ai_reasoning || "AI Reasoning"}:</strong>${escapeHtml(item.ai_reasoning)}</div>` : ""}
           ${missingDimensions.length ? `<div class="small text-muted">${escapeHtml(getI18n().missing_dimensions_prefix || "Missing dimensions")}: ${escapeHtml(missingDimensions.join(", "))}</div>` : ""}
           ${conflicts.length ? `<div class="small text-danger">${escapeHtml(conflicts.join("; "))}</div>` : ""}
           ${suggestions ? `<div class="small text-muted mt-1">${getI18n().suggested_candidates || "Candidates"}</div>${suggestions}` : ""}
