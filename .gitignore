@@ -47,6 +47,7 @@ data/scan_uploads/
 data/logs/
 data/llama_servers_state.json
 data/run_windows_state.json
+data/run_linux_state.json
 
 # Large media, downloaded images, and resource assets
 static/images/*

@@ -111,26 +111,42 @@ class MultiTurnSearchService:
     def get_extractor_client(self) -> OpenAI:
         """Lazy client for Stage 1 Extractor llama-server."""
         if self._extractor_client is None:
+            import httpx
             self._extractor_client = OpenAI(
                 base_url=self.extractor_base_url,
                 api_key=self.api_key,
                 timeout=self.timeout,
+                http_client=httpx.Client(trust_env=False, timeout=self.timeout),
             )
         return self._extractor_client
 
     def get_reranker_client(self) -> OpenAI:
         """Lazy client for Stage 2 Reranker llama-server."""
         if self._reranker_client is None:
+            import httpx
             self._reranker_client = OpenAI(
                 base_url=self.reranker_base_url,
                 api_key=self.api_key,
                 timeout=self.timeout,
+                http_client=httpx.Client(trust_env=False, timeout=self.timeout),
             )
         return self._reranker_client
 
     def stage1_extract(self, ocr_lines: List[str]) -> Dict[str, Any]:
         """Stage 1: Extract normalized queries and specifications from OCR lines."""
-        input_text = "\n".join(ocr_lines) if isinstance(ocr_lines, list) else str(ocr_lines)
+        if isinstance(ocr_lines, list):
+            formatted_lines = []
+            for idx, line in enumerate(ocr_lines, start=1):
+                s = str(line).strip()
+                if not s:
+                    continue
+                if re.match(r"^\d+[:\.]\s*", s):
+                    formatted_lines.append(s)
+                else:
+                    formatted_lines.append(f"{idx}: {s}")
+            input_text = "\n".join(formatted_lines)
+        else:
+            input_text = str(ocr_lines)
         client = self.get_extractor_client()
 
         try:
@@ -313,7 +329,15 @@ class MultiTurnSearchService:
 
         prompt += "\n数据库检索候选项:\n"
         for c in numbered_cands:
-            prompt += f"[候选 {c['index']}] 型号: {c['mfr_part_number']} | 品牌: {c['manufacturer']} | 封装: {c['package']} | 品类: {c['category']} | 描述: {c['description']}\n"
+            pkg_raw = c.get("package") or ""
+            pkg_display = pkg_raw
+            if re.search(r"through[\s_-]?hole|dip|pin header", pkg_raw, re.I):
+                if "插件" not in pkg_display:
+                    pkg_display = f"{pkg_raw} (插件/直插)"
+            elif re.search(r"surface[\s_-]?mount|smd|smt", pkg_raw, re.I):
+                if "贴片" not in pkg_display:
+                    pkg_display = f"{pkg_raw} (贴片)"
+            prompt += f"[候选 {c['index']}] 型号: {c['mfr_part_number']} | 品牌: {c['manufacturer']} | 封装: {pkg_display} | 品类: {c['category']} | 描述: {c['description']}\n"
 
         client = self.get_reranker_client()
         try:
