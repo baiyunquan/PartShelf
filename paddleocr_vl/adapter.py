@@ -126,6 +126,8 @@ class PaddleOCRVLAdapter:
         complete = finish == "stop" and bool(lines) and not repeated
         return {
             "engine": "paddleocr-vl-llama.cpp",
+            "region": None,
+            "confidence_source": "not_provided_by_model",
             "status": "complete" if complete else "incomplete",
             "finish_reason": finish,
             "error": None if complete else "ocr_empty" if not lines else "ocr_repeated" if repeated else "ocr_incomplete",

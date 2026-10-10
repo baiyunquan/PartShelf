@@ -26,6 +26,7 @@ from app.services.multi_turn_retrieval import (
     fast_path_lcsc_lookup,
     format_candidate,
     retrieve_candidates,
+    lookup_lcsc_candidates,
 )
 from app.services.multi_turn_schemas import (
     EXTRACTOR_SYSTEM_PROMPT,
@@ -34,7 +35,7 @@ from app.services.multi_turn_schemas import (
     extract_json_safely,
     is_logistics_or_shelf_noise,
 )
-from app.services.scan_evidence import lcsc_codes, model_key, model_tokens
+from app.services.scan_evidence import lcsc_codes, model_key, model_tokens, verify_text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,13 +49,13 @@ class MultiTurnSearchService:
         reranker_base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         timeout: Optional[float] = None,
-        strict_mode: bool = False,
+        strict_mode: Optional[bool] = None,
     ):
-        self.extractor_base_url = extractor_base_url or os.getenv("STAGE1_EXTRACTOR_URL", "http://127.0.0.1:8081/v1")
-        self.reranker_base_url = reranker_base_url or os.getenv("STAGE2_RERANKER_URL", "http://127.0.0.1:8082/v1")
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "no-key")
-        self.timeout = timeout or 30.0
-        self.strict_mode = strict_mode
+        self.extractor_base_url = extractor_base_url or os.getenv("STAGE1_EXTRACTOR_URL") or settings.LLAMA_EXTRACTOR_BASE_URL
+        self.reranker_base_url = reranker_base_url or os.getenv("STAGE2_RERANKER_URL") or settings.LLAMA_RERANKER_BASE_URL
+        self.api_key = api_key or settings.LLAMA_API_KEY
+        self.timeout = timeout if timeout is not None else settings.LLAMA_TIMEOUT_SECONDS
+        self.strict_mode = strict_mode if strict_mode is not None else settings.LLAMA_STRICT_MODE
         self._extractor_client: Optional[OpenAI] = None
         self._reranker_client: Optional[OpenAI] = None
 
@@ -65,6 +66,7 @@ class MultiTurnSearchService:
                 base_url=self.extractor_base_url,
                 api_key=self.api_key,
                 timeout=self.timeout,
+                max_retries=0,
                 http_client=httpx.Client(trust_env=False, timeout=self.timeout),
             )
         return self._extractor_client
@@ -76,6 +78,7 @@ class MultiTurnSearchService:
                 base_url=self.reranker_base_url,
                 api_key=self.api_key,
                 timeout=self.timeout,
+                max_retries=0,
                 http_client=httpx.Client(trust_env=False, timeout=self.timeout),
             )
         return self._reranker_client
@@ -112,12 +115,14 @@ class MultiTurnSearchService:
         """Reuse OCR text; exact C-codes and full observed models precede specification search."""
         started = time.time()
         codes, observed = lcsc_codes(ocr_lines), model_tokens(ocr_lines)
+        code_candidates = lookup_lcsc_candidates(codes)
 
         # 1. Fast-path check: authoritative LCSC C-code directly matching observed model
         fast_match = fast_path_lcsc_lookup(
             c_codes=codes,
             observed_tokens=observed,
             source_label="原文",
+            candidates=code_candidates,
         )
         if fast_match:
             fast_match["latency_ms"] = round((time.time() - started) * 1000, 1)
@@ -128,7 +133,7 @@ class MultiTurnSearchService:
         queries, specs = stage1.get("queries", []), stage1.get("specs", {})
         models = list(dict.fromkeys([model_key(q["text"]) for q in queries if q.get("kind") == "mpn"] + observed))
 
-        candidates = []
+        candidates = list(code_candidates)
         for model in models[:6]:
             candidates.extend(self.retrieve_candidates(model, max_candidates=8))
         if not candidates:
@@ -137,6 +142,21 @@ class MultiTurnSearchService:
                 query = " ".join(filter(None, [value, specs.get("package")]))
                 candidates.extend(self.retrieve_candidates(query, max_candidates=8))
         candidates = deduplicate_candidates(candidates)[:10]
+
+        supported = [(candidate, verify_text(candidate, ocr_lines)) for candidate in candidates]
+        corrections = [(candidate, evidence) for candidate, evidence in supported
+                       if evidence.get("verified") and evidence.get("model_correction")]
+        if corrections:
+            unique = len(corrections) == 1 and not any(c.get("retrieval_truncated") for c in candidates)
+            chosen, evidence = corrections[0]
+            return {"status":"success", "route":"supported_ocr_correction", "decision":"exact_match" if unique else "ambiguous",
+                    "selected_component":chosen if unique else None,
+                    "candidate_components":[c for c,_ in corrections] if not unique else [],
+                    "all_retrieved_candidates":candidates, "reasoning":"型号的一处字形误读有完整目录、品牌、封装和标值证据支持。" if unique else "多个目录记录支持该字形修正，请核查。",
+                    "model_correction":evidence["model_correction"], "stage1_extraction":stage1,
+                    "field_evidence":stage1.get("field_evidence", {}),
+                    "stages":{"extractor":stage1.get("stage_status", {}), "reranker":{"status":"not_needed"}},
+                    "latency_ms":round((time.time()-started)*1000, 1)}
 
         if not candidates:
             return {
@@ -147,6 +167,8 @@ class MultiTurnSearchService:
                 "candidate_components": [],
                 "reasoning": "未找到原文型号或明确规格对应的目录记录。",
                 "stage1_extraction": stage1,
+                "field_evidence": stage1.get("field_evidence", {}),
+                "stages": {"extractor":stage1.get("stage_status", {}), "reranker":{"status":"not_needed"}},
                 "latency_ms": round((time.time() - started) * 1000, 1),
             }
 

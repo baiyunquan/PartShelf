@@ -13,6 +13,8 @@ from app.services.multi_turn_schemas import (
     RERANKER_SYSTEM_PROMPT,
     SPEC_FIELDS,
     completed_json,
+    request_structured,
+    ExtractorOutput, RerankerOutput, AIStageError,
     is_logistics_or_shelf_noise,
     structured_format,
 )
@@ -21,7 +23,8 @@ from app.services.scan_evidence import (
     lcsc_codes,
     model_key,
     model_tokens,
-    package_key,
+    package_key, packages,
+    electrical_values,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -49,7 +52,7 @@ def grounded_extraction(parsed: Dict[str, Any], lines: List[str]) -> Dict[str, A
             normalized_query = {"kind": kind, "text": value}
             if normalized_query not in queries:
                 queries.append(normalized_query)
-    specs = {}
+    specs, evidence = {}, {}
     observed_values = {(m.kind, m.value) for line in lines for m in parse_measurements(line)}
     for key, value in (parsed.get("specs") or {}).items():
         if key not in SPEC_FIELDS or not isinstance(value, str) or not value.strip():
@@ -57,7 +60,22 @@ def grounded_extraction(parsed: Dict[str, Any], lines: List[str]) -> Dict[str, A
         values = {(m.kind, m.value) for m in parse_measurements(value)}
         if model_key(value) in model_key(text) or (values and values <= observed_values):
             specs[key] = value
-    return {**parsed, "queries": queries, "specs": specs}
+            matched = []
+            for index, line in enumerate(lines):
+                line_values = {(m.kind, m.value) for m in parse_measurements(line)}
+                supported = (package_key(value) in packages([line]) if key == "package" else
+                             (values <= line_values if values else contains_model(line, value)))
+                if supported:
+                    matched.append({"line_index": index, "text": line})
+            if matched:
+                evidence[key] = matched
+            else:
+                specs.pop(key, None)
+    for query in queries:
+        evidence[f"query:{query['kind']}:{query['text']}"] = [
+            {"line_index": index, "text": line} for index, line in enumerate(lines)
+            if contains_model(line, query["text"])]
+    return {**parsed, "queries": queries, "specs": specs, "field_evidence": evidence}
 
 
 def build_rerank_prompt(label_context: Dict[str, Any], numbered_cands: List[Dict[str, Any]]) -> str:
@@ -95,14 +113,14 @@ def rule_based_rerank_fallback(
     """Fallback rule-based evaluator when Stage 2 Reranker LLM service is offline."""
     target_mpn = (label_context.get("extracted_mpn") or "").strip().upper()
     target_pkg = (label_context.get("extracted_package") or "").strip().upper()
-    target_val = (label_context.get("extracted_value") or "").strip().upper()
+    target_val = (label_context.get("extracted_value") or "").strip()
+    target_measurements = electrical_values([target_val])
 
     matching_indices = []
     excluded = []
     for c in numbered_cands:
         c_mpn = (c.get("mfr_part_number") or c.get("name") or "").upper()
         c_pkg = (c.get("package") or "").upper()
-        c_desc = (c.get("description") or "").upper()
         c_ext = str(c.get("external_part_id") or c.get("lcsc") or "").upper()
         c_code_str = f"C{c_ext}" if c_ext else ""
 
@@ -118,9 +136,12 @@ def rule_based_rerank_fallback(
             else:
                 excluded.append({"index": c["index"], "reason": f"封装不匹配 ({c_pkg} vs {target_pkg})"})
         elif not target_mpn and target_val:
-            if (target_val in c_desc or target_val in c_mpn) and (not target_pkg or target_pkg in c_pkg or c_pkg in target_pkg):
+            candidate_measurements = electrical_values([c.get("description") or "", c.get("mfr_part_number") or ""],
+                next(iter(target_measurements))[0] if target_measurements else None)
+            value_matches = bool(target_measurements and target_measurements <= candidate_measurements)
+            if value_matches and (not target_pkg or package_key(target_pkg) == package_key(c_pkg)):
                 matching_indices.append(c["index"])
-            elif not (target_val in c_desc or target_val in c_mpn):
+            elif not value_matches:
                 excluded.append({"index": c["index"], "reason": f"标称参数不匹配 ({target_val})"})
             else:
                 excluded.append({"index": c["index"], "reason": f"封装不匹配 ({c_pkg} vs {target_pkg})"})
@@ -187,10 +208,13 @@ def format_rerank_result(
         "excluded": stage2.get("excluded", []),
         "all_retrieved_candidates": candidates,
         "stage2_decision": stage2,
+        "stages": {"reranker": stage2.get("stage_status", {})},
         "latency_ms": round((time.time() - started_time) * 1000, 1),
     }
     if stage1 is not None:
         res["stage1_extraction"] = stage1
+        res["stages"]["extractor"] = stage1.get("stage_status", {})
+        res["field_evidence"] = stage1.get("field_evidence", {})
     return res
 
 
@@ -222,43 +246,18 @@ def stage1_extract(
             active_client = client_getter()
         except Exception as e:
             if strict_mode:
-                raise RuntimeError(
-                    f"LLM service unavailable: llama.cpp Extractor client error at {extractor_base_url}: {e}"
-                ) from e
+                raise AIStageError("extractor", "model_unavailable") from e
             LOGGER.warning("Stage 1 Extractor client unavailable, falling back to heuristic: %s", e)
 
     if active_client is not None:
         try:
-            resp = active_client.chat.completions.create(
-                model="electronic-qwen-extractor",
-                messages=[
-                    {"role": "system", "content": EXTRACTOR_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"请从以下工业元器件标签 OCR 文本中提取标准型号查询词与封装规格。\n\n{input_text}"},
-                ],
-                temperature=0.1,
-                max_tokens=600,
-                response_format=structured_format("label_extraction", EXTRACT_SCHEMA),
-            )
-            parsed = completed_json(resp)
-            if parsed and ("queries" in parsed or "family" in parsed):
-                specs = parsed.get("specs") or {}
-                raw_text = input_text.lower()
-                has_resistor_val = bool(re.search(r"\b\d+(?:\.\d+)?[kmr]\b", raw_text) or "ω" in raw_text or "resistor" in raw_text)
-                has_capacitor_val = bool(re.search(r"\b\d+(?:\.\d+)?[pnuµ]f\b", raw_text) or "mlcc" in raw_text or "capacitor" in raw_text)
-
-                if has_resistor_val and not has_capacitor_val:
-                    parsed["family"] = "resistor"
-                    specs["category"] = "Resistors"
-                    if "capacitance" in specs and "resistance" not in specs:
-                        specs["resistance"] = specs.pop("capacitance")
-                elif has_capacitor_val and not has_resistor_val:
-                    parsed["family"] = "capacitor"
-                    specs["category"] = "Capacitors"
-                    if "resistance" in specs and "capacitance" not in specs:
-                        specs["capacitance"] = specs.pop("resistance")
-
-                parsed["specs"] = specs
-                return grounded_extraction(parsed, ocr_lines)
+            parsed = request_structured(active_client, "extractor", "electronic-qwen-extractor",
+                [{"role": "system", "content": EXTRACTOR_SYSTEM_PROMPT},
+                 {"role": "user", "content": f"请提取原文中确实出现的型号和规格。\n\n{input_text}"}],
+                ExtractorOutput, EXTRACT_SCHEMA, 512)
+            return grounded_extraction(parsed, ocr_lines)
+        except AIStageError:
+            raise
         except Exception as e:
             if strict_mode:
                 raise RuntimeError(
@@ -266,9 +265,7 @@ def stage1_extract(
                 ) from e
             LOGGER.warning("Stage 1 Extractor server call failed, falling back to heuristic: %s", e)
     elif strict_mode:
-        raise RuntimeError(
-            f"LLM service unavailable: llama.cpp Extractor client is None at {extractor_base_url}"
-        )
+        raise AIStageError("extractor", "model_unavailable")
 
     # Fallback heuristic extractor
     queries = []
@@ -299,7 +296,8 @@ def stage1_extract(
             specs["value"] = m_val.group(0)
 
     return grounded_extraction(
-        {"family": "general", "queries": queries, "specs": specs, "review_reason": "heuristic_fallback"},
+        {"family": "general", "queries": queries, "specs": specs, "review_reason": "heuristic_fallback",
+         "stage_status": {"stage": "extractor", "status": "heuristic", "attempts": 0}},
         ocr_lines,
     )
 
@@ -336,34 +334,25 @@ def stage2_rerank(
             active_client = client_getter()
         except Exception as e:
             if strict_mode:
-                raise RuntimeError(
-                    f"LLM service unavailable: llama.cpp Reranker client error at {reranker_base_url}: {e}"
-                ) from e
+                raise AIStageError("reranker", "model_unavailable") from e
             LOGGER.warning("Stage 2 Reranker client unavailable, falling back to rule-based evaluator: %s", e)
 
     if active_client is not None:
         try:
-            resp = active_client.chat.completions.create(
-                model="electronic-qwen-reranker",
-                messages=[
-                    {"role": "system", "content": RERANKER_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"请根据工业标签信息与检索候选项列表，进行专业技术比对与排他分析，输出裁决理由与结构化决策。\n\n{prompt}"},
-                ],
-                temperature=0.1,
-                max_tokens=1200,
-                response_format=structured_format("candidate_decision", RERANK_SCHEMA),
-            )
-            parsed = completed_json(resp)
-            decision = parsed.get("decision")
-            index = parsed.get("selected_index")
-            if decision not in {"exact_match", "ambiguous", "no_match"}:
-                raise ValueError("Invalid candidate decision")
-            if decision == "exact_match" and (type(index) is not int or not 1 <= index <= len(candidates)):
-                raise ValueError("Invalid selected candidate")
-            if any(type(i) is not int or not 1 <= i <= len(candidates) for i in (parsed.get("candidate_indices") or [])):
-                raise ValueError("Invalid candidate indices")
-            parsed["reasoning"] = str(parsed.get("reasoning") or "")[:120]
+            parsed = request_structured(active_client, "reranker", "electronic-qwen-reranker",
+                [{"role": "system", "content": RERANKER_SYSTEM_PROMPT},
+                 {"role": "user", "content": f"核对候选，只返回短 JSON 决策。\n\n{prompt}"}],
+                RerankerOutput, RERANK_SCHEMA, 1200)
+            decision, index = parsed["decision"], parsed["selected_index"]
+            if decision == "exact_match" and (index is None or not 1 <= index <= len(candidates)):
+                raise AIStageError("reranker", "invalid_candidate_index")
+            if any(not 1 <= i <= len(candidates) for i in (parsed["candidate_indices"] or [])):
+                raise AIStageError("reranker", "invalid_candidate_index")
+            if any(not 1 <= row["index"] <= len(candidates) for row in parsed["excluded"]):
+                raise AIStageError("reranker", "invalid_candidate_index")
             return parsed
+        except AIStageError:
+            raise
         except Exception as e:
             if strict_mode:
                 raise RuntimeError(
@@ -371,8 +360,8 @@ def stage2_rerank(
                 ) from e
             LOGGER.warning("Stage 2 Reranker server call failed, falling back to rule-based evaluator: %s", e)
     elif strict_mode:
-        raise RuntimeError(
-            f"LLM service unavailable: llama.cpp Reranker client is None at {reranker_base_url}"
-        )
+        raise AIStageError("reranker", "model_unavailable")
 
-    return rule_based_rerank_fallback(label_context, numbered_cands)
+    result = rule_based_rerank_fallback(label_context, numbered_cands)
+    result["stage_status"] = {"stage": "reranker", "status": "heuristic", "attempts": 0}
+    return result

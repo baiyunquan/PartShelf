@@ -4,6 +4,8 @@ import json
 import logging
 import re
 from typing import Any, Dict
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,32 +43,55 @@ SPEC_FIELDS = (
     "voltage", "voltage_rating", "current", "power", "power_rating", "tolerance"
 )
 
-EXTRACT_SCHEMA = {
-    "type": "object", "additionalProperties": False,
-    "properties": {
-        "family": {"type": "string", "enum": ["resistor", "capacitor", "inductor", "ic", "connector", "mechanical", "general", "unknown"]},
-        "queries": {"type": "array", "maxItems": 3, "items": {
-            "type": "object", "additionalProperties": False,
-            "properties": {"kind": {"type": "string", "enum": ["lcsc", "mpn", "value", "package"]},
-                           "text": {"type": "string", "maxLength": 64}}, "required": ["kind", "text"]}},
-        "specs": {"type": "object", "additionalProperties": False,
-                  "properties": {key: {"type": ["string", "null"], "maxLength": 48} for key in ("package", "value", "manufacturer")},
-                  "required": ["package", "value", "manufacturer"]},
-        "review_reason": {"type": ["string", "null"], "maxLength": 40}},
-    "required": ["family", "queries", "specs", "review_reason"]}
+class StrictOutput(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
 
-RERANK_SCHEMA = {
-    "type": "object", "additionalProperties": False,
-    "properties": {
-        "decision": {"type": "string", "enum": ["exact_match", "ambiguous", "no_match"]},
-        "selected_index": {"type": ["integer", "null"], "minimum": 1},
-        "candidate_indices": {"type": ["array", "null"], "items": {"type": "integer", "minimum": 1}, "maxItems": 10},
-        "reasoning": {"type": "string", "maxLength": 120},
-        "excluded": {"type": "array", "maxItems": 10, "items": {
-            "type": "object", "additionalProperties": False,
-            "properties": {"index": {"type": "integer", "minimum": 1}, "reason": {"type": "string", "maxLength": 80}},
-            "required": ["index", "reason"]}}},
-    "required": ["decision", "selected_index", "candidate_indices", "reasoning", "excluded"]}
+
+class LabelQuery(StrictOutput):
+    kind: Literal["lcsc", "mpn", "value", "package"]
+    text: str = Field(min_length=1, max_length=64)
+
+
+class LabelSpecs(StrictOutput):
+    package: str | None = Field(max_length=48)
+    value: str | None = Field(max_length=48)
+    manufacturer: str | None = Field(max_length=48)
+
+
+class ExtractorOutput(StrictOutput):
+    family: Literal["resistor", "capacitor", "inductor", "ic", "connector", "mechanical", "general", "unknown"]
+    queries: list[LabelQuery] = Field(max_length=3)
+    specs: LabelSpecs
+    review_reason: str | None = Field(max_length=40)
+
+
+class ExcludedCandidate(StrictOutput):
+    index: int = Field(ge=1)
+    reason: str = Field(max_length=80)
+
+
+class RerankerOutput(StrictOutput):
+    decision: Literal["exact_match", "ambiguous", "no_match"]
+    selected_index: int | None = Field(ge=1)
+    candidate_indices: list[int] | None = Field(max_length=10)
+    reasoning: str = Field(max_length=120)
+    excluded: list[ExcludedCandidate] = Field(max_length=10)
+
+
+EXTRACT_SCHEMA = ExtractorOutput.model_json_schema()
+RERANK_SCHEMA = RerankerOutput.model_json_schema()
+
+
+class ModelOutputError(ValueError):
+    def __init__(self, code, finish_reason=None):
+        self.code, self.finish_reason = code, finish_reason
+        super().__init__(code)
+
+
+class AIStageError(RuntimeError):
+    def __init__(self, stage, code, attempts=1, finish_reason=None):
+        self.details = {"stage": stage, "code": code, "attempts": attempts, "finish_reason": finish_reason}
+        super().__init__(f"{stage}: {code} (attempts={attempts})")
 
 
 def structured_format(name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,14 +99,39 @@ def structured_format(name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
     return {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}}
 
 
-def completed_json(response: Any) -> Dict[str, Any]:
+def completed_json(response: Any, output_model=None) -> Dict[str, Any]:
     """Validate completion finish reason and extract validated JSON payload."""
     if not response.choices or response.choices[0].finish_reason != "stop":
-        raise ValueError("Model output is incomplete")
-    parsed = extract_json_safely(response.choices[0].message.content or "")
-    if not parsed:
-        raise ValueError("Model did not return a valid JSON object")
+        finish = response.choices[0].finish_reason if response.choices else None
+        raise ModelOutputError("output_incomplete", finish)
+    try:
+        parsed = json.loads(response.choices[0].message.content or "")
+        if not isinstance(parsed, dict) or not parsed:
+            raise ValueError()
+        if output_model is not None:
+            parsed = output_model.model_validate(parsed).model_dump()
+    except (ValueError, TypeError, ValidationError) as exc:
+        raise ModelOutputError("invalid_output", "stop") from exc
     return parsed
+
+
+def request_structured(client, stage, model, messages, output_model, schema, budget):
+    """Retry a truncated text completion once, never OCR and never a hidden heuristic."""
+    for attempt in (1, 2):
+        try:
+            response = client.chat.completions.create(model=model, messages=messages,
+                temperature=0.1, max_tokens=budget, response_format=structured_format(stage, schema))
+        except Exception as exc:
+            raise AIStageError(stage, "model_unavailable", attempt) from exc
+        try:
+            parsed = completed_json(response, output_model)
+        except ModelOutputError as exc:
+            if exc.finish_reason == "length" and attempt == 1:
+                continue
+            raise AIStageError(stage, exc.code, attempt, exc.finish_reason) from exc
+        parsed["stage_status"] = {"stage": stage, "status": "complete", "attempts": attempt,
+                                  "finish_reason": "stop", "budget": budget}
+        return parsed
 
 
 def is_logistics_or_shelf_noise(s: str) -> bool:

@@ -14,10 +14,15 @@ from app.services import paddleocr_client
 LOGGER = logging.getLogger(__name__)
 
 
-def recognize_once(db, image):
+def cache_identity(image):
     digest = hashlib.sha256(image).hexdigest()
     version = os.getenv("PADDLEOCR_VL_CACHE_VERSION", "vl-1.5-exif-1536-jpeg92-v1")
     key = hashlib.sha256(f"{version}:{digest}".encode()).hexdigest()
+    return key, digest
+
+
+def recognize_once(db, image):
+    key, digest = cache_identity(image)
     row = db.get(ScanOCRResult, key)
     owner = False
     if row is None:

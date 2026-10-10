@@ -17,7 +17,7 @@ from app.models import Inventory, Part, Project, ProjectPart, ScanSession
 from app.services import external_library_service as libraries, component_search_service
 from app.services import paddleocr_client as ocr_client
 from app.services.scan_verification import MAX_QUANTITY, parse_label
-from app.services.scan_evidence import verify_text, quantities
+from app.services.scan_evidence import verify_text, quantities, connector_observations
 from app.services.scan_ocr_cache import recognize_once
 from app.services.multi_turn_search_service import multi_turn_service
 from app.user_identity import SESSION_USERNAME_KEY, require_project_history_username
@@ -50,7 +50,8 @@ def _component_snapshot(item):
         identity = str(identity).lstrip("Cc")
     snapshot = {key: merged.get(key) for key in ("id", "lcsc", "lcsc_part", "mfr", "mfr_part_number", "lib_reference", "name",
                 "manufacturer", "package", "category", "subcategory", "description", "library_type", "lcsc_url",
-                "image_url_small", "capacitance", "resistance", "inductance")}
+                "image_url_small", "capacitance", "resistance", "inductance", "attributes", "attributes_dict",
+                "parameters_json", "parameters", "voltage_rating", "power_rating", "tolerance", "retrieval_truncated")}
     snapshot.update(library_source=source, source=source, external_part_id=str(identity) if identity is not None else None)
     return snapshot
 
@@ -254,6 +255,13 @@ def verify_scan(db, scan_id, image, lang="zh"):
             verification["reasons"].append(ocr.get("error") or "ocr_incomplete")
         else:
             lines = [line["text"] for line in ocr.get("lines", []) if line.get("text")]
+            verification["observations"] = connector_observations(lines)
+            counts = quantities(lines)
+            valid_quantity = len(counts) == 1 and 1 <= next(iter(counts)) <= MAX_QUANTITY
+            label["qty"] = next(iter(counts)) if valid_quantity else None
+            verification["fields"]["quantity"] = {"matched": valid_quantity, "expected": label["qty"],
+                "text": ", ".join(map(str, sorted(counts))), "evidence": [
+                    {"line_index": i, "text": line} for i,line in enumerate(lines) if quantities([line])]}
             if not lines:
                 verification["reasons"].append("ocr_empty")
             else:
@@ -262,6 +270,8 @@ def verify_scan(db, scan_id, image, lang="zh"):
                     decision = result.get("decision", "no_match")
                     verification.update(ai_decision=decision, ai_reasoning=result.get("reasoning", ""),
                                         match_type=f"ai_{decision}")
+                    verification["stages"] = result.get("stages", {})
+                    verification["field_evidence"] = result.get("field_evidence", {})
                     candidates = []
                     for candidate in [result.get("selected_component"), *result.get("candidate_components", []),
                                       *result.get("all_retrieved_candidates", [])]:
@@ -280,15 +290,23 @@ def verify_scan(db, scan_id, image, lang="zh"):
                             evidence = verify_text(component, lines)
                             verification.update(evidence)
                             label["qty"] = evidence["quantity"]
+                            compatible = [candidate for candidate in candidates if verify_text(candidate, lines)["verified"]]
+                            if len(compatible) > 1:
+                                verification["verified"] = False
+                                verification["reasons"].append("ambiguous_candidates")
                         else:
                             verification["reasons"].append("catalog_unavailable")
                     elif decision == "ambiguous":
                         verification["reasons"].append("ambiguous_candidates")
                     else:
                         verification["reasons"].append("ai_no_match")
+                    if any(stage.get("status") == "heuristic" for stage in result.get("stages", {}).values()):
+                        verification["verified"] = False
+                        verification["reasons"].append("ai_unavailable")
                 except Exception as exc:
                     LOGGER.exception("AI search failed for scan %s", scan_id)
                     verification.update(ai_error=str(exc), verified=False)
+                    verification["stage_errors"] = [exc.details] if hasattr(exc, "details") else [{"stage":"matching","code":"internal_error","attempts":1}]
                     verification["reasons"].append("ai_unavailable")
                 # A reused bag can expose old and new quantities even when neither model is in the catalog.
                 counts = quantities(lines)

@@ -92,9 +92,17 @@
     const catalogCode = component.library_source === "jlcparts" ? `C${component.external_part_id}` : component.external_part_id || "?";
     evidence.append(element("p", `${text("catalog")}: ${catalogCode} · ${component.mfr_part_number || component.mfr || component.name || "?"} · ${component.package || "?"}`, "fw-bold"));
     for (const [key, result] of Object.entries(scan.verification.fields || {})) {
-      const status = text(result.matched ? "matched" : "unmatched");
+      const status = text(result.matched == null ? "unknown" : result.matched ? "matched" : "unmatched");
       const value = `${text(key)}: ${status} · ${result.expected ?? ""} · ${result.text || ""}`;
-      evidence.append(element("p", value, "scan-evidence-line " + (result.matched ? "text-success" : "text-danger")));
+      evidence.append(element("p", value, "scan-evidence-line " + (result.matched == null ? "text-secondary" : result.matched ? "text-success" : "text-danger")));
+    }
+    for (const [key, result] of Object.entries(scan.verification.observations || {})) {
+      const values = result.value == null ? (result.values || []) : [result.value];
+      const display = values.map(value => translations[`observation_${value}`] || value).join(" / ");
+      evidence.append(element("p", `${text(`observation_${key}`)}: ${display}${key === "pitch_mm" ? " mm" : ""}`, "small"));
+    }
+    for (const error of scan.verification.stage_errors || []) {
+      evidence.append(element("p", `${text(`stage_${error.stage}`)}: ${text(`stage_error_${error.code}`)}`, "text-danger small"));
     }
     for (const reason of scan.verification.reasons || []) evidence.append(element("p", text(`reason_${reason}`), "text-danger"));
     const details = document.createElement("details");

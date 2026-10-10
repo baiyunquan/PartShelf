@@ -33,8 +33,8 @@ def model_service(completions, strict=True):
 
 
 def test_extractor_filters_unobserved_model_and_specs():
-    completion = Completions({"family": "transistor", "queries": [{"kind": "mpn", "text": "PN7160AIHN"},
-        {"kind": "mpn", "text": "PN7160A1HN"}], "specs": {"package": "SOT-23", "voltage": "60V"}})
+    completion = Completions({"family": "ic", "queries": [{"kind": "mpn", "text": "PN7160AIHN"},
+        {"kind": "mpn", "text": "PN7160A1HN"}], "specs": {"package": "SOT-23", "value": "60V", "manufacturer": "NXP"}, "review_reason": None})
     result = model_service(completion).stage1_extract(["PN7160AIHN", "QTY:3"])
     assert result["queries"] == [{"kind": "mpn", "text": "PN7160AIHN"}]
     assert not result["specs"].get("package")
@@ -101,10 +101,10 @@ def test_llama_ocr_returns_unknown_confidence_and_truncation(setup, monkeypatch)
 
 
 def test_full_model_suffix_is_required_by_offline_reranker():
-    completion = Completions({})
-    result = model_service(completion, strict=False).stage2_rerank(
+    from app.services.multi_turn_evaluator import rule_based_rerank_fallback
+    result = rule_based_rerank_fallback(
         {"extracted_mpn": "PN7160A1HN", "ocr_text": "PN7160A1HN"},
-        [{"mfr_part_number": "PN7160", "manufacturer": "NXP", "package": "", "category": "IC", "description": ""}])
+        [{"index": 1, "mfr_part_number": "PN7160", "manufacturer": "NXP", "package": "", "category": "IC", "description": ""}])
     assert result["decision"] == "no_match"
 
 
@@ -235,4 +235,3 @@ def test_stage2_rerank_standalone_function():
     res = stage2_rerank(ctx, cands, client=None, strict_mode=False)
     assert res["decision"] == "exact_match"
     assert res["selected_index"] == 1
-
