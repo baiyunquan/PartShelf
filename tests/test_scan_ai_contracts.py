@@ -7,6 +7,8 @@ import httpx
 import pytest
 
 from app.services.multi_turn_search_service import MultiTurnSearchService
+from app.services.multi_turn_evaluator import stage1_extract, stage2_rerank
+from app.services.multi_turn_retrieval import retrieve_candidates
 from paddleocr_vl.adapter import PaddleOCRVLAdapter
 from tests.test_scan_import import setup, scan
 from tests.test_scan_verification import COMPONENT, evidence
@@ -133,7 +135,7 @@ def test_cross_library_exact_model_candidates_merge_using_lcsc_identity(tmp_path
             (78287, "CL10C101JB8NNNC", "CL10C101JB8NNNC", "C14858", "0603", "Samsung")])
     monkeypatch.setattr(libraries, "JLCPARTS_DB_PATH", jlc)
     monkeypatch.setattr(libraries, "ALTIUM_DB_PATH", altium)
-    candidates = MultiTurnSearchService().retrieve_candidates("CL10C101JB8NNNC")
+    candidates = retrieve_candidates("CL10C101JB8NNNC")
     assert len(candidates) == 1
     assert (candidates[0]["library_source"], candidates[0]["external_part_id"]) == ("jlcparts", "14858")
 
@@ -207,3 +209,30 @@ def test_reused_bag_quantity_conflict_is_reported_even_without_a_catalog_match(s
     assert "quantity" in result["verification"]["reasons"]
     assert not result["verification"]["fields"]["quantity"]["matched"]
     assert result["status"] == "needs_review"
+
+
+def test_stage1_extract_standalone_function():
+    """Verify standalone stage1_extract function behaves deterministically with heuristic fallback."""
+    lines = ["型号: CL10C101JB8NNNC", "封装: 0603", "100PF ±5%", "数量: 100PCS"]
+    res = stage1_extract(lines, client=None, strict_mode=False)
+    assert res["family"] == "general"
+    queries = [q["text"] for q in res.get("queries", [])]
+    assert "CL10C101JB8NNNC" in queries
+    assert res.get("specs", {}).get("package") == "0603"
+
+
+def test_stage2_rerank_standalone_function():
+    """Verify standalone stage2_rerank function handles candidate adjudication with rule-based fallback."""
+    ctx = {
+        "ocr_text": "型号: NE555P\\n封装: DIP-8",
+        "extracted_mpn": "NE555P",
+        "extracted_package": "DIP-8",
+    }
+    cands = [
+        {"mfr_part_number": "NE555P", "package": "DIP-8", "manufacturer": "TI", "description": "Timer"},
+        {"mfr_part_number": "NE555D", "package": "SOIC-8", "manufacturer": "TI", "description": "Timer SMD"},
+    ]
+    res = stage2_rerank(ctx, cands, client=None, strict_mode=False)
+    assert res["decision"] == "exact_match"
+    assert res["selected_index"] == 1
+
