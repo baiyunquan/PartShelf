@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Inventory, Part, Project, ProjectPart, ScanSession
+from app.models import Inventory, Part, Project, ProjectPart, ScanSession, WarehousePlacement
 from app.services import external_library_service as libraries, component_search_service
 from app.services import paddleocr_client as ocr_client
 from app.services.scan_verification import MAX_QUANTITY, parse_label
@@ -428,14 +428,20 @@ def confirm(db, scan_id, code, quantity, note="", new_package=False, lang="zh",
     return import_package(db, scan_id, component, quantity, note, new_package)
 
 
-def public_scan(scan):
+def public_scan(scan, db=None):
     utc = lambda value: value.replace(tzinfo=timezone.utc).isoformat() if value else None
     verification = dict(scan.verification or {})
     if "candidates" in verification:
         verification["candidates"] = [_component_snapshot(candidate) for candidate in verification["candidates"] if candidate]
+    placement = None
+    if db is not None and scan.part_id:
+        p = db.get(WarehousePlacement, scan.part_id)
+        if p is not None:
+            placement = {"cabinet_id": p.cabinet_id, "drawer_code": p.drawer_code}
     return {"id": scan.id, "request_id": scan.request_id, "status": scan.status,
             "created_at": utc(scan.created_at), "imported_at": utc(scan.imported_at), "username": scan.username,
             "imported_by": scan.imported_by, "project_id": scan.project_id, "project_name": scan.project_name,
             "part_id": scan.part_id, "quantity": scan.quantity, "label": scan.label, "component": _component_snapshot(scan.component),
             "ocr": scan.ocr, "verification": verification, "note": scan.note,
-            "image_url": f"/api/scan/{scan.id}/image"}
+            "image_url": f"/api/scan/{scan.id}/image",
+            "placement": placement}

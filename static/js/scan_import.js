@@ -42,7 +42,11 @@
   async function request(url, options) {
     const response = await fetch(url, options);
     const result = await response.json();
-    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : text("error"));
+    if (!response.ok) {
+      const err = new Error(typeof result.detail === "string" ? result.detail : text("error"));
+      err.status = response.status;
+      throw err;
+    }
     return result;
   }
   function saveProject() {
@@ -163,6 +167,228 @@
     node("scan-new-package").checked = false;
     node("scan-new-package-wrap").hidden = scan.status !== "duplicate";
   }
+
+  const WarehouseModal = (() => {
+    const modalEl = document.getElementById("warehousePlacementModal");
+    let modalInstance = null;
+    let currentScan = null;
+    let customPhotoFile = null;
+    let candidates = [];
+    let requestVersion = 0;
+    let saving = false;
+
+    const partInfoEl = document.getElementById("warehouse-modal-part-info");
+    const alreadyPlacedEl = document.getElementById("warehouse-modal-already-placed");
+    const alreadyPlacedText = document.getElementById("warehouse-modal-already-placed-text");
+    const removeBtn = document.getElementById("warehouse-modal-remove-placement");
+    const targetSelect = document.getElementById("warehouse-modal-target");
+    const groupHintEl = document.getElementById("warehouse-modal-group-hint");
+    const photoPreview = document.getElementById("warehouse-modal-photo-preview");
+    const photoInput = document.getElementById("warehouse-modal-photo-input");
+    const changePhotoBtn = document.getElementById("warehouse-modal-change-photo-btn");
+    const messageEl = document.getElementById("warehouse-modal-message");
+    const confirmBtn = document.getElementById("warehouse-modal-confirm");
+    const drawerTypeRadios = document.querySelectorAll('input[name="modal_drawer_type"]');
+
+    function getDrawerType() {
+      const checked = document.querySelector('input[name="modal_drawer_type"]:checked');
+      return checked ? checked.value : "S";
+    }
+
+    function showMessage(key, isError = false) {
+      if (!messageEl) return;
+      if (!key) {
+        messageEl.hidden = true;
+        messageEl.textContent = "";
+        return;
+      }
+      messageEl.hidden = false;
+      messageEl.className = `alert py-2 px-3 small mb-0 ${isError ? "alert-danger" : "alert-success"}`;
+      messageEl.textContent = text(key) || key;
+    }
+
+    function updateConfirmButton() {
+      if (!confirmBtn) return;
+      confirmBtn.disabled = saving || targetSelect.disabled || !targetSelect.value;
+    }
+
+    async function loadSuggestion() {
+      if (!currentScan || !currentScan.part_id) return;
+      const version = ++requestVersion;
+      candidates = [];
+      targetSelect.replaceChildren();
+      targetSelect.disabled = true;
+      groupHintEl.textContent = "";
+      updateConfirmButton();
+      showMessage("placement_loading");
+
+      const drawerType = getDrawerType();
+      try {
+        const result = await request(`/api/warehouse/parts/${encodeURIComponent(currentScan.part_id)}/suggestion?drawer_type=${drawerType}`);
+        if (version !== requestVersion) return;
+
+        if (result.reason === "already_placed" && result.placement) {
+          alreadyPlacedEl.hidden = false;
+          alreadyPlacedText.textContent = `${text("placement_already_placed")} (${result.placement.cabinet_id} / ${result.placement.drawer_code})`;
+          currentScan.placement = result.placement;
+          renderHistory();
+          showMessage("");
+        } else {
+          alreadyPlacedEl.hidden = true;
+        }
+
+        candidates = result.candidates || [];
+        for (const [index, target] of candidates.entries()) {
+          const opt = document.createElement("option");
+          opt.value = String(index);
+          opt.textContent = `${target.cabinet_id} / ${target.drawer_code} — ${text(`placement_${target.state}`) || target.state}`;
+          targetSelect.append(opt);
+        }
+
+        if (candidates.length) {
+          targetSelect.disabled = false;
+          targetSelect.value = "0";
+          if (result.group && result.group.label) {
+            groupHintEl.textContent = `${text("placement_group")}: ${result.group.label}`;
+          }
+          if (result.reason !== "already_placed") {
+            showMessage("");
+          }
+        } else {
+          if (result.reason !== "already_placed") {
+            showMessage(result.reason ? `placement_${result.reason}` : "placement_no_available_drawer", true);
+          }
+        }
+      } catch (err) {
+        if (version === requestVersion) {
+          showMessage("placement_error", true);
+        }
+      } finally {
+        if (version === requestVersion) {
+          updateConfirmButton();
+        }
+      }
+    }
+
+    if (changePhotoBtn && photoInput) {
+      changePhotoBtn.addEventListener("click", () => photoInput.click());
+      photoInput.addEventListener("change", () => {
+        if (photoInput.files.length) {
+          customPhotoFile = photoInput.files[0];
+          photoPreview.src = URL.createObjectURL(customPhotoFile);
+        }
+      });
+    }
+
+    for (const radio of drawerTypeRadios) {
+      radio.addEventListener("change", () => loadSuggestion());
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener("click", async () => {
+        if (!currentScan || !currentScan.part_id || saving) return;
+        saving = true;
+        removeBtn.disabled = true;
+        try {
+          await request(`/api/warehouse/parts/${encodeURIComponent(currentScan.part_id)}/placement`, { method: "DELETE" });
+          showMessage("placement_removed");
+          currentScan.placement = null;
+          alreadyPlacedEl.hidden = true;
+          renderHistory();
+          await loadSuggestion();
+        } catch (err) {
+          showMessage("placement_error", true);
+        } finally {
+          saving = false;
+          removeBtn.disabled = false;
+        }
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", async () => {
+        if (confirmBtn.disabled || !currentScan || !currentScan.part_id || saving) return;
+        const target = candidates[Number(targetSelect.value)];
+        if (!target) return;
+
+        saving = true;
+        confirmBtn.disabled = true;
+        showMessage("placement_loading");
+
+        try {
+          let photoBlob = customPhotoFile;
+          if (!photoBlob) {
+            const resp = await fetch(currentScan.image_url);
+            if (!resp.ok) throw new Error("Failed to load scan image");
+            photoBlob = await resp.blob();
+          }
+
+          const formData = new FormData();
+          formData.append("cabinet_id", target.cabinet_id);
+          formData.append("drawer_code", target.drawer_code);
+          formData.append("photo", photoBlob, "label.jpg");
+
+          await request(`/api/warehouse/parts/${encodeURIComponent(currentScan.part_id)}/placement`, {
+            method: "POST",
+            body: formData,
+          });
+
+          currentScan.placement = {
+            cabinet_id: target.cabinet_id,
+            drawer_code: target.drawer_code,
+          };
+          renderHistory();
+          showMessage("placement_saved");
+
+          setTimeout(() => {
+            if (modalInstance) modalInstance.hide();
+          }, 800);
+        } catch (err) {
+          showMessage(err.status === 409 ? "placement_conflict" : "placement_upload_error", true);
+          await loadSuggestion();
+        } finally {
+          saving = false;
+          updateConfirmButton();
+        }
+      });
+    }
+
+    return {
+      open(scan) {
+        if (!modalEl || !scan || !scan.part_id) return;
+        currentScan = scan;
+        customPhotoFile = null;
+        if (photoInput) photoInput.value = "";
+        saving = false;
+        showMessage("");
+
+        const comp = scan.component || {};
+        const code = (comp.lcsc ? "C" + comp.lcsc : comp.external_part_id) || (scan.label && scan.label.pc) || "Part";
+        if (partInfoEl) {
+          partInfoEl.textContent = `#${scan.part_id} · ${code} · ${comp.mfr_part_number || comp.mfr || comp.name || ""} · ${comp.package || ""} · ${text("quantity")}: ${scan.quantity || (scan.label && scan.label.qty) || "?"}`;
+        }
+
+        if (photoPreview) {
+          photoPreview.src = scan.image_url || "";
+        }
+        if (alreadyPlacedEl) {
+          alreadyPlacedEl.hidden = true;
+        }
+
+        const sRadio = document.getElementById("modal-drawer-type-s");
+        if (sRadio) sRadio.checked = true;
+
+        if (!modalInstance && window.bootstrap && bootstrap.Modal) {
+          modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+        }
+        if (modalInstance) {
+          modalInstance.show();
+        }
+        loadSuggestion();
+      }
+    };
+  })();
+
   function renderHistory() {
     const container = node("scan-history");
     container.replaceChildren();
@@ -181,7 +407,17 @@
       actions.append(button);
       if (scan.part_id) {
         link(actions, "inventory_link", `/component_details?part_id=${scan.part_id}`);
-        link(actions, "warehouse_link", `/warehouse?part_id=${scan.part_id}&drawer_type=S`);
+        const whBtn = element(
+          "button",
+          scan.placement ? `${text("warehouse_placed")} (${scan.placement.cabinet_id} / ${scan.placement.drawer_code})` : text("warehouse_placement_btn"),
+          scan.placement ? "btn btn-outline-success btn-sm" : "btn btn-outline-primary btn-sm"
+        );
+        whBtn.type = "button";
+        whBtn.addEventListener("click", () => {
+          stopCamera();
+          WarehouseModal.open(scan);
+        });
+        actions.append(whBtn);
         if (scan.project_id) link(actions, "project_link", `/project_details?project_id=${scan.project_id}`);
       }
       card.append(actions);
@@ -205,6 +441,10 @@
       showReview(scan);
     } else if (scan.status === "imported") {
       node("scan-review").hidden = true;
+      if (scan.part_id) {
+        stopCamera();
+        WarehouseModal.open(scan);
+      }
     }
     message(scan.status === "processing" ? "status_processing" : scan.status, scan.status === "needs_review");
   }

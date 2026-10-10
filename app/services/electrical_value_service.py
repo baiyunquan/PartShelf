@@ -40,7 +40,8 @@ class Measurement:
 
 def normalize_value_text(text: Any) -> str:
     """Preserve prefix case while normalizing Unicode and micro symbols."""
-    return unicodedata.normalize("NFKC", str(text or "")).replace("μ", "u").replace("µ", "u")
+    normalized = unicodedata.normalize("NFKC", str(text or "")).replace("μ", "u").replace("µ", "u")
+    return re.sub(r"(?<=\d)\s*([pPnNuUmkKMGT]?[FfHh]|[ΩΩ]|[Oo][Hh][Mm][Ss]?|欧姆)(?=\d)", r"\1 ", normalized)
 
 
 def _canonical(number: str, prefix: str) -> Optional[str]:

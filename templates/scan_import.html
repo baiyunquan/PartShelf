@@ -69,6 +69,63 @@
           </div></div>
         </section>
       </div>
+      <div class="modal fade" id="warehousePlacementModal" tabindex="-1" aria-labelledby="warehousePlacementModalTitle" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content shadow border-0">
+            <div class="modal-header bg-primary text-white">
+              <h5 class="modal-title fw-bold" id="warehousePlacementModalTitle">{{ t('warehouse.placement_heading') }}</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('libraries_common.btn_cancel') }}"></button>
+            </div>
+            <div class="modal-body p-3">
+              <div id="warehouse-modal-part-info" class="p-2 mb-3 bg-light rounded border small"></div>
+              <div id="warehouse-modal-already-placed" class="alert alert-info py-2 px-3 small mb-3" hidden>
+                <div class="d-flex justify-content-between align-items-center">
+                  <span id="warehouse-modal-already-placed-text"></span>
+                  <button type="button" id="warehouse-modal-remove-placement" class="btn btn-outline-danger btn-sm">
+                    {{ t('scan_import.remove_placement') }}
+                  </button>
+                </div>
+              </div>
+              <form id="warehouse-modal-form">
+                <div class="mb-3">
+                  <label class="form-label fw-bold small mb-1">{{ t('warehouse.drawer_type_label') }}</label>
+                  <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" name="modal_drawer_type" id="modal-drawer-type-s" value="S" checked autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="modal-drawer-type-s">{{ t('warehouse.drawer_type_small') }}</label>
+                    <input type="radio" class="btn-check" name="modal_drawer_type" id="modal-drawer-type-l" value="L" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="modal-drawer-type-l">{{ t('warehouse.drawer_type_large') }}</label>
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-bold small mb-1" for="warehouse-modal-target">{{ t('warehouse.placement_target') }}</label>
+                  <select id="warehouse-modal-target" class="form-select" required disabled></select>
+                  <div id="warehouse-modal-group-hint" class="form-text small text-muted mt-1"></div>
+                </div>
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label fw-bold small mb-0">{{ t('warehouse.placement_photo') }}</label>
+                    <button type="button" id="warehouse-modal-change-photo-btn" class="btn btn-link btn-sm p-0 text-decoration-none">
+                      {{ t('scan_import.change_photo') }}
+                    </button>
+                  </div>
+                  <div class="text-center p-2 bg-light rounded border mb-1">
+                    <img id="warehouse-modal-photo-preview" class="img-fluid rounded" style="max-height: 180px;" alt="{{ t('warehouse.placement_photo') }}">
+                  </div>
+                  <input type="file" id="warehouse-modal-photo-input" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp" hidden>
+                  <div class="form-text small text-muted">{{ t('scan_import.photo_auto_filled_hint') }}</div>
+                </div>
+                <div id="warehouse-modal-message" class="alert py-2 px-3 small mb-0" hidden></div>
+              </form>
+            </div>
+            <div class="modal-footer py-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">{{ t('libraries_common.btn_cancel') }}</button>
+              <button type="button" id="warehouse-modal-confirm" class="btn btn-primary btn-sm" disabled>
+                {{ t('warehouse.placement_confirm') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
     <script id="page-translations" type="application/json">{{ page_translations | tojson }}</script>
     <script src="/static/js/vendor/zxing-wasm/reader.js"></script>

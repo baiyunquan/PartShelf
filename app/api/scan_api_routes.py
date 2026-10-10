@@ -65,7 +65,7 @@ def recognize_label(
         except (ValueError, TypeError):
             raise HTTPException(422, "qr_texts must be an array of up to eight QR payloads")
     scan = service.recognize(db, qr_text, data, pid, req_id, get_current_language(request), qr_texts=payloads)
-    return service.public_scan(scan)
+    return service.public_scan(scan, db=db)
 
 
 @router.get("/history")
@@ -73,19 +73,19 @@ def get_scan_history(status: str | None = Query(None), limit: int = Query(50, ge
     query = db.query(ScanSession)
     if status:
         query = query.filter(ScanSession.status == status)
-    return {"items": [service.public_scan(scan) for scan in query.order_by(ScanSession.created_at.desc()).limit(limit).all()]}
+    return {"items": [service.public_scan(scan, db=db) for scan in query.order_by(ScanSession.created_at.desc()).limit(limit).all()]}
 
 
 @router.post("/{scan_id}/confirm")
 def confirm_scan(scan_id: str, body: ScanConfirmation, request: Request, db: Session = Depends(get_db)):
     scan = service.confirm(db, scan_id, body.lcsc_code, body.quantity, body.note, body.new_package,
                            get_current_language(request), body.library_source, body.external_part_id)
-    return service.public_scan(scan)
+    return service.public_scan(scan, db=db)
 
 
 @router.post("/{scan_id}/retry")
 def retry_scan(scan_id: str, request: Request, db: Session = Depends(get_db)):
-    return service.public_scan(service.retry_scan(db, scan_id, get_current_language(request)))
+    return service.public_scan(service.retry_scan(db, scan_id, get_current_language(request)), db=db)
 
 
 @router.get("/{scan_id}/image")

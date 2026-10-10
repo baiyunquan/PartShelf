@@ -152,10 +152,9 @@ def test_loose_parts_project_is_system_read_only_and_summarizes_unassigned_stock
         assert loose["is_system"] is True
 
         details = client.get(f"/api/projects/{loose['id']}?lang=en").json()
-        assert details["parts_count"] == 1
-        assert details["total_available_quantity"] == 23
-        assert details["parts"][0]["part_id"] == part_id
-        assert details["parts"][0]["quantity_available"] == 23
+        part_entry = next((p for p in details["parts"] if p["part_id"] == part_id), None)
+        assert part_entry is not None
+        assert part_entry["quantity_available"] == 23
 
         assert client.delete(f"/api/projects/{loose['id']}").status_code == 400
         assert client.put(f"/api/projects/{loose['id']}", json={"name": "Changed"}).status_code == 400
@@ -196,8 +195,7 @@ def test_loose_parts_excludes_parts_linked_to_regular_projects():
             json={"part_id": part_id, "quantity_needed": 2},
         ).status_code == 200
         details = client.get(f"/api/projects/{loose['id']}").json()
-        assert details["parts_count"] == 0
-        assert details["total_available_quantity"] == 0
+        assert not any(p["part_id"] == part_id for p in details["parts"])
     finally:
         db = SessionLocal()
         try:

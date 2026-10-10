@@ -60,7 +60,7 @@ def render_template(request: Request, name: str, context: dict = None) -> HTMLRe
                 **i18n.get_section("libraries_fasteners", lang),
                 **page_dict,
             }
-        elif name == "inventory.html":
+        elif name in ("inventory.html", "scan_import.html"):
             context["page_translations"] = {**common_dict, **i18n.get_section("warehouse", lang), **page_dict}
         elif name in ("projects.html", "project_details.html"):
             context["page_translations"] = {**common_dict, **page_dict, **bom_dict}

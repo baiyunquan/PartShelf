@@ -8,9 +8,12 @@ custom component creation, and project BOM linking.
 import io
 import re
 import csv
+import logging
 import openpyxl
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+
+LOGGER = logging.getLogger(__name__)
 
 from app.models.project import Project
 from app.models.project_part import ProjectPart
@@ -360,7 +363,11 @@ def analyze_bom_matching(parsed_rows: List[Dict[str, Any]], db: Session, lang: s
                 code_missing = bool(code and not exact)
 
                 # AI Multi-Turn Search matching for ambiguous, missing-code, or un-coded rows
-                ai_res = multi_turn_service.process_bom_row(row)
+                try:
+                    ai_res = multi_turn_service.process_bom_row(row)
+                except Exception as e:
+                    LOGGER.warning("AI BOM matching failed for row, falling back to heuristic: %s", e)
+                    ai_res = {"decision": "no_match", "reasoning": "AI 匹配异常，已转为规则匹配"}
                 ai_decision = ai_res.get("decision", "no_match")
                 ai_reasoning = ai_res.get("reasoning", "")
                 ai_cand = ai_res.get("selected_component")
