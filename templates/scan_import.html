@@ -50,8 +50,37 @@
               <div id="scan-candidates-list" class="d-flex flex-column gap-2"></div>
             </div>
             <form id="scan-review-form">
-              <label class="form-label" for="scan-review-code">{{ t('scan_import.number') }}</label>
-              <input id="scan-review-code" class="form-control mb-2" pattern="[A-Za-z0-9._-]{1,64}" required>
+              <div id="scan-review-catalog-fields">
+                <label class="form-label" for="scan-review-code">{{ t('scan_import.number') }}</label>
+                <input id="scan-review-code" class="form-control mb-2" pattern="[A-Za-z0-9._-]{1,64}" required>
+              </div>
+              <div id="scan-review-custom-fields" class="mb-2" hidden>
+                <div class="card p-2 bg-light border">
+                  <div class="fw-bold small text-primary mb-2">{{ t('scan_import.custom_item_card_title') }}</div>
+                  <label class="form-label small mb-1" for="scan-custom-name">{{ t('scan_import.custom_item_name') }}</label>
+                  <input id="scan-custom-name" class="form-control form-control-sm mb-2" maxlength="255">
+                  <div class="row g-2 mb-2">
+                    <div class="col-6">
+                      <label class="form-label small mb-1" for="scan-custom-mfr">{{ t('scan_import.custom_item_manufacturer') }}</label>
+                      <input id="scan-custom-mfr" class="form-control form-control-sm" maxlength="255">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small mb-1" for="scan-custom-pkg">{{ t('scan_import.custom_item_package') }}</label>
+                      <input id="scan-custom-pkg" class="form-control form-control-sm" maxlength="128">
+                    </div>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small mb-1" for="scan-custom-type">{{ t('scan_import.custom_item_part_type') }}</label>
+                      <input id="scan-custom-type" class="form-control form-control-sm" maxlength="128">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small mb-1" for="scan-custom-desc">{{ t('scan_import.custom_item_description') }}</label>
+                      <input id="scan-custom-desc" class="form-control form-control-sm" maxlength="500">
+                    </div>
+                  </div>
+                </div>
+              </div>
               <label class="form-label" for="scan-review-quantity">{{ t('scan_import.quantity') }}</label>
               <input id="scan-review-quantity" class="form-control mb-2" type="number" min="1" max="2147483647" step="1" required>
               <label class="form-label" for="scan-review-note">{{ t('scan_import.note') }}</label>

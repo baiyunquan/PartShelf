@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -15,16 +16,30 @@ from db.database import get_db
 router = APIRouter()
 
 
+class CustomItemPayload(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    manufacturer: str | None = Field(default=None, max_length=255)
+    package: str | None = Field(default=None, max_length=128)
+    part_type: str | None = Field(default=None, max_length=128)
+    description: str | None = None
+    specs: dict[str, Any] | None = None
+
+
 class ScanConfirmation(BaseModel):
     lcsc_code: str | None = Field(default=None, min_length=1, max_length=64, description="Legacy LCSC C-code")
-    library_source: str | None = Field(default=None, pattern="^(jlcparts|altium|kicad)$")
+    library_source: str | None = Field(default=None, pattern="^(jlcparts|altium|kicad|custom)$")
     external_part_id: str | None = Field(default=None, min_length=1, max_length=64)
+    custom_item: CustomItemPayload | None = None
     quantity: int = Field(ge=1, le=service.MAX_QUANTITY)
     note: str = Field(default="", max_length=500)
     new_package: bool = False
 
     @model_validator(mode="after")
     def identity(self):
+        if self.library_source == "custom":
+            if not self.custom_item and not self.external_part_id:
+                raise ValueError("Provide custom_item details or existing custom external_part_id")
+            return self
         if bool(self.library_source) != bool(self.external_part_id):
             raise ValueError("Provide both library_source and external_part_id")
         if not self.library_source and not self.lcsc_code:
@@ -78,8 +93,10 @@ def get_scan_history(status: str | None = Query(None), limit: int = Query(50, ge
 
 @router.post("/{scan_id}/confirm")
 def confirm_scan(scan_id: str, body: ScanConfirmation, request: Request, db: Session = Depends(get_db)):
+    custom_dict = body.custom_item.model_dump() if body.custom_item else None
     scan = service.confirm(db, scan_id, body.lcsc_code, body.quantity, body.note, body.new_package,
-                           get_current_language(request), body.library_source, body.external_part_id)
+                           get_current_language(request), body.library_source, body.external_part_id,
+                           custom_item=custom_dict)
     return service.public_scan(scan, db=db)
 
 

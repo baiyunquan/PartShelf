@@ -84,6 +84,16 @@
     anchor.href = url;
     container.append(anchor);
   }
+  function setCustomMode(enabled) {
+    const catalogFields = node("scan-review-catalog-fields");
+    const customFields = node("scan-review-custom-fields");
+    const codeInput = node("scan-review-code");
+    const customNameInput = node("scan-custom-name");
+    if (catalogFields) catalogFields.hidden = enabled;
+    if (customFields) customFields.hidden = !enabled;
+    if (codeInput) codeInput.required = !enabled;
+    if (customNameInput) customNameInput.required = enabled;
+  }
   function showReview(scan) {
     review = scan;
     node("scan-review").hidden = false;
@@ -124,10 +134,24 @@
     }
     const candSection = node("scan-candidates-section");
     const candList = node("scan-candidates-list");
+    const recommendedCustom = (scan.verification && scan.verification.recommended_custom_item) || null;
     if (candSection && candList) {
       const candidates = (scan.verification && scan.verification.candidates) || [];
-      candSection.hidden = candidates.length === 0;
+      candSection.hidden = candidates.length === 0 && !recommendedCustom;
       candList.replaceChildren();
+
+      function updateCardSelection() {
+        for (const c of candList.children) {
+          if (selectedIdentity && selectedIdentity.library_source === "custom" && c.dataset.candidateId === "custom") {
+            c.classList.add("border-primary", "bg-primary-subtle");
+          } else if (selectedIdentity && selectedIdentity.library_source !== "custom" && c.dataset.candidateId === (selectedIdentity.external_part_id || selectedIdentity.name)) {
+            c.classList.add("border-primary", "bg-primary-subtle");
+          } else {
+            c.classList.remove("border-primary", "bg-primary-subtle");
+          }
+        }
+      }
+
       for (const cand of candidates) {
         const card = document.createElement("div");
         card.className = "card p-2 border scan-candidate-card";
@@ -151,11 +175,65 @@
           const codeVal = cand.external_part_id ? (cand.library_source === "jlcparts" ? "C" + cand.external_part_id : cand.external_part_id) : (cand.lcsc ? "C" + cand.lcsc : title);
           node("scan-review-code").value = codeVal;
           selectedIdentity = cand;
+          setCustomMode(false);
+          updateCardSelection();
         });
         row.append(info, selBtn);
         card.append(row);
+        card.dataset.candidateId = cand.external_part_id || cand.name;
         candList.append(card);
       }
+
+      if (recommendedCustom) {
+        const customCard = document.createElement("div");
+        customCard.className = "card p-2 border scan-candidate-card scan-custom-candidate-card";
+        const cRow = document.createElement("div");
+        cRow.className = "d-flex justify-content-between align-items-center";
+        const cInfo = document.createElement("div");
+        const cTitle = document.createElement("div");
+        cTitle.className = "fw-bold small text-primary";
+        cTitle.textContent = `[${text("custom_item_card_title") || "Custom Item"}] ${recommendedCustom.name || ""}`;
+        const cSub = document.createElement("div");
+        cSub.className = "text-muted small";
+        cSub.textContent = `${recommendedCustom.package || ""} · ${recommendedCustom.manufacturer || ""} · ${recommendedCustom.part_type || ""}`;
+        cInfo.append(cTitle, cSub);
+        if (recommendedCustom.description) {
+          const cDesc = document.createElement("div");
+          cDesc.className = "text-secondary small";
+          cDesc.textContent = recommendedCustom.description;
+          cInfo.append(cDesc);
+        }
+        const cBtn = document.createElement("button");
+        cBtn.type = "button";
+        cBtn.className = "btn btn-outline-primary btn-sm";
+        cBtn.textContent = text("btn_select_custom_item") || "Select Custom Item";
+        cBtn.addEventListener("click", () => {
+          selectedIdentity = { library_source: "custom", ...recommendedCustom };
+          setCustomMode(true);
+          updateCardSelection();
+        });
+        cRow.append(cInfo, cBtn);
+        customCard.append(cRow);
+        customCard.dataset.candidateId = "custom";
+        candList.append(customCard);
+      }
+      updateCardSelection();
+    }
+
+    if (recommendedCustom) {
+      if (node("scan-custom-name")) node("scan-custom-name").value = recommendedCustom.name || "";
+      if (node("scan-custom-mfr")) node("scan-custom-mfr").value = recommendedCustom.manufacturer || "";
+      if (node("scan-custom-pkg")) node("scan-custom-pkg").value = recommendedCustom.package || "";
+      if (node("scan-custom-type")) node("scan-custom-type").value = recommendedCustom.part_type || "";
+      if (node("scan-custom-desc")) node("scan-custom-desc").value = recommendedCustom.description || "";
+    }
+
+    const existingCandidates = (scan.verification && scan.verification.candidates) || [];
+    if (recommendedCustom && (existingCandidates.length === 0 || !component.library_source || component.library_source === "custom")) {
+      selectedIdentity = { library_source: "custom", ...recommendedCustom };
+      setCustomMode(true);
+    } else {
+      setCustomMode(false);
     }
     node("scan-review-form").hidden = scan.status === "imported";
     const resolvedCode = (scan.component && (scan.component.lcsc ? "C" + scan.component.lcsc : scan.component.external_part_id))
@@ -573,7 +651,10 @@
     imageInput.value = "";
   });
   node("scan-refresh").addEventListener("click", () => loadHistory().catch(() => message("error", true)));
-  node("scan-review-code").addEventListener("input", () => { selectedIdentity = null; });
+  node("scan-review-code").addEventListener("input", () => {
+    selectedIdentity = null;
+    setCustomMode(false);
+  });
   node("scan-review-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (busy || !review || !event.target.reportValidity()) return;
@@ -581,9 +662,35 @@
     busy = true;
     updateControls();
     try {
-      const result = await request(`/api/scan/${review.id}/confirm`, {method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({...ScanLabel.confirmationIdentity(node("scan-review-code").value.trim(), selectedIdentity), quantity: Number(node("scan-review-quantity").value),
-          note: node("scan-review-note").value, new_package: node("scan-new-package").checked})});
+      let bodyData;
+      if (selectedIdentity && selectedIdentity.library_source === "custom") {
+        bodyData = {
+          library_source: "custom",
+          custom_item: {
+            name: (node("scan-custom-name").value || "").trim(),
+            manufacturer: (node("scan-custom-mfr").value || "").trim() || null,
+            package: (node("scan-custom-pkg").value || "").trim() || null,
+            part_type: (node("scan-custom-type").value || "").trim() || null,
+            description: (node("scan-custom-desc").value || "").trim() || null,
+            specs: selectedIdentity.specs || null,
+          },
+          quantity: Number(node("scan-review-quantity").value),
+          note: node("scan-review-note").value,
+          new_package: node("scan-new-package").checked,
+        };
+      } else {
+        bodyData = {
+          ...ScanLabel.confirmationIdentity(node("scan-review-code").value.trim(), selectedIdentity),
+          quantity: Number(node("scan-review-quantity").value),
+          note: node("scan-review-note").value,
+          new_package: node("scan-new-package").checked,
+        };
+      }
+      const result = await request(`/api/scan/${review.id}/confirm`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(bodyData),
+      });
       receive(result);
     } catch (error) { message("error", true); node("scan-message").append(document.createTextNode(` ${error.message}`)); }
     finally { busy = false; updateControls(); }

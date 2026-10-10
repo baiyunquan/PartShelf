@@ -39,6 +39,18 @@ def initialize_main_database(engine: Engine) -> None:
     if "project_token" not in scan_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE scan_sessions ADD COLUMN project_token VARCHAR(36)"))
+    inspector_tables = set(inspect(engine).get_table_names())
+    if "custom_components" in inspector_tables:
+        custom_columns = {column["name"] for column in inspect(engine).get_columns("custom_components")}
+        if "specs" not in custom_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE custom_components ADD COLUMN specs TEXT"))
+        if "raw_ocr_text" not in custom_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE custom_components ADD COLUMN raw_ocr_text TEXT"))
+        if "source_scan_id" not in custom_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE custom_components ADD COLUMN source_scan_id VARCHAR(36)"))
     with engine.begin() as connection:
         ids = list(connection.execute(text("SELECT id FROM projects WHERE identity_token IS NULL")))
         for (project_id,) in ids:

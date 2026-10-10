@@ -224,6 +224,13 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
         try:
             custom = db.query(CustomComponent).filter(CustomComponent.id == custom_id).first()
             if custom:
+                specs_dict = None
+                if custom.specs:
+                    try:
+                        import json
+                        specs_dict = json.loads(custom.specs)
+                    except Exception:
+                        specs_dict = {"raw": custom.specs}
                 external_details = {
                     "id": custom.id,
                     "name": custom.name,
@@ -231,6 +238,9 @@ def resolve_part_full(library_source: str, external_part_id: str, lang: str = "z
                     "package": custom.package,
                     "part_type": custom.part_type,
                     "description": custom.description,
+                    "specs": specs_dict,
+                    "raw_ocr_text": custom.raw_ocr_text,
+                    "source_scan_id": custom.source_scan_id,
                     "created_at": str(custom.created_at) if custom.created_at else None,
                 }
         finally:

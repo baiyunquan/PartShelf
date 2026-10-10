@@ -14,6 +14,7 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Inventory, Part, Project, ProjectPart, ScanSession, WarehousePlacement
+from app.models.custom_component import CustomComponent
 from app.services import external_library_service as libraries, component_search_service
 from app.services import paddleocr_client as ocr_client
 from app.services.scan_verification import MAX_QUANTITY, parse_label
@@ -51,9 +52,51 @@ def _component_snapshot(item):
     snapshot = {key: merged.get(key) for key in ("id", "lcsc", "lcsc_part", "mfr", "mfr_part_number", "lib_reference", "name",
                 "manufacturer", "package", "category", "subcategory", "description", "library_type", "lcsc_url",
                 "image_url_small", "capacitance", "resistance", "inductance", "attributes", "attributes_dict",
-                "parameters_json", "parameters", "voltage_rating", "power_rating", "tolerance", "retrieval_truncated")}
+                "parameters_json", "parameters", "voltage_rating", "power_rating", "tolerance", "retrieval_truncated",
+                "part_type", "specs")}
     snapshot.update(library_source=source, source=source, external_part_id=str(identity) if identity is not None else None)
     return snapshot
+
+
+def build_recommended_custom_item(stage1=None, label=None, lines=None):
+    stage1 = stage1 or {}
+    specs = dict(stage1.get("specs") or {})
+    queries = list(stage1.get("queries") or [])
+    label = label or {}
+    lines = lines or []
+
+    mpn_queries = [q["text"] for q in queries if isinstance(q, dict) and q.get("kind") == "mpn" and q.get("text")]
+    first_query = [q["text"] for q in queries if isinstance(q, dict) and q.get("text")]
+
+    name = (mpn_queries[0] if mpn_queries else None) or (first_query[0] if first_query else None) or label.get("pm") or ""
+    if not name and lines:
+        name = lines[0].strip()
+    if not name:
+        name = "Custom Part"
+
+    pkg = specs.get("package") or ""
+    if not pkg:
+        for q in queries:
+            if isinstance(q, dict) and q.get("kind") == "package":
+                pkg = q.get("text") or ""
+                break
+    mfr = specs.get("manufacturer") or ""
+    if not mfr:
+        for q in queries:
+            if isinstance(q, dict) and q.get("kind") == "brand":
+                mfr = q.get("text") or ""
+                break
+
+    description = specs.get("description") or specs.get("value") or ""
+
+    return {
+        "name": name,
+        "manufacturer": mfr,
+        "package": pkg,
+        "part_type": stage1.get("family") or "general",
+        "description": description,
+        "specs": specs,
+    }
 
 
 def _project(db, project_id, *, importing=False, expected_token=None):
@@ -109,7 +152,28 @@ def import_package(db, scan_id, component, quantity, note="", new_package=False)
             return scan
         project = _project(db, scan.project_id, importing=True, expected_token=scan.project_token)
         scan.claim_key = None if previous and previous.id != scan.id else scan.fingerprint
-        db.flush()  # acquire the unique claim before adding stock
+        if component and component.get("library_source") == "custom" and not component.get("external_part_id") and component.get("custom_payload"):
+            payload = component["custom_payload"]
+            c_name = str(payload.get("name") or "").strip()
+            specs_val = payload.get("specs")
+            specs_text = json.dumps(specs_val, ensure_ascii=False) if isinstance(specs_val, (dict, list)) else (str(specs_val) if specs_val else None)
+            ocr_lines = [line["text"] for line in (scan.ocr or {}).get("lines", []) if line.get("text")]
+            raw_ocr = "\n".join(ocr_lines) if ocr_lines else None
+            custom_comp = CustomComponent(
+                name=c_name,
+                manufacturer=str(payload.get("manufacturer") or "").strip() or None,
+                package=str(payload.get("package") or "").strip() or None,
+                part_type=str(payload.get("part_type") or "").strip() or None,
+                description=str(payload.get("description") or "").strip() or None,
+                specs=specs_text,
+                raw_ocr_text=raw_ocr,
+                source_scan_id=scan.id,
+            )
+            db.add(custom_comp)
+            db.flush()
+            component["external_part_id"] = str(custom_comp.id)
+            component["id"] = custom_comp.id
+
         component = _component_snapshot(component)
         lib_src, ext_id = component["library_source"], component["external_part_id"]
         if not lib_src or not ext_id:
@@ -272,6 +336,8 @@ def verify_scan(db, scan_id, image, lang="zh"):
                                         match_type=f"ai_{decision}")
                     verification["stages"] = result.get("stages", {})
                     verification["field_evidence"] = result.get("field_evidence", {})
+                    stage1 = result.get("stage1_extraction") or {}
+                    verification["recommended_custom_item"] = build_recommended_custom_item(stage1, label, lines)
                     candidates = []
                     for candidate in [result.get("selected_component"), *result.get("candidate_components", []),
                                       *result.get("all_retrieved_candidates", [])]:
@@ -312,6 +378,7 @@ def verify_scan(db, scan_id, image, lang="zh"):
                     verification.update(ai_error=str(exc), verified=False)
                     verification["stage_errors"] = [exc.details] if hasattr(exc, "details") else [{"stage":"matching","code":"internal_error","attempts":1}]
                     verification["reasons"].append("ai_unavailable")
+                    verification["recommended_custom_item"] = build_recommended_custom_item({}, label, lines)
                 # A reused bag can expose old and new quantities even when neither model is in the catalog.
                 counts = quantities(lines)
                 if len(counts) > 1 or any(count <= 0 or count > MAX_QUANTITY for count in counts):
@@ -371,7 +438,7 @@ def retry_scan(db, scan_id, lang="zh"):
 
 
 def confirm(db, scan_id, code, quantity, note="", new_package=False, lang="zh",
-            library_source=None, external_part_id=None):
+            library_source=None, external_part_id=None, custom_item=None):
     scan = _get(db, scan_id)
     if scan.status == "imported":
         return scan
@@ -391,10 +458,50 @@ def confirm(db, scan_id, code, quantity, note="", new_package=False, lang="zh",
                 component = libraries.get_altium_component(int(external_part_id), lang)
             elif library_source == "kicad":
                 component = libraries.get_kicad_symbol(int(external_part_id))
+            elif library_source == "custom":
+                if custom_item:
+                    c_name = str(custom_item.get("name") or "").strip()
+                    if not c_name:
+                        raise HTTPException(422, "Custom component name cannot be empty")
+                    component = {
+                        "name": c_name,
+                        "manufacturer": str(custom_item.get("manufacturer") or "").strip() or None,
+                        "package": str(custom_item.get("package") or "").strip() or None,
+                        "part_type": str(custom_item.get("part_type") or "").strip() or None,
+                        "description": str(custom_item.get("description") or "").strip() or None,
+                        "specs": custom_item.get("specs"),
+                        "library_source": "custom",
+                        "external_part_id": None,
+                        "custom_payload": custom_item,
+                    }
+                elif external_part_id:
+                    comp_id = int(external_part_id) if str(external_part_id).isdigit() else 0
+                    custom_comp = db.query(CustomComponent).filter(CustomComponent.id == comp_id).first()
+                    if not custom_comp:
+                        raise HTTPException(404, "Custom component not found")
+                    specs_parsed = None
+                    if custom_comp.specs:
+                        try:
+                            specs_parsed = json.loads(custom_comp.specs)
+                        except Exception:
+                            specs_parsed = {"raw": custom_comp.specs}
+                    component = {
+                        "id": custom_comp.id,
+                        "name": custom_comp.name,
+                        "manufacturer": custom_comp.manufacturer,
+                        "package": custom_comp.package,
+                        "part_type": custom_comp.part_type,
+                        "description": custom_comp.description,
+                        "specs": specs_parsed,
+                        "library_source": "custom",
+                        "external_part_id": str(custom_comp.id),
+                    }
+                else:
+                    raise HTTPException(422, "Provide custom component details or identifier")
             else:
                 raise HTTPException(422, "Unsupported catalog")
             if component:
-                component = {**component, "library_source": library_source, "external_part_id": str(external_part_id)}
+                component = {**component, "library_source": library_source, "external_part_id": str(external_part_id) if external_part_id is not None else None}
         else:
             # Legacy C-code confirmation remains compatible. Bare IDs require an unambiguous saved candidate.
             if re.fullmatch(r"C\d{3,10}", str(code or ""), re.I):
