@@ -297,3 +297,34 @@ def test_altium_supplier_reference_fetches_matching_model_and_keeps_conflicting_
     candidates=MultiTurnSearchService().retrieve_candidates("R00603FR-0710KL")
     assert calls == [98220]
     assert {(c['library_source'],c['manufacturer']) for c in candidates} == {('jlcparts','YAGEO'),('altium','Uniroyal')}
+
+
+def test_exact_retrieval_reports_truncated_candidate_pool(correction_catalog):
+    _, altium = correction_catalog
+    with sqlite3.connect(altium) as db:
+        db.execute("INSERT INTO altium_components VALUES(43082,'RC0603FR-0710KL','RC0603FR-0710KL',NULL,'0603','Other Brand','Resistors','10kΩ','10k resistor')")
+    rows=MultiTurnSearchService().retrieve_candidates("RC0603FR-0710KL",max_candidates=1)
+    assert len(rows) == 1
+    assert rows[0]["retrieval_truncated"] is True
+
+
+def test_truncated_pool_cannot_be_automatically_imported(setup,monkeypatch):
+    from app.services import scan_import_service as scans
+    from tests.test_scan_import import scan
+    from tests.test_scan_verification import COMPONENT,evidence
+    client,_,image=setup
+    selected={"library_source":"jlcparts","external_part_id":"6119867",
+        "raw_item":COMPONENT,"retrieval_truncated":True}
+    monkeypatch.setattr(scans.ocr_client,"recognize_image",lambda _:evidence(COMPONENT["mfr"],"0603","数量:100"))
+    monkeypatch.setattr(scans.multi_turn_service,"process",lambda _:{"decision":"exact_match",
+        "selected_component":selected,"all_retrieved_candidates":[selected]})
+    result=scan(client,image,raw="").json()
+    assert result["status"] == "needs_review"
+    assert "ambiguous_candidates" in result["verification"]["reasons"]
+
+
+def test_reranker_cannot_select_an_excluded_candidate():
+    wrong={**adjudication(),"excluded":[{"index":1,"reason":"Different model"}]}
+    with pytest.raises(RuntimeError) as error:
+        configured(Responses([(wrong,"stop")])).stage2_rerank({},[candidate()])
+    assert error.value.details["code"] == "inconsistent_decision"

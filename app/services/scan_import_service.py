@@ -294,6 +294,10 @@ def verify_scan(db, scan_id, image, lang="zh"):
                             if len(compatible) > 1:
                                 verification["verified"] = False
                                 verification["reasons"].append("ambiguous_candidates")
+                            if any(candidate.get("retrieval_truncated") for candidate in candidates):
+                                verification["verified"] = False
+                                if "ambiguous_candidates" not in verification["reasons"]:
+                                    verification["reasons"].append("ambiguous_candidates")
                         else:
                             verification["reasons"].append("catalog_unavailable")
                     elif decision == "ambiguous":

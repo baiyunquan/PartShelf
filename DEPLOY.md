@@ -142,6 +142,10 @@ LLAMA_OCR_TIMEOUT_SECONDS=60
 
 升级启动新增 `scan_ocr_results`，保留库存、项目、历史和已有扫描数据；已知旧来源 `lcsc_dynamic` 自动规范为 `jlcparts`，保留原元件 ID。目录缓存写入前自动迁移数值索引触发器，不重建整个别名索引。库存、项目关联、操作历史及扫描状态原子提交；原项目身份快照防止项目 ID 复用后误入库。
 
+文本提取/重排预算分别为 512/1200 tokens；JSON Schema 及严格类型校验检查完成状态、候选下标和裁决一致性。仅截断允许用相同 OCR 文本重试一次，不重扫图片；HTTP SDK 隐式重试关闭。`LLAMA_TIMEOUT_SECONDS` 控制文本服务超时，默认 30 秒；`LLAMA_STRICT_MODE` 默认开启。显式关闭后产生的启发式结果仅供核查，不会自动入库。
+
+历史扫描身份可用 `python scripts/audit_scan_identities.py --database partshelf.db --report data/evaluations/identity-audit.json` 只读审计；疑似 Altium/JLC 数字 ID 混用须结合原图人工核查，不自动改写。复用保存结果的隔离样本评估命令和输入格式见 [OCR API 文档](paddleocr_vl/API.md#4-离线审计与样本复验)。保存的普通照片结果必须来自 llama.cpp，并匹配原图摘要；不要用传统 OCR 结果代替。请把报告保存在持久目录，评估工具不调用 OCR。
+
 ## 5. 配置用户名记录模式
 
 生产环境建议设置：

@@ -21,6 +21,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 - [部署指南（中文）](DEPLOY.md)
 - [使用指南（中文）](USAGE.md)
 - [独立 OCR 服务 API 与部署说明（中文）](paddleocr_vl/API.md)
+- [扫码修复与样本复验记录 / Scan repair and sample verification](docs/scan-import-followup.md)
 - [API 文档](http://127.0.0.1:8000/docs)（启动应用后访问 / available after startup）
 - 许可证 / License: [MIT](LICENSE)
 
@@ -124,6 +125,8 @@ OCR 使用 llama.cpp 模型后端（8083）和 PartShelf 主环境中的 HTTP �
 扫码入库（`/scan-import`）与 BOM 匹配（`/bom-import`）全面支持两阶段大模型交互式检索机制：
 - **Stage 1 (Extractor)**：从标签 OCR 或 BOM 原始文本中抽取标准化 MPN、品牌、封装与原文中明确出现的电气参数；JSON Schema 约束输出并检查是否完整结束。
 - **Stage 2 (Reranker)**：基于本地元器件库（Altium / JLCParts）候选集合，执行结构化技术裁决（`exact_match`、`ambiguous`、`no_match`），完整保留型号后缀，输出简短理由；普通照片的冲突仍需人工核查。嘉立创二维码绕过这两个阶段。
+
+两阶段预算为 512/1200 tokens，严格检查类型、完成状态、下标及裁决一致性。截断最多重试一次相同文字，不再次 OCR；阶段错误和原文证据保存在扫描核验结果中。型号内部空格可合并；长 C/R/L 型号开头的一处字形误读只有在品牌、封装、等价标值及唯一完整目录记录共同支持时才纠正，后缀不改。跨库同型号的品牌/规格冲突分别保留，候选截短时不自动入库。离线审计及只用保存结果的隔离评估见 [OCR API 文档](paddleocr_vl/API.md#4-离线审计与样本复验)。
 
 大模型后端采用本地 `llama.cpp` 原生服务（OpenAI 兼容 `/v1/chat/completions` 接口），默认使用全精度未量化 BF16 模型：
 - **端口 8081**：Stage 1 Extractor (`ElectronicQwen-Extractor-v1-BF16.gguf`)
@@ -279,6 +282,8 @@ python scripts/prepare_scan_assets.py
 ```
 
 OCR runs through llama.cpp on port 8083 and the PartShelf HTTP adapter on port 8010, and can be hosted on another device. The legacy PP-OCRv4/PaddlePaddle runtime is disabled and has no fallback path. Its setup commands and HTTP contract are documented in the [OCR API guide](paddleocr_vl/API.md).
+
+Text extraction and reranking use strict JSON schemas with budgets of 512 and 1200 tokens. Responses are checked for completion, field types, candidate indices, and consistent decisions. A truncated text completion may retry once using the same saved OCR; images are never scanned again. Evidence and stage errors remain available for review. Spaces inside complete models may be removed. One glyph error in the initial series of a long C/R/L model can be corrected only with matching brand, explicit package, equivalent value, and a unique complete catalog identity; suffixes remain unchanged. Conflicting brands/specifications are retained separately, and truncated candidate pools cannot auto-import. Read-only identity audits and isolated evaluations using saved llama.cpp OCR are documented in the [OCR API guide](paddleocr_vl/API.md#4-离线审计与样本复验).
 
 ### Development and verification
 

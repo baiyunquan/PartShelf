@@ -1,0 +1,821 @@
+{
+  "run_dir": "/tmp/partshelf-scan-resume/final-runs/e62c71bf-27a5-4317-8667-2b5f19f28e8e",
+  "source_evidence": "/tmp/partshelf-scan-resume/saved-final.json",
+  "results": [
+    {
+      "filename": "20261007_205723.jpg",
+      "path": "qr",
+      "seconds": 0.97,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "33d5555b-0ff1-4fa4-a205-540ba177902e",
+        "request_id": "24fd5fe8-e50f-4b3e-a419-2a65722e287f",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:45.667482+00:00",
+        "imported_at": "2026-10-10T07:46:46.592517+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 1,
+        "quantity": 50,
+        "label": {
+          "on": "SO2607040807",
+          "pc": "C2937625",
+          "pm": "PZ254V-11-03P",
+          "qty": 50,
+          "mc": "",
+          "cc": "1",
+          "pdi": "223376226",
+          "hp": "11",
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 2937625,
+          "lcsc_part": null,
+          "mfr": "PZ254V-11-03P",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "XFCN",
+          "package": "Through Hole,P=2.54mm",
+          "category": "Connectors",
+          "subcategory": "Headers, Male Pins",
+          "description": "Pin Header 3 Position 2.54mm Pitch Single Row Through Hole -40℃~+105℃",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C2937625",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20251009_XFCN-PZ254V-11-03P_C2937625_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{\"Connector Type\": \"Through Hole\", \"Voltage Rating (Max)\": \"250V\", \"Contact Material\": \"Brass\", \"Number of Rows\": \"1\", \"Pitch\": \"2.54mm\", \"Circluar Pins/Square Pins\": \"Square pin\", \"Current Rating\": \"3A\", \"Insulation Height\": \"2.5mm\", \"Length of Mating Pin\": \"6.1mm\", \"Contact Plating\": \"Gold\", \"Number of PINs\": \"3P\", \"Operating Temperature\": \"-40℃~+105℃\", \"Length of End Connection Pin\": \"3mm\", \"Color\": \"Black\", \"Pin Structure\": \"1x3P\"}",
+          "attributes_dict": {
+            "Connector Type": "Through Hole",
+            "Voltage Rating (Max)": "250V",
+            "Contact Material": "Brass",
+            "Number of Rows": "1",
+            "Pitch": "2.54mm",
+            "Circluar Pins/Square Pins": "Square pin",
+            "Current Rating": "3A",
+            "Insulation Height": "2.5mm",
+            "Length of Mating Pin": "6.1mm",
+            "Contact Plating": "Gold",
+            "Number of PINs": "3P",
+            "Operating Temperature": "-40℃~+105℃",
+            "Length of End Connection Pin": "3mm",
+            "Color": "Black",
+            "Pin Structure": "1x3P"
+          },
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "2937625"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/33d5555b-0ff1-4fa4-a205-540ba177902e/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205733.jpg",
+      "path": "qr",
+      "seconds": 0.73,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "a65b2ff0-aa39-4320-a2b1-8c64d579ce25",
+        "request_id": "010d9a43-2175-45e7-96f1-a57520d3691e",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:46.606398+00:00",
+        "imported_at": "2026-10-10T07:46:47.324343+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 2,
+        "quantity": 100,
+        "label": {
+          "on": "SO2607040807",
+          "pc": "C19273151",
+          "pm": "YLED0603G",
+          "qty": 100,
+          "mc": "",
+          "cc": "1",
+          "pdi": "223376240",
+          "hp": "11",
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 19273151,
+          "lcsc_part": null,
+          "mfr": "YLED0603G",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "YONGYUTAI",
+          "package": "0603",
+          "category": "Optoelectronics",
+          "subcategory": "LED Indication - Discrete",
+          "description": "Emerald Green LED Indication - Discrete 2.7V~3.2V 0603",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C19273151",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20231219_YONGYUTAI-YLED0603G_C19273151_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{\"Forward Current\": \"25mA\", \"Operating Temperature\": \"-40℃~+85℃\", \"Voltage - Forward(Vf)\": \"2.6V~3.2V\", \"Diode Configuration\": \"Discrete Diode\", \"Viewing Angle\": \"120°\", \"Luminous Intensity\": \"358mcd\", \"Illumination Color\": \"Emerald Green\", \"Lamp Holder Type\": \"1.1mm x 0.8mm square LED\", \"Wavelength\": \"510nm~531nm\"}",
+          "attributes_dict": {
+            "Forward Current": "25mA",
+            "Operating Temperature": "-40℃~+85℃",
+            "Voltage - Forward(Vf)": "2.6V~3.2V",
+            "Diode Configuration": "Discrete Diode",
+            "Viewing Angle": "120°",
+            "Luminous Intensity": "358mcd",
+            "Illumination Color": "Emerald Green",
+            "Lamp Holder Type": "1.1mm x 0.8mm square LED",
+            "Wavelength": "510nm~531nm"
+          },
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "19273151"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/a65b2ff0-aa39-4320-a2b1-8c64d579ce25/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205740.jpg",
+      "path": "qr",
+      "seconds": 0.86,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "8f1b29d4-a7a4-4b2a-ae14-9f0390d45dea",
+        "request_id": "3c705ad2-00e5-4a88-af27-b14a1f517b14",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:47.335288+00:00",
+        "imported_at": "2026-10-10T07:46:48.188154+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 3,
+        "quantity": 1,
+        "label": {
+          "on": "SO2607040807",
+          "pc": "C42378531",
+          "pm": "LCKFB-TMX-MSPM0G3507",
+          "qty": 1,
+          "mc": "",
+          "cc": "1",
+          "pdi": "223376224",
+          "hp": "11",
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 42378531,
+          "lcsc_part": null,
+          "mfr": "LCKFB-TMX-MSPM0G3507",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "LCSC-boards",
+          "package": "-",
+          "category": "Development Boards & Tools",
+          "subcategory": "Embedded MCU, DSP Evaluation Boards",
+          "description": "Embedded MCU, DSP Evaluation Boards ",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C42378531",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20241127_LCSC-boards-LCKFB-TMX-MSPM0G3507_C42378531_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{}",
+          "attributes_dict": {},
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "42378531"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/8f1b29d4-a7a4-4b2a-ae14-9f0390d45dea/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205748.jpg",
+      "path": "qr",
+      "seconds": 0.01,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "91f96fd5-91d6-4018-9b67-49198d67344b",
+        "request_id": "ab71252d-a539-4ef8-aa7a-6c98480e8a8d",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:48.208428+00:00",
+        "imported_at": "2026-10-10T07:46:48.212512+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 4,
+        "quantity": 10,
+        "label": {
+          "on": "SO2607040807",
+          "pc": "C455282",
+          "pm": "TS-1089S-02526",
+          "qty": 10,
+          "mc": "",
+          "cc": "1",
+          "pdi": "223376229",
+          "hp": null,
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 455282,
+          "lcsc_part": null,
+          "mfr": "TS-1089S-02526",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "XUNPU",
+          "package": "SMD-4P,4.2x3.3mm",
+          "category": "Switches",
+          "subcategory": "Tactile Switches",
+          "description": "Tactile Switch SPST 2.5mm 4.2mm x 3.25mm Surface Mount",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C455282",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20230118_XUNPU-TS-1089S-02526_C455282_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{\"with Bracket\": \"Without Bracket\", \"Length\": \"4.2mm\", \"Operating Force\": \"2.6N\", \"Height\": \"2.5mm\", \"Voltage Rating\": \"12V\", \"Switching Life\": \"100,000 cycles\", \"Width\": \"3.25mm\", \"Termination Style\": \"SMD(SMT) Tab\", \"Actuator Style\": \"Oval Button\", \"Mounting Type\": \"Surface Mount,Vertical\", \"Actuator/Cap Color\": \"White\", \"Circuit\": \"SPST\", \"Contact Current\": \"50mA\"}",
+          "attributes_dict": {
+            "with Bracket": "Without Bracket",
+            "Length": "4.2mm",
+            "Operating Force": "2.6N",
+            "Height": "2.5mm",
+            "Voltage Rating": "12V",
+            "Switching Life": "100,000 cycles",
+            "Width": "3.25mm",
+            "Termination Style": "SMD(SMT) Tab",
+            "Actuator Style": "Oval Button",
+            "Mounting Type": "Surface Mount,Vertical",
+            "Actuator/Cap Color": "White",
+            "Circuit": "SPST",
+            "Contact Current": "50mA"
+          },
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "455282"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/91f96fd5-91d6-4018-9b67-49198d67344b/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205755.jpg",
+      "path": "qr",
+      "seconds": 0.01,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "a9b55efe-4b66-43b7-a560-0ab1bdd1078a",
+        "request_id": "c8cb59df-59dd-41d0-b7bd-d63de43939c4",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:48.222953+00:00",
+        "imported_at": "2026-10-10T07:46:48.225852+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 5,
+        "quantity": 5,
+        "label": {
+          "on": "SO2607040807",
+          "pc": "C541722",
+          "pm": "AO3400C",
+          "qty": 5,
+          "mc": "",
+          "cc": "1",
+          "pdi": "223376219",
+          "hp": "11",
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 541722,
+          "lcsc_part": null,
+          "mfr": "AO3400C",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "AOS",
+          "package": "SOT-23",
+          "category": "Transistors/Thyristors",
+          "subcategory": "Single FETs, MOSFETs",
+          "description": "N-Channel 30V 6.2A Surface Mount SOT-23",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C541722",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20230203_Alpha---Omega-Semicon-AO3400C_C541722_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{\"Ciss-Input Capacitance\": \"600pF\", \"Pd - Power Dissipation\": \"1.3W\", \"Operating Temperature\": \"-55℃~+150℃\", \"Drain to Source Voltage\": \"30V\", \"Current - Continuous Drain(Id)\": \"6.2A\", \"Reverse Transfer Capacitance (Crss)\": \"60pF\", \"RDS(on)\": \"20mΩ@4.5V\", \"Number\": \"1 N-channel\", \"Gate Charge(Qg)\": \"12nC@10V\", \"Vgs\": \"±20V\", \"Gate Threshold Voltage (Vgs(th))\": \"1.3V\", \"Type\": \"N-Channel\"}",
+          "attributes_dict": {
+            "Ciss-Input Capacitance": "600pF",
+            "Pd - Power Dissipation": "1.3W",
+            "Operating Temperature": "-55℃~+150℃",
+            "Drain to Source Voltage": "30V",
+            "Current - Continuous Drain(Id)": "6.2A",
+            "Reverse Transfer Capacitance (Crss)": "60pF",
+            "RDS(on)": "20mΩ@4.5V",
+            "Number": "1 N-channel",
+            "Gate Charge(Qg)": "12nC@10V",
+            "Vgs": "±20V",
+            "Gate Threshold Voltage (Vgs(th))": "1.3V",
+            "Type": "N-Channel"
+          },
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "541722"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/a9b55efe-4b66-43b7-a560-0ab1bdd1078a/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205902.jpg",
+      "path": "qr",
+      "seconds": 0.01,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "f5a72f61-3010-4d01-942a-bfd3a9c05e54",
+        "request_id": "0926f60e-afca-407a-9712-5a561b9318d6",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:48.236779+00:00",
+        "imported_at": "2026-10-10T07:46:48.240308+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 6,
+        "quantity": 100,
+        "label": {
+          "on": "SO26042924401",
+          "pc": "C473048",
+          "pm": "0201WMF1002TEE",
+          "qty": 100,
+          "mc": "",
+          "cc": "1",
+          "pdi": "211463774",
+          "hp": "12",
+          "is_jlc_qr": true
+        },
+        "component": {
+          "id": null,
+          "lcsc": 473048,
+          "lcsc_part": null,
+          "mfr": "0201WMF1002TEE",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "UNI-ROYAL",
+          "package": "0201",
+          "category": "Resistors",
+          "subcategory": "Chip Resistor - Surface Mount",
+          "description": "10kΩ ±1% 50mW 0201 Thick Film Resistor",
+          "library_type": "lcsc_dynamic",
+          "lcsc_url": "https://www.lcsc.com/search?q=C473048",
+          "image_url_small": "https://assets.lcsc.com/images/lcsc/96x96/20230119_UNI-ROYAL-Uniroyal-Elec-0201WMF1002TEE_C473048_front.jpg",
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{\"Power(Watts)\": \"50mW\", \"Resistance\": \"10kΩ\", \"Voltage Rating\": \"25V\", \"Type\": \"Thick Film Resistor\", \"Tolerance\": \"±1%\", \"Temperature Coefficient\": \"±200ppm/℃\", \"Operating Temperature\": \"-55℃~+155℃\"}",
+          "attributes_dict": {
+            "Power(Watts)": "50mW",
+            "Resistance": "10kΩ",
+            "Voltage Rating": "25V",
+            "Type": "Thick Film Resistor",
+            "Tolerance": "±1%",
+            "Temperature Coefficient": "±200ppm/℃",
+            "Operating Temperature": "-55℃~+155℃"
+          },
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "473048"
+        },
+        "ocr": null,
+        "verification": {
+          "verified": true,
+          "fields": {},
+          "reasons": [],
+          "match_type": "jlc_qr"
+        },
+        "note": "",
+        "image_url": "/api/scan/f5a72f61-3010-4d01-942a-bfd3a9c05e54/image",
+        "placement": null
+      }
+    },
+    {
+      "filename": "20261007_205922.jpg",
+      "path": "saved_ocr",
+      "seconds": 3.63,
+      "ocr_calls": 0,
+      "scan": {
+        "id": "363483fe-92da-4519-8d29-a7faac4d95dd",
+        "request_id": "ee9a79b5-c4c9-480b-b0ec-f6af45646faa",
+        "status": "imported",
+        "created_at": "2026-10-10T07:46:48.249168+00:00",
+        "imported_at": "2026-10-10T07:46:51.871238+00:00",
+        "username": "Scan evaluation",
+        "imported_by": "Scan evaluation",
+        "project_id": 1,
+        "project_name": "Isolated scan evaluation",
+        "part_id": 7,
+        "quantity": 50,
+        "label": {
+          "is_jlc_qr": false,
+          "raw": "",
+          "pc": null,
+          "pm": "Scanned Part",
+          "qty": 50,
+          "image_sha256": "69995869572d23d0fe951deee67e3545e5e02683da4d9d88e1f8824c99911d04"
+        },
+        "component": {
+          "id": null,
+          "lcsc": 14858,
+          "lcsc_part": null,
+          "mfr": "CL10C101JB8NNNC",
+          "mfr_part_number": null,
+          "lib_reference": null,
+          "name": null,
+          "manufacturer": "Samsung Electro-Mechanics",
+          "package": "0603",
+          "category": "Capacitors - MLCC",
+          "subcategory": "",
+          "description": "Capacitor, Ceramic (MLCC), 100pF, ±5%, 50V, C0G, ±5%, SMD 0603",
+          "library_type": "base",
+          "lcsc_url": "https://www.lcsc.com/search?q=C14858",
+          "image_url_small": null,
+          "capacitance": null,
+          "resistance": null,
+          "inductance": null,
+          "attributes": "{}",
+          "attributes_dict": {},
+          "parameters_json": null,
+          "parameters": null,
+          "voltage_rating": null,
+          "power_rating": null,
+          "tolerance": null,
+          "retrieval_truncated": null,
+          "library_source": "jlcparts",
+          "source": "jlcparts",
+          "external_part_id": "14858"
+        },
+        "ocr": {
+          "api_version": "1",
+          "request_id": "bb1a2bb7-94c6-4942-85b3-e9b1c10ebfbd",
+          "engine": "paddleocr-vl-llama.cpp",
+          "region": null,
+          "confidence_source": "not_provided_by_model",
+          "status": "complete",
+          "finish_reason": "stop",
+          "error": null,
+          "usage": {
+            "completion_tokens": 190,
+            "prompt_tokens": 1260,
+            "total_tokens": 1450,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "image": {
+            "width": 4000,
+            "height": 1848,
+            "rotation_degrees": 0
+          },
+          "lines": [
+            {
+              "text": "柜号:15",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "\\( \\frac{1}{5} \\)",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "A61990",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "4759797",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "型号: CL 10C101JB8NNNC 100PF ±5%",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "品牌: SAMSUNG (三星)",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "标识:",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "封装: 0603",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "A-64-01-02",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "批次: 129989",
+              "confidence": null,
+              "box": null
+            },
+            {
+              "text": "数量: 50",
+              "confidence": null,
+              "box": null
+            }
+          ],
+          "raw_text": "柜号:15\n\\( \\frac{1}{5} \\)\nA61990\n4759797\n型号: CL 10C101JB8NNNC 100PF ±5%\n品牌: SAMSUNG (三星)\n标识:\n封装: 0603\nA-64-01-02\n批次: 129989\n数量: 50",
+          "elapsed_ms": 1392.09
+        },
+        "verification": {
+          "verified": true,
+          "fields": {
+            "model": {
+              "matched": true,
+              "expected": "CL10C101JB8NNNC",
+              "text": "型号: CL 10C101JB8NNNC 100PF ±5%",
+              "evidence": [
+                {
+                  "line_index": 4,
+                  "text": "型号: CL 10C101JB8NNNC 100PF ±5%"
+                }
+              ]
+            },
+            "package": {
+              "matched": true,
+              "expected": "0603",
+              "text": "0603",
+              "evidence": [
+                {
+                  "line_index": 7,
+                  "text": "封装: 0603"
+                }
+              ]
+            },
+            "quantity": {
+              "matched": true,
+              "expected": 50,
+              "text": "50",
+              "evidence": [
+                {
+                  "line_index": 10,
+                  "text": "数量: 50"
+                }
+              ]
+            },
+            "manufacturer": {
+              "matched": true,
+              "expected": "Samsung Electro-Mechanics",
+              "text": "SAMSUNG",
+              "evidence": [
+                {
+                  "line_index": 5,
+                  "text": "品牌: SAMSUNG (三星)"
+                }
+              ]
+            },
+            "specifications": {
+              "matched": true,
+              "expected": "Capacitor, Ceramic (MLCC), 100pF, ±5%, 50V, C0G, ±5%, SMD 0603",
+              "expected_values": {
+                "capacitance": [
+                  "0.0000000001"
+                ],
+                "tolerance": [
+                  "5"
+                ],
+                "voltage": [
+                  "50"
+                ]
+              },
+              "text": "型号: CL 10C101JB8NNNC 100PF ±5%",
+              "evidence": [
+                {
+                  "line_index": 4,
+                  "text": "型号: CL 10C101JB8NNNC 100PF ±5%"
+                }
+              ]
+            }
+          },
+          "reasons": [],
+          "observations": {},
+          "ai_decision": "exact_match",
+          "ai_reasoning": "候选1与标签信息在主型号(CL10C101JB8NNNC)、品牌(Samsung)、封装(0603)及关键参数(100pF, ±5%)上完全一致。候选2的封装为C0603，与标签的0603存在物理尺寸差异，属于硬性不兼容，予以淘汰。候选1的",
+          "match_type": "ai_exact_match",
+          "stages": {
+            "reranker": {
+              "stage": "reranker",
+              "status": "complete",
+              "attempts": 1,
+              "finish_reason": "stop",
+              "budget": 1200
+            },
+            "extractor": {
+              "stage": "extractor",
+              "status": "complete",
+              "attempts": 1,
+              "finish_reason": "stop",
+              "budget": 512
+            }
+          },
+          "field_evidence": {
+            "package": [
+              {
+                "line_index": 7,
+                "text": "封装: 0603"
+              }
+            ],
+            "value": [
+              {
+                "line_index": 4,
+                "text": "型号: CL 10C101JB8NNNC 100PF ±5%"
+              }
+            ],
+            "manufacturer": [
+              {
+                "line_index": 5,
+                "text": "品牌: SAMSUNG (三星)"
+              }
+            ]
+          },
+          "candidates": [
+            {
+              "id": null,
+              "lcsc": 14858,
+              "lcsc_part": null,
+              "mfr": "CL10C101JB8NNNC",
+              "mfr_part_number": "CL10C101JB8NNNC",
+              "lib_reference": null,
+              "name": "CL10C101JB8NNNC",
+              "manufacturer": "Samsung Electro-Mechanics",
+              "package": "0603",
+              "category": "Capacitors - MLCC",
+              "subcategory": "",
+              "description": "Capacitor, Ceramic (MLCC), 100pF, ±5%, 50V, C0G, ±5%, SMD 0603",
+              "library_type": "base",
+              "lcsc_url": null,
+              "image_url_small": null,
+              "capacitance": null,
+              "resistance": null,
+              "inductance": null,
+              "attributes": "{}",
+              "attributes_dict": null,
+              "parameters_json": null,
+              "parameters": null,
+              "voltage_rating": null,
+              "power_rating": null,
+              "tolerance": null,
+              "retrieval_truncated": null,
+              "library_source": "jlcparts",
+              "source": "jlcparts",
+              "external_part_id": "14858"
+            },
+            {
+              "id": 78287,
+              "lcsc": null,
+              "lcsc_part": "14858",
+              "mfr": null,
+              "mfr_part_number": "CL10C101JB8NNNC",
+              "lib_reference": "CL10C101JB8NNNC",
+              "name": "CL10C101JB8NNNC",
+              "manufacturer": "SAMSUNG",
+              "package": "C0603",
+              "category": "",
+              "subcategory": null,
+              "description": "100pF (101) ±5% 50V",
+              "library_type": null,
+              "lcsc_url": "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10C101JB8NNNC_100pF-101-5-50V_C14858.html",
+              "image_url_small": null,
+              "capacitance": "",
+              "resistance": "",
+              "inductance": "",
+              "attributes": null,
+              "attributes_dict": null,
+              "parameters_json": "{\"lcsc_id\": 14858, \"manufacturer_part_number\": \"CL10C101JB8NNNC\", \"manufacturer\": \"SAMSUNG\", \"manufacturer_cn\": \"三星\", \"category\": \"\", \"package\": \"C0603\", \"jlcpcb_basic_part\": 1, \"lcsc_price\": 0.0076, \"prefix\": \"\", \"szlcsc_url\": \"http://www.szlcsc.com/product/details_15530.html\", \"lcsc_url\": \"https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10C101JB8NNNC_100pF-101-5-50V_C14858.html\"}",
+              "parameters": null,
+              "voltage_rating": "",
+              "power_rating": "",
+              "tolerance": "",
+              "retrieval_truncated": null,
+              "library_source": "altium",
+              "source": "altium",
+              "external_part_id": "78287"
+            }
+          ],
+          "quantity": 50
+        },
+        "note": "",
+        "image_url": "/api/scan/363483fe-92da-4519-8d29-a7faac4d95dd/image",
+        "placement": null
+      }
+    }
+  ],
+  "summary": {
+    "imported": 7,
+    "samples": 7,
+    "ocr_calls": 0,
+    "ai_calls": 1,
+    "qr_imported": 6,
+    "qr_quantity": 266
+  }
+}

@@ -70,6 +70,12 @@ def deduplicate_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, A
 deduplicate = deduplicate_candidates
 
 
+def limit_candidates(candidates, limit, incomplete=False):
+    """Preserve evidence that undisplayed candidates may make an identity ambiguous."""
+    truncated = incomplete or len(candidates) > limit or any(c.get("retrieval_truncated") for c in candidates)
+    return [{**c, "retrieval_truncated": True} if truncated else c for c in candidates[:limit]]
+
+
 def enrich_supplier_references(candidates):
     """Resolve declared Altium C references, retaining conflicting metadata for review."""
     enriched = list(candidates)
@@ -96,7 +102,7 @@ def enrich_supplier_references(candidates):
 
 def retrieve_candidates(mpn: str, max_candidates: int = 5) -> List[Dict[str, Any]]:
     """Query full models before fuzzy or unit-equivalent search; merge supplier references."""
-    exact = []
+    exact, incomplete = [], False
     target = model_key(mpn)
     if not target:
         return []
@@ -112,15 +118,16 @@ def retrieve_candidates(mpn: str, max_candidates: int = 5) -> List[Dict[str, Any
             valid_fields = [field for field in fields if field in available]
             if valid_fields:
                 where = " OR ".join(f"{field} = ? COLLATE NOCASE" for field in valid_fields)
-                rows = connection.execute(
+                rows = list(connection.execute(
                     f"SELECT * FROM {table} WHERE {where} LIMIT ?",
-                    [target] * len(valid_fields) + [200],
-                )
+                    [target] * len(valid_fields) + [201],
+                ))
+                incomplete |= len(rows) >= 201
                 exact.extend(format_candidate(dict(row), source) for row in rows)
         finally:
             connection.close()
     if exact:
-        return enrich_supplier_references(exact)[:max_candidates]
+        return limit_candidates(enrich_supplier_references(exact), max_candidates, incomplete)
     # Candidate-only relaxation: change one glyph in the series; preserve the complete suffix.
     approximate, incomplete = [], False
     if len(target) >= 10 and model_tokens([target]):
@@ -149,17 +156,15 @@ def retrieve_candidates(mpn: str, max_candidates: int = 5) -> List[Dict[str, Any
                 conn.close()
     if approximate:
         approximate = enrich_supplier_references(approximate)
-        incomplete |= len(approximate) > max_candidates
-        if incomplete:
-            for item in approximate:
-                item["retrieval_truncated"] = True
-        return approximate[:max_candidates]
+        return limit_candidates(approximate, max_candidates, incomplete)
     candidates = []
     for source, search in (("jlcparts", lib_svc.search_jlcparts), ("altium", lib_svc.search_altium)):
         try:
+            found = search(query=mpn, limit=30).get("items", [])
+            incomplete |= len(found) >= 30
             candidates.extend(
                 format_candidate(row, source)
-                for row in search(query=mpn, limit=30).get("items", [])
+                for row in found
             )
         except Exception:
             LOGGER.debug("Catalog search unavailable for %s", source, exc_info=True)
@@ -169,15 +174,17 @@ def retrieve_candidates(mpn: str, max_candidates: int = 5) -> List[Dict[str, Any
         if match and len(match.group(1)) >= 4 and match.group(1) != target:
             for source, search in (("jlcparts", lib_svc.search_jlcparts), ("altium", lib_svc.search_altium)):
                 try:
+                    found = search(query=match.group(1), limit=10).get("items", [])
+                    incomplete |= len(found) >= 10
                     candidates.extend(
                         format_candidate(row, source)
-                        for row in search(query=match.group(1), limit=10).get("items", [])
+                        for row in found
                     )
                 except Exception:
                     LOGGER.debug("Relaxed catalog search unavailable", exc_info=True)
     candidates = enrich_supplier_references(candidates)
     candidates.sort(key=lambda c: model_key(c["mfr_part_number"]) != target)
-    return candidates[:max_candidates]
+    return limit_candidates(candidates, max_candidates, incomplete)
 
 
 def fast_path_lcsc_lookup(

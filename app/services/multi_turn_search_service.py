@@ -27,6 +27,7 @@ from app.services.multi_turn_retrieval import (
     format_candidate,
     retrieve_candidates,
     lookup_lcsc_candidates,
+    limit_candidates,
 )
 from app.services.multi_turn_schemas import (
     EXTRACTOR_SYSTEM_PROMPT,
@@ -141,7 +142,7 @@ class MultiTurnSearchService:
             if value:
                 query = " ".join(filter(None, [value, specs.get("package")]))
                 candidates.extend(self.retrieve_candidates(query, max_candidates=8))
-        candidates = deduplicate_candidates(candidates)[:10]
+        candidates = limit_candidates(deduplicate_candidates(candidates), 10)
 
         supported = [(candidate, verify_text(candidate, ocr_lines)) for candidate in candidates]
         corrections = [(candidate, evidence) for candidate, evidence in supported

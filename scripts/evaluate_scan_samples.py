@@ -13,7 +13,7 @@ from uuid import uuid4
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, required=True)
-    parser.add_argument("--saved-scans", type=Path, required=True, help="Prior response array, with filenames, scan.label.image_sha256 and scan.ocr")
+    parser.add_argument("--saved-scans", type=Path, required=True, help="Prior response array or evaluation report, with filenames, scan.label.image_sha256 and scan.ocr")
     parser.add_argument("--library-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True, help="Parent for a new isolated evaluation directory")
@@ -42,6 +42,10 @@ def main():
     libraries.ALTIUM_DB_PATH = run/"altium_library.db"
     scans.UPLOAD_DIR = run/"uploads"
     entries = json.loads(args.saved_scans.read_text())
+    if isinstance(entries, dict):
+        entries = entries.get("results")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("Saved evidence must contain a nonempty scan array or report results")
     engine = create_engine(os.environ["DATABASE_URL"], connect_args={"check_same_thread":False})
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False)
@@ -56,6 +60,8 @@ def main():
             key, digest = cache_identity(photo)
             if original["label"].get("image_sha256") != digest or not original.get("ocr"):
                 raise ValueError(f"Missing or mismatched OCR evidence for {entry['filename']}")
+            if original["ocr"].get("engine") != "paddleocr-vl-llama.cpp":
+                raise ValueError(f"llama.cpp OCR evidence required for {entry['filename']}")
             if db.get(ScanOCRResult, key) is None:
                 db.add(ScanOCRResult(cache_key=key, image_sha256=digest, status="complete", result=original["ocr"]))
                 db.flush()

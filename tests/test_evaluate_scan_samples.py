@@ -36,3 +36,17 @@ def test_sample_evaluation_reuses_saved_ocr_and_preserves_source_catalog(tmp_pat
     assert report['summary']['needs_review'] == 1
     assert report['summary']['qr_quantity'] == 7
     assert hashlib.sha256((libraries/'jlcparts.db').read_bytes()).hexdigest() == catalog_hash
+    # The complete output is also an input artifact for later text-only evaluations.
+    repeated = command.copy()
+    repeated[repeated.index('--saved-scans')+1] = str(output)
+    result=subprocess.run(repeated,cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True)
+    assert result.returncode == 0,result.stderr+result.stdout
+    assert json.loads(output.read_text())['summary'] == report['summary']
+
+    entries=json.loads(evidence.read_text())
+    entries[1]['scan']['ocr']['engine']='PP-OCRv4'
+    evidence.write_text(json.dumps(entries))
+    result=subprocess.run(command,cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True)
+    assert result.returncode != 0
+    assert 'llama.cpp OCR evidence required' in result.stderr
+    assert hashlib.sha256((libraries/'jlcparts.db').read_bytes()).hexdigest() == catalog_hash

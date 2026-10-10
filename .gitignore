@@ -45,6 +45,7 @@ data/cache/
 data/temp/
 data/scan_uploads/
 data/logs/
+data/evaluations/
 data/llama_servers_state.json
 data/run_windows_state.json
 data/run_linux_state.json

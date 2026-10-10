@@ -350,6 +350,14 @@ def stage2_rerank(
                 raise AIStageError("reranker", "invalid_candidate_index")
             if any(not 1 <= row["index"] <= len(candidates) for row in parsed["excluded"]):
                 raise AIStageError("reranker", "invalid_candidate_index")
+            suggested = parsed["candidate_indices"] or []
+            excluded = {row["index"] for row in parsed["excluded"]}
+            if ((decision == "exact_match" and (index in excluded or suggested))
+                    or (decision != "exact_match" and index is not None)
+                    or (decision == "no_match" and suggested)
+                    or len(suggested) != len(set(suggested))
+                    or bool(set(suggested) & excluded)):
+                raise AIStageError("reranker", "inconsistent_decision")
             return parsed
         except AIStageError:
             raise
