@@ -6,6 +6,22 @@ from db.reset_main_database import reset_main_database_data
 from db.schema_migrations import initialize_main_database
 
 
+def test_dynamic_jlc_source_alias_migrates_without_changing_component_identity(tmp_path):
+    from app.models import Part
+    engine = create_engine(f"sqlite:///{tmp_path / 'source_alias.sqlite'}")
+    initialize_main_database(engine)
+    with Session(engine) as db:
+        db.add(Part(library_source="lcsc_dynamic", external_part_id="541722"))
+        db.add(Part(library_source="altium", external_part_id="31355"))
+        db.commit()
+    initialize_main_database(engine)
+    initialize_main_database(engine)
+    with Session(engine) as db:
+        assert [(p.library_source, p.external_part_id) for p in db.query(Part).order_by(Part.id)] == [
+            ("jlcparts", "541722"), ("altium", "31355")]
+    engine.dispose()
+
+
 def test_existing_project_table_migrates_and_system_project_seeds_idempotently(tmp_path):
     database_path = tmp_path / "legacy.sqlite"
     engine = create_engine(f"sqlite:///{database_path}")

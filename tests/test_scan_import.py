@@ -96,10 +96,10 @@ def test_different_packages_with_same_component_are_independent(setup):
         assert [row.project_id for row in db.query(ProjectPart).order_by(ProjectPart.id)] == [1, 2]
 
 
-def test_ocr_conflict_is_saved_for_review_with_original_project(setup, monkeypatch):
+def test_missing_qr_quantity_is_saved_for_review_with_original_project(setup, monkeypatch):
     client, factory, image = setup
     monkeypatch.setattr(service.ocr_client, "recognize_image", lambda data: evidence("C6119867", COMPONENT["mfr"], "0805"))
-    result = scan(client, image).json()
+    result = scan(client, image, raw=RAW.replace("qty:200", "qty:0")).json()
     assert result["status"] == "needs_review"
     assert result["project_id"] == 1
     with factory() as db:
@@ -116,7 +116,7 @@ def test_service_failure_never_imports_and_system_project_is_rejected(setup, mon
     def unavailable(data):
         raise RuntimeError("unavailable")
     monkeypatch.setattr(service.ocr_client, "recognize_image", unavailable)
-    result = scan(client, image).json()
+    result = scan(client, image, raw="").json()
     assert result["status"] == "needs_review"
     assert "ocr_unavailable" in result["verification"]["reasons"]
     assert scan(client, image, project_id=3).status_code == 400
@@ -135,7 +135,7 @@ def test_inventory_only_scan_has_no_project_link(setup):
 def test_deleted_project_blocks_atomic_import_in_manual_review(setup, monkeypatch):
     client, factory, image = setup
     monkeypatch.setattr(service.ocr_client, "recognize_image", lambda data: evidence("C6119867"))
-    result = scan(client, image).json()
+    result = scan(client, image, raw=RAW.replace("qty:200", "qty:0")).json()
     with factory() as db:
         db.query(Project).filter_by(id=1).delete()
         db.commit()
@@ -156,13 +156,13 @@ def test_parallel_scan_of_same_package_imports_only_once(setup):
         assert db.query(Part).count() == db.query(Inventory).count() == db.query(ProjectPart).count() == 1
 
 
-def test_retry_uses_saved_photo_and_original_project(setup, monkeypatch):
+def test_retry_uses_saved_qr_and_original_project(setup, monkeypatch):
     client, factory, image = setup
-    original = service.ocr_client.recognize_image
-    monkeypatch.setattr(service.ocr_client, "recognize_image", lambda data: evidence("C6119867"))
+    original = service.resolve_component
+    monkeypatch.setattr(service, "resolve_component", lambda *args: None)
     result = scan(client, image, project_id=2).json()
     assert result["status"] == "needs_review"
-    monkeypatch.setattr(service.ocr_client, "recognize_image", original)
+    monkeypatch.setattr(service, "resolve_component", original)
     response = client.post(f"/api/scan/{result['id']}/retry")
     assert response.json()["status"] == "imported"
     with factory() as db:
@@ -172,7 +172,7 @@ def test_retry_uses_saved_photo_and_original_project(setup, monkeypatch):
 def test_project_id_reuse_cannot_redirect_review_to_a_different_project(setup, monkeypatch):
     client, factory, image = setup
     monkeypatch.setattr(service.ocr_client, "recognize_image", lambda data: evidence("C6119867"))
-    result = scan(client, image).json()
+    result = scan(client, image, raw=RAW.replace("qty:200", "qty:0")).json()
     with factory() as db:
         db.query(Project).filter_by(id=1).delete()
         db.add(Project(id=1, name="Unrelated replacement"))
@@ -188,23 +188,18 @@ def test_overlapping_retry_and_manual_confirm_cannot_import_twice(setup, monkeyp
     from threading import Event, current_thread
     from fastapi import HTTPException
     client, factory, image = setup
-    original_ocr = service.ocr_client.recognize_image
-    monkeypatch.setattr(service.ocr_client, "recognize_image", lambda data: evidence("C6119867"))
+    monkeypatch.setattr(service, "resolve_component", lambda *args: None)
     record = scan(client, image).json()
-    monkeypatch.setattr(service.ocr_client, "recognize_image", original_ocr)
-    confirm_lookup, allow_confirm, retry_verify, allow_retry = [Event() for _ in range(4)]
-    original_verify = service.verify_label
+    confirm_lookup, allow_confirm, retry_lookup, allow_retry = [Event() for _ in range(4)]
     def lookup(*args):
         if current_thread().name.startswith("confirm"):
             confirm_lookup.set()
             assert allow_confirm.wait(10)
+        else:
+            retry_lookup.set()
+            assert allow_retry.wait(10)
         return COMPONENT.copy()
-    def verify(*args):
-        retry_verify.set()
-        assert allow_retry.wait(10)
-        return original_verify(*args)
     monkeypatch.setattr(service, "resolve_component", lookup)
-    monkeypatch.setattr(service, "verify_label", verify)
     def run_confirm():
         with factory() as db:
             db.info[SESSION_USERNAME_KEY] = "Reviewer"
@@ -221,7 +216,7 @@ def test_overlapping_retry_and_manual_confirm_cannot_import_twice(setup, monkeyp
         confirmation = confirmations.submit(run_confirm)
         assert confirm_lookup.wait(10)
         retry = retries.submit(run_retry)
-        assert retry_verify.wait(10)
+        assert retry_lookup.wait(10)
         allow_confirm.set()
         confirmation.result(timeout=10)
         allow_retry.set()

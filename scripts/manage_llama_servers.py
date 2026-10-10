@@ -66,7 +66,7 @@ def start_server(bin_path: str, model_path: str, port: int, alias: str, log_file
         "-ngl", "99",
         "--port", str(port),
         "--host", "127.0.0.1",
-        "-c", "2048",
+        "-c", "4096",
         "--alias", alias,
     ]
 

@@ -1,4 +1,4 @@
-"""Independent HTTP API for the configured ElectronicQwen PaddleOCR runtime."""
+"""Archived PP-OCR API. Default inference is disabled; use paddleocr_vl.server."""
 
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 
-from .engine import MAX_IMAGE_BYTES, OCRRuntime, load_image
+from .engine import MAX_IMAGE_BYTES, load_image
 
 
 def create_app(runtime=None):
@@ -14,11 +14,8 @@ def create_app(runtime=None):
 
     @asynccontextmanager
     async def lifespan(app):
-        if configured_runtime is None:
-            app.state.ocr = OCRRuntime()
-            await run_in_threadpool(app.state.ocr.start)
-        else:
-            app.state.ocr = configured_runtime
+        # Explicit runtime injection keeps historical contract tests usable without enabling PP-OCR.
+        app.state.ocr = configured_runtime
         yield
 
     app = FastAPI(title="ElectronicQwen PaddleOCR API", version="1.0.0", lifespan=lifespan)
@@ -26,6 +23,8 @@ def create_app(runtime=None):
     @app.get("/health")
     def health():
         engine = getattr(app.state, "ocr", None)
+        if engine is None:
+            raise HTTPException(503, "Legacy PP-OCR is disabled; use the llama.cpp PaddleOCR-VL adapter")
         if not engine or not engine.ready:
             raise HTTPException(503, "OCR model is not ready")
         return {"api_version": "1", "ready": True, "device": engine.device}

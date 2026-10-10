@@ -57,7 +57,14 @@ def mock_multi_turn_library(tmp_path, monkeypatch):
 
     monkeypatch.setattr(libraries, "JLCPARTS_DB_PATH", jlc_path)
     monkeypatch.setattr(libraries, "ALTIUM_DB_PATH", altium_path)
-    service = MultiTurnSearchService()
+    from app.services import lcsc_dynamic_service as dynamic
+    monkeypatch.setattr(dynamic, "JLCPARTS_DB_PATH", jlc_path)
+    monkeypatch.setattr(dynamic, "fetch_lcsc_product", lambda *args: None)
+    service = MultiTurnSearchService(strict_mode=False)
+    def offline():
+        raise RuntimeError("Offline model boundary for deterministic tests")
+    monkeypatch.setattr(service, "get_extractor_client", offline)
+    monkeypatch.setattr(service, "get_reranker_client", offline)
     monkeypatch.setattr("app.services.bom_service.multi_turn_service", service)
     return service, jlc_path
 

@@ -111,28 +111,36 @@ PARTSHELF_TEST_MODE=false
 .venv/bin/python scripts/prepare_scan_assets.py
 ```
 
-OCR 不安装到 PartShelf 主环境。独立服务使用 Python 3.11、PaddleOCR 2.9.1 和 PaddlePaddle 2.6.2，可部署到另一台设备。服务源码在 `services/paddleocr_api/`；工作区中同步到 ElectronicQwen 后的安装示例：
+唯一 OCR 引擎是 llama.cpp 中的 PaddleOCR-VL-1.5。Python HTTP 适配层使用 PartShelf 主虚拟环境，无需安装 PaddlePaddle、PaddleOCR 或旧 `.venv-ocr` 依赖。旧 `services/paddleocr_api/` 默认推理已停用，没有回退路径。
+
+模型放在 `data/models/paddleocr_vl/`，先准备文件再启动：
 
 ```bash
-.venv/bin/python scripts/sync_ocr_api.py --destination ../ElectronicQwen
-cd ../ElectronicQwen
-python3.11 -m venv .venv-ocr
-.venv-ocr/bin/python -m pip install -r ocr_api/requirements.txt
-.venv-ocr/bin/python -m uvicorn ocr_api.server:app --host 127.0.0.1 --port 8010
+.venv/bin/python scripts/download_paddleocr_vl.py
+.venv/bin/python run_linux.py --no-web
+# Windows: .venv\Scripts\python.exe run_windows.py --no-web
 ```
 
-首次加载会下载 PP-OCRv4 模型。离线模型路径、远程监听、Windows 启动和完整接口说明见 [独立 OCR API 文档](services/paddleocr_api/API.md)。该服务可用独立 systemd 服务管理，工作目录和虚拟环境必须与 PartShelf 分开。
+启动器使用配置的 llama-server 二进制及 GGUF 模型：OCR 模型 8083、适配层 8010、文本提取 8081、候选重排 8082；上下文均为 4096。更新后，已有服务需要重启以应用新代码和上下文。单独启动适配层（模型后端需先就绪）：
 
-在 PartShelf 的 `.env` 中配置服务根地址：
+```bash
+.venv/bin/python -m paddleocr_vl.server --host 127.0.0.1 --port 8010 --llama-url http://127.0.0.1:8083/v1
+```
+
+`.env` 示例：
 
 ```dotenv
 PADDLEOCR_API_URL=http://127.0.0.1:8010
 PADDLEOCR_TIMEOUT_SECONDS=60
+LLAMA_OCR_BASE_URL=http://127.0.0.1:8083/v1
+LLAMA_OCR_TIMEOUT_SECONDS=60
 ```
 
-服务可用状态通过 `GET /health` 检查，OCR 接口为 `POST /v1/ocr`。PartShelf 转发图片，浏览器无需直连 OCR 服务。扫码照片限 JPEG、PNG、WebP，最大 10 MiB、2400 万像素；服务账号需对 `data/scan_uploads/` 有写权限。远程摄像头使用 HTTPS。
+两个超时默认均为 30 秒，可按模型速度调整。健康检查为 `GET /health`，图片识别为 `POST /v1/ocr`；见 [当前 OCR API 文档](paddleocr_vl/API.md)。旧 PP-OCR 如由 systemd 或其他管理器运行，应按服务名停用；不要按 8010 端口关闭当前 llama.cpp 适配层。
 
-升级启动时新增 `scan_sessions` 表及项目稳定标识 `projects.identity_token`，为已有项目补齐标识，保留原业务数据。扫码事务同时保存单包库存、项目元件关联及操作者历史；待核查条目保留原项目快照，项目删除或 ID 被新项目复用时不会误入其他项目。
+嘉立创二维码仅依赖目录查询和数据库，OCR、提取或重排离线不会阻断此路径。普通照片只识别一次，结果和失败状态保存在 `scan_ocr_results`；重复上传和重试复用结果。模型或预处理规则更换后，可设置新的 `PADDLEOCR_VL_CACHE_VERSION`，新任务使用新版本缓存。服务账号需对 `data/scan_uploads/` 有写权限；图片限 JPEG、PNG、WebP、10 MiB、2400 万像素，远程摄像头需 HTTPS。
+
+升级启动新增 `scan_ocr_results`，保留库存、项目、历史和已有扫描数据；已知旧来源 `lcsc_dynamic` 自动规范为 `jlcparts`，保留原元件 ID。目录缓存写入前自动迁移数值索引触发器，不重建整个别名索引。库存、项目关联、操作历史及扫描状态原子提交；原项目身份快照防止项目 ID 复用后误入库。
 
 ## 5. 配置用户名记录模式
 

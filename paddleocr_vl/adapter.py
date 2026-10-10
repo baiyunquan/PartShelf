@@ -6,11 +6,10 @@ and maps the VLM output into the standardized PaddleOCR schema.
 
 import base64
 from io import BytesIO
-import json
 import logging
 import os
+import re
 import time
-from urllib.parse import urlsplit
 
 import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -116,17 +115,21 @@ class PaddleOCRVLAdapter:
                 continue
             lines.append({
                 "text": line_text,
-                "confidence": 0.99,
-                "box": [
-                    [0.0, 0.0],
-                    [float(width), 0.0],
-                    [float(width), float(height)],
-                    [0.0, float(height)],
-                ],
+                "confidence": None,
+                "box": None,
             })
 
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+        finish = choices[0].get("finish_reason")
+        repeated = any(content.splitlines().count(line["text"]) >= 4 for line in lines)
+        repeated = repeated or bool(re.search(r"(.{12,160})(?:\s*\1){3,}", content))
+        complete = finish == "stop" and bool(lines) and not repeated
         return {
+            "engine": "paddleocr-vl-llama.cpp",
+            "status": "complete" if complete else "incomplete",
+            "finish_reason": finish,
+            "error": None if complete else "ocr_empty" if not lines else "ocr_repeated" if repeated else "ocr_incomplete",
+            "usage": body.get("usage"),
             "image": {
                 "width": width,
                 "height": height,
@@ -136,4 +139,3 @@ class PaddleOCRVLAdapter:
             "raw_text": content,
             "elapsed_ms": elapsed_ms,
         }
-

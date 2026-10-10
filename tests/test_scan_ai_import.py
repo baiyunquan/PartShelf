@@ -85,7 +85,11 @@ def scan_setup(tmp_path, monkeypatch):
     from app.services import lcsc_dynamic_service as dynamic
     monkeypatch.setattr(dynamic, "fetch_lcsc_product", lambda _code: None)
     monkeypatch.setattr(dynamic, "JLCPARTS_DB_PATH", jlc_path)
-    ai_service = MultiTurnSearchService()
+    ai_service = MultiTurnSearchService(strict_mode=False)
+    def offline():
+        raise RuntimeError("Offline model boundary for deterministic tests")
+    monkeypatch.setattr(ai_service, "get_extractor_client", offline)
+    monkeypatch.setattr(ai_service, "get_reranker_client", offline)
     monkeypatch.setattr(service, "multi_turn_service", ai_service)
     monkeypatch.setattr(service, "UPLOAD_DIR", tmp_path / "images")
     monkeypatch.setattr(service, "resolve_component", lambda code, lang="zh": COMPONENT.copy() if str(code) == "C6119867" else None)
@@ -124,27 +128,16 @@ def test_non_jlc_qr_invokes_ai_matching(scan_setup, monkeypatch):
     assert top["name"] == "0603WAF1002T5E"
 
 
-def test_reused_bag_warning_flagged(scan_setup, monkeypatch):
-    """When JLC QR is for C6119867 capacitor, but OCR shows a conflicting resistor MPN."""
+def test_jlc_qr_is_authoritative_without_reading_conflicting_text(scan_setup, monkeypatch):
     client, factory, image = scan_setup
-
-    monkeypatch.setattr(
-        service.ocr_client,
-        "recognize_image",
-        lambda data: evidence("C965815", "0603WAF1002T5E", "10k 0603", "QTY:100"),
-    )
-
-    # QR claims C6119867 (TDK capacitor)
+    def forbidden(data):
+        pytest.fail("QR imports do not read OCR text")
+    monkeypatch.setattr(service.ocr_client, "recognize_image", forbidden)
     data = {"qr_text": RAW, "request_id": str(uuid4()), "project_id": "1"}
-    response = client.post("/api/scan/recognize", data=data, files={"image": ("label.jpg", image, "image/jpeg")})
-
-    assert response.status_code == 200
-    res = response.json()
-    assert res["status"] == "needs_review"
-    verification = res["verification"]
-    assert verification.get("reused_bag_warning") is True
-    assert "reused_bag_conflict" in verification.get("reasons", [])
-    assert len(verification.get("candidates", [])) >= 1
+    res = client.post("/api/scan/recognize", data=data, files={"image": ("label.jpg", image, "image/jpeg")}).json()
+    assert res["status"] == "imported"
+    assert res["ocr"] is None
+    assert res["quantity"] == 200
 
 
 def test_confirm_candidate_from_ai(scan_setup, monkeypatch):

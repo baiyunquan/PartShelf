@@ -29,3 +29,26 @@ test("an explicit new bag action releases camera repeat suppression", () => {
   label.repeatCameraScan(seen);
   assert.equal(seen.has("same packaging QR"), false);
 });
+
+test("a JLC identity with missing quantity remains on the QR review path", () => {
+  const result = label.decodeChoice([{text: "{pc:C541722,qty:0}"}]);
+  assert.equal(result.kind, "jlc");
+  assert.equal(result.label.pc, "C541722");
+  assert.equal(result.label.qty, null);
+});
+
+test("two JLC labels are never silently reduced to the first QR", () => {
+  const result = label.decodeChoice([
+    {text: "{pc:C541722,pm:AO3400C,qty:5}"},
+    {text: "{pc:C473048,pm:0201WMF1002TEE,qty:100}"},
+  ]);
+  assert.equal(result.kind, "multiple");
+  assert.equal(result.qr_texts.length, 2);
+});
+
+test("candidate confirmation always carries its catalog namespace", () => {
+  const result = label.confirmationIdentity("31355", {library_source: "altium", external_part_id: "31355"});
+  assert.deepEqual(result, {library_source: "altium", external_part_id: "31355"});
+  assert.deepEqual(label.confirmationIdentity("C541722", null), {lcsc_code: "C541722"});
+  assert.deepEqual(label.confirmationIdentity("C965815", {library_source: "altium", external_part_id: "31355"}), {lcsc_code: "C965815"});
+});

@@ -539,7 +539,7 @@ def main():
                 "--host",
                 "127.0.0.1",
                 "-c",
-                "2048",
+                "4096",
                 "--alias",
                 "electronic-qwen-extractor",
             ]
@@ -570,7 +570,7 @@ def main():
                 "--host",
                 "127.0.0.1",
                 "-c",
-                "2048",
+                "4096",
                 "--alias",
                 "electronic-qwen-reranker",
             ]

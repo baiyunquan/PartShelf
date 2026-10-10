@@ -11,6 +11,7 @@ from app.services.electrical_value_service import PARSER_VERSION, measurements_f
 
 
 LOGGER = logging.getLogger(__name__)
+TRIGGER_VERSION = "2"
 CATALOGS = {
     "jlcparts": ("jlc_components", "lcsc", "jlcparts.db"),
     "altium": ("altium_components", "id", "altium_library.db"),
@@ -38,13 +39,37 @@ def _schema(conn: sqlite3.Connection, source: str) -> None:
                  "ON numeric_search_aliases(kind,value,record_id)")
     conn.execute("CREATE TABLE IF NOT EXISTS numeric_search_dirty (record_id INTEGER PRIMARY KEY)")
     conn.execute("CREATE TABLE IF NOT EXISTS numeric_search_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+    meta = dict(conn.execute("SELECT key,value FROM numeric_search_meta"))
+    if meta.get("trigger_version") == TRIGGER_VERSION:
+        return
     for event, reference in (("INSERT", "NEW"), ("UPDATE", "NEW"), ("DELETE", "OLD")):
+        conn.execute(f"DROP TRIGGER IF EXISTS numeric_search_{event.lower()}")
         conn.execute(
-            f"CREATE TRIGGER IF NOT EXISTS numeric_search_{event.lower()} AFTER {event} ON {table} "
-            f"BEGIN INSERT OR IGNORE INTO numeric_search_dirty(record_id) VALUES({reference}.{identity}); "
-            + (f"INSERT OR IGNORE INTO numeric_search_dirty(record_id) VALUES(OLD.{identity}); "
+            f"CREATE TRIGGER numeric_search_{event.lower()} AFTER {event} ON {table} "
+            f"BEGIN INSERT INTO numeric_search_dirty(record_id) VALUES({reference}.{identity}) ON CONFLICT(record_id) DO NOTHING; "
+            + (f"INSERT INTO numeric_search_dirty(record_id) VALUES(OLD.{identity}) ON CONFLICT(record_id) DO NOTHING; "
                if event == "UPDATE" else "") + "END"
         )
+    conn.execute("INSERT INTO numeric_search_meta VALUES('trigger_version',?) "
+                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (TRIGGER_VERSION,))
+
+
+def ensure_numeric_triggers(conn: sqlite3.Connection, source: str) -> None:
+    """Migrate only dirty-record triggers before a catalog UPSERT; do not rebuild aliases."""
+    if conn.in_transaction:
+        raise RuntimeError("Commit catalog changes before migrating numeric triggers")
+    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='numeric_search_meta'").fetchone()
+    if exists:
+        version = conn.execute("SELECT value FROM numeric_search_meta WHERE key='trigger_version'").fetchone()
+        if version and version[0] == TRIGGER_VERSION:
+            return
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn, source)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def _insert_records(conn, source, records, columns) -> Dict[str, int]:
@@ -84,7 +109,8 @@ def ensure_numeric_aliases(
                           "AND name='numeric_search_meta'").fetchone()
     if exists and not force:
         meta = dict(conn.execute("SELECT key,value FROM numeric_search_meta"))
-        if meta.get("version") == PARSER_VERSION and meta.get("aliases") == digest:
+        if (meta.get("version") == PARSER_VERSION and meta.get("aliases") == digest
+                and meta.get("trigger_version") == TRIGGER_VERSION):
             if not conn.execute("SELECT 1 FROM numeric_search_dirty LIMIT 1").fetchone():
                 return report
     try:

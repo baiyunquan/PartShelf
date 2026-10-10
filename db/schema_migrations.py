@@ -31,6 +31,10 @@ def initialize_main_database(engine: Engine) -> None:
     # The old table column is added before create_all so its declared unique
     # index can be created on both fresh and upgraded SQLite databases.
     Base.metadata.create_all(bind=engine)
+    # lcsc_dynamic is a cache provenance, not a separate reference catalog.
+    # Normalize that known alias without guessing any historical Altium IDs.
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE parts SET library_source='jlcparts' WHERE library_source='lcsc_dynamic'"))
     scan_columns = {column["name"] for column in inspect(engine).get_columns("scan_sessions")}
     if "project_token" not in scan_columns:
         with engine.begin() as connection:

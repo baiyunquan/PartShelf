@@ -23,6 +23,8 @@ from openai import OpenAI
 
 from app.core.config import settings
 from app.services import external_library_service as lib_svc
+from app.services.scan_evidence import contains_model, lcsc_codes, model_key, model_tokens, package_key
+from app.services.electrical_value_service import parse_measurements
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,39 +32,97 @@ EXTRACTOR_SYSTEM_PROMPT = """你是一个专业的电子元器件标签分析与
 你的任务是从杂乱的工业包装袋 OCR 文本中提取标准型号、C 码、品牌、封装与规格属性。
 规则约束：
 1. 过滤立创销售订单编号 (SO\\d+) 与仓库拣货库位编号 (\\d{4}-\\w+, \\d+/\\d+)。
-2. 若检测到工业旧袋复用场景，表面加贴新标签型号优先级高于底层印刷旧底标与作废 C 码。
-3. 输出纯 JSON 格式数据。"""
+2. 只能提取原文实际出现的型号与参数，不得推测封装、电压、品类或修改型号字符。多个型号或数量并存时记录冲突，不得猜测哪张标签有效。
+3. 保留完整型号后缀。缺失的规格使用 null。输出符合给定 JSON Schema 的 JSON。"""
 
 RERANKER_SYSTEM_PROMPT = """你是一个资深的电子硬件工程仲裁专家。
 你的任务是在候选元器件列表中进行深层工程比对。
 规则约束：
 1. 逐项审查型号、品牌、封装兼容性、引脚数与电气参数。
-2. 识别工业旧袋复用冲突，加贴新标签优先于底层旧印刷。
+2. 型号后缀不同不能判为精确匹配。多标签冲突须人工核查，不得猜测标签的新旧关系。
 3. 决策分为 exact_match、ambiguous、no_match，并给出严谨的排他分析理由 (reasoning)。
-4. 输出严格符合 JSON 格式。"""
+4. 输出符合给定 JSON Schema 的 JSON，reasoning 不超过 120 字，不输出长篇思考过程。"""
 
 
 def extract_json_safely(text: str) -> Dict[str, Any]:
     """Extract first valid balanced JSON object from model output."""
-    start = text.find("{")
-    if start == -1:
-        return {}
-    depth = 0
-    end = -1
-    for i in range(start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                end = i + 1
-                break
-    if end != -1:
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
         try:
-            return json.loads(text[start:end])
-        except Exception:
-            pass
+            value, _ = decoder.raw_decode(text[match.start():])
+            if isinstance(value, dict):
+                return value
+        except ValueError:
+            continue
     return {}
+
+
+SPEC_FIELDS = ("package", "value", "manufacturer", "resistance", "capacitance", "inductance",
+               "voltage", "voltage_rating", "current", "power", "power_rating", "tolerance")
+EXTRACT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "family": {"type": "string", "enum": ["resistor", "capacitor", "inductor", "ic", "connector", "mechanical", "general", "unknown"]},
+        "queries": {"type": "array", "maxItems": 3, "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {"kind": {"type": "string", "enum": ["lcsc", "mpn", "value", "package"]},
+                           "text": {"type": "string", "maxLength": 64}}, "required": ["kind", "text"]}},
+        "specs": {"type": "object", "additionalProperties": False,
+                  "properties": {key: {"type": ["string", "null"], "maxLength": 48} for key in ("package", "value", "manufacturer")},
+                  "required": ["package", "value", "manufacturer"]},
+        "review_reason": {"type": ["string", "null"], "maxLength": 40}},
+    "required": ["family", "queries", "specs", "review_reason"]}
+RERANK_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "decision": {"type": "string", "enum": ["exact_match", "ambiguous", "no_match"]},
+        "selected_index": {"type": ["integer", "null"], "minimum": 1},
+        "candidate_indices": {"type": ["array", "null"], "items": {"type": "integer", "minimum": 1}, "maxItems": 10},
+        "reasoning": {"type": "string", "maxLength": 120},
+        "excluded": {"type": "array", "maxItems": 10, "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {"index": {"type": "integer", "minimum": 1}, "reason": {"type": "string", "maxLength": 80}},
+            "required": ["index", "reason"]}}},
+    "required": ["decision", "selected_index", "candidate_indices", "reasoning", "excluded"]}
+
+
+def structured_format(name, schema):
+    return {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}}
+
+
+def completed_json(response):
+    if not response.choices or response.choices[0].finish_reason != "stop":
+        raise ValueError("Model output is incomplete")
+    parsed = extract_json_safely(response.choices[0].message.content or "")
+    if not parsed:
+        raise ValueError("Model did not return a valid JSON object")
+    return parsed
+
+
+def grounded_extraction(parsed, lines):
+    text = "\n".join(lines)
+    codes = lcsc_codes(lines)
+    queries = []
+    for query in parsed.get("queries", []):
+        if not isinstance(query, dict):
+            continue
+        value, kind = str(query.get("text") or ""), str(query.get("kind") or "").lower()
+        observed = (value.upper() in codes if kind == "lcsc" else
+                    contains_model(text, value) and bool(model_tokens([value])) if kind == "mpn" else
+                    model_key(value) in model_key(text) if value else False)
+        if observed and kind in {"lcsc", "mpn", "value", "package"}:
+            normalized_query = {"kind": kind, "text": value}
+            if normalized_query not in queries:
+                queries.append(normalized_query)
+    specs = {}
+    observed_values = {(m.kind, m.value) for line in lines for m in parse_measurements(line)}
+    for key, value in (parsed.get("specs") or {}).items():
+        if key not in SPEC_FIELDS or not isinstance(value, str) or not value.strip():
+            continue
+        values = {(m.kind, m.value) for m in parse_measurements(value)}
+        if model_key(value) in model_key(text) or (values and values <= observed_values):
+            specs[key] = value
+    return {**parsed, "queries": queries, "specs": specs}
 
 
 def is_logistics_or_shelf_noise(s: str) -> bool:
@@ -147,9 +207,8 @@ class MultiTurnSearchService:
             input_text = "\n".join(formatted_lines)
         else:
             input_text = str(ocr_lines)
-        client = self.get_extractor_client()
-
         try:
+            client = self.get_extractor_client()
             resp = client.chat.completions.create(
                 model="electronic-qwen-extractor",
                 messages=[
@@ -157,30 +216,13 @@ class MultiTurnSearchService:
                     {"role": "user", "content": f"请从以下工业元器件标签 OCR 文本中提取标准型号查询词与封装规格。\n\n{input_text}"},
                 ],
                 temperature=0.1,
-                max_tokens=300,
+                max_tokens=512,
+                response_format=structured_format("label_extraction", EXTRACT_SCHEMA),
             )
-            gen_text = resp.choices[0].message.content or ""
-            parsed = extract_json_safely(gen_text)
-            if parsed and ("queries" in parsed or "family" in parsed):
-                # Sanity post-processing on physical electrical units
-                specs = parsed.get("specs") or {}
-                raw_text = input_text.lower()
-                has_resistor_val = bool(re.search(r"\b\d+(?:\.\d+)?[kmr]\b", raw_text) or "ω" in raw_text or "resistor" in raw_text)
-                has_capacitor_val = bool(re.search(r"\b\d+(?:\.\d+)?[pnuµ]f\b", raw_text) or "mlcc" in raw_text or "capacitor" in raw_text)
-
-                if has_resistor_val and not has_capacitor_val:
-                    parsed["family"] = "resistor"
-                    specs["category"] = "Resistors"
-                    if "capacitance" in specs and "resistance" not in specs:
-                        specs["resistance"] = specs.pop("capacitance")
-                elif has_capacitor_val and not has_resistor_val:
-                    parsed["family"] = "capacitor"
-                    specs["category"] = "Capacitors"
-                    if "resistance" in specs and "capacitance" not in specs:
-                        specs["capacitance"] = specs.pop("resistance")
-
-                parsed["specs"] = specs
-                return parsed
+            parsed = completed_json(resp)
+            if not isinstance(parsed.get("queries"), list) or not isinstance(parsed.get("specs"), dict):
+                raise ValueError("Invalid label extraction fields")
+            return grounded_extraction(parsed, ocr_lines)
         except Exception as e:
             if self.strict_mode:
                 raise RuntimeError(
@@ -218,84 +260,77 @@ class MultiTurnSearchService:
             if m_val and "value" not in specs:
                 specs["value"] = m_val.group(0)
 
-        return {
-            "family": "general",
-            "queries": queries,
-            "specs": specs,
-            "review_reason": "heuristic_fallback"
-        }
+        return grounded_extraction({"family": "general", "queries": queries, "specs": specs,
+                                    "review_reason": "heuristic_fallback"}, ocr_lines)
+
+    @staticmethod
+    def candidate(item, source):
+        identity = str(item.get("lcsc") if source == "jlcparts" else item.get("id") or "")
+        name = item.get("mfr_part_number") or item.get("mfr") or item.get("lib_reference") or f"Part {identity}"
+        return {"library_source": source, "source": source, "external_part_id": identity,
+                "name": name, "mfr_part_number": name, "manufacturer": item.get("manufacturer") or "",
+                "package": item.get("package") or "", "category": item.get("category") or "",
+                "description": item.get("description") or "", "stock": item.get("stock", 0),
+                "image": item.get("image_url_small") or item.get("image") or "", "raw_item": item}
+
+    @staticmethod
+    def deduplicate(candidates):
+        result, seen = [], set()
+        # Prefer the supplier catalog when another library references exactly the same part.
+        for candidate in sorted(candidates, key=lambda c: c.get("library_source") != "jlcparts"):
+            raw = candidate.get("raw_item") or candidate
+            source = candidate.get("library_source") or candidate.get("source")
+            code = raw.get("lcsc") if source == "jlcparts" else raw.get("lcsc_part")
+            if code and re.fullmatch(r"C?\d{3,10}", str(code), re.I):
+                key = ("lcsc", str(code).lstrip("Cc"), model_key(candidate.get("mfr_part_number")), package_key(candidate.get("package")))
+            else:
+                key = (source, candidate.get("external_part_id"))
+            if key not in seen:
+                result.append(candidate)
+                seen.add(key)
+        return result
 
     def retrieve_candidates(self, mpn: str, max_candidates: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve candidate parts from PartShelf databases using tiered relaxation."""
+        """Query full models before fuzzy or unit-equivalent search; merge supplier references."""
+        exact = []
+        target = model_key(mpn)
+        if not target:
+            return []
+        for source, path, table, fields in (
+            ("jlcparts", lib_svc.JLCPARTS_DB_PATH, "jlc_components", ("mfr",)),
+            ("altium", lib_svc.ALTIUM_DB_PATH, "altium_components", ("mfr_part_number", "lib_reference")),
+        ):
+            connection = lib_svc.get_connection(path)
+            if connection is None:
+                continue
+            try:
+                available = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+                fields = [field for field in fields if field in available]
+                if fields:
+                    where = " OR ".join(f"{field} = ? COLLATE NOCASE" for field in fields)
+                    rows = connection.execute(f"SELECT * FROM {table} WHERE {where} LIMIT ?", [target] * len(fields) + [200])
+                    exact.extend(self.candidate(dict(row), source) for row in rows)
+            finally:
+                connection.close()
+        if exact:
+            return self.deduplicate(exact)[:max_candidates]
         candidates = []
-        seen_keys = set()
-
-        def add_item(item: Dict[str, Any], source: str):
-            part_no = (item.get("mfr_part_number") or item.get("mfr") or item.get("lib_reference") or "").strip()
-            ext_id = str(item.get("lcsc") or item.get("id") or "")
-            key = f"{source}:{ext_id or part_no.upper()}"
-            if key in seen_keys:
-                return
-            seen_keys.add(key)
-            name = item.get("mfr") or item.get("lib_reference") or item.get("mfr_part_number") or f"Part {ext_id}"
-            candidates.append({
-                "library_source": source,
-                "external_part_id": ext_id,
-                "name": name,
-                "mfr_part_number": item.get("mfr_part_number") or item.get("mfr") or name,
-                "manufacturer": item.get("manufacturer") or "",
-                "package": item.get("package") or "",
-                "category": item.get("category") or "",
-                "description": item.get("description") or "",
-                "stock": item.get("stock", 0),
-                "image": item.get("image_url_small") or item.get("image") or "",
-                "source": source,
-                "raw_item": item
-            })
-
-        # 1. Exact MPN search in Altium library
-        try:
-            altium_res = lib_svc.search_altium(query=mpn, limit=max_candidates)
-            for it in altium_res.get("items", []):
-                add_item(it, "altium")
-        except Exception:
-            pass
-
-        # 2. Exact MPN search in JLCParts library
-        try:
-            jlc_res = lib_svc.search_jlcparts(query=mpn, limit=max_candidates)
-            for it in jlc_res.get("items", []):
-                add_item(it, "jlcparts")
-        except Exception:
-            pass
-
-        # 3. Relaxation fallback if candidates < 3
-        if len(candidates) < 3 and len(mpn) > 4:
-            base_roots = []
-            m_root = re.match(r"^([A-Za-z0-9]+?)(?:-[A-Za-z0-9]+|[A-Z]{1,3}\d*R|\d{1,2}[A-Z]{1,2})$", mpn)
-            if m_root and len(m_root.group(1)) >= 4:
-                base_roots.append(m_root.group(1))
-            if not base_roots:
-                m_pref = re.match(r"^([A-Za-z]{2,}\d+)", mpn)
-                if m_pref:
-                    base_roots.append(m_pref.group(1))
-
-            for root in base_roots:
-                if len(candidates) >= max_candidates:
-                    break
-                try:
-                    rel_res = lib_svc.search_jlcparts(query=root, limit=max_candidates)
-                    for it in rel_res.get("items", []):
-                        add_item(it, "jlcparts")
-                except Exception:
-                    pass
-                try:
-                    rel_alt = lib_svc.search_altium(query=root, limit=max_candidates)
-                    for it in rel_alt.get("items", []):
-                        add_item(it, "altium")
-                except Exception:
-                    pass
-
+        for source, search in (("jlcparts", lib_svc.search_jlcparts), ("altium", lib_svc.search_altium)):
+            try:
+                candidates.extend(self.candidate(row, source) for row in search(query=mpn, limit=30).get("items", []))
+            except Exception:
+                LOGGER.debug("Catalog search unavailable for %s", source, exc_info=True)
+        # Relax only after a complete model lookup fails; never silently replace the observed model.
+        if not candidates and model_tokens([mpn]):
+            match = re.match(r"^([A-Za-z]{2,}\d+)", target)
+            if match and len(match.group(1)) >= 4 and match.group(1) != target:
+                for source, search in (("jlcparts", lib_svc.search_jlcparts), ("altium", lib_svc.search_altium)):
+                    try:
+                        candidates.extend(self.candidate(row, source) for row in search(query=match.group(1), limit=10).get("items", []))
+                    except Exception:
+                        LOGGER.debug("Relaxed catalog search unavailable", exc_info=True)
+        candidates = self.deduplicate(candidates)
+        candidates.sort(key=lambda c: model_key(c["mfr_part_number"]) != target)
         return candidates[:max_candidates]
 
     def stage2_rerank(self, label_context: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -339,8 +374,8 @@ class MultiTurnSearchService:
                     pkg_display = f"{pkg_raw} (贴片)"
             prompt += f"[候选 {c['index']}] 型号: {c['mfr_part_number']} | 品牌: {c['manufacturer']} | 封装: {pkg_display} | 品类: {c['category']} | 描述: {c['description']}\n"
 
-        client = self.get_reranker_client()
         try:
+            client = self.get_reranker_client()
             resp = client.chat.completions.create(
                 model="electronic-qwen-reranker",
                 messages=[
@@ -348,16 +383,20 @@ class MultiTurnSearchService:
                     {"role": "user", "content": f"请根据工业标签信息与检索候选项列表，进行专业技术比对与排他分析，输出裁决理由与结构化决策。\n\n{prompt}"},
                 ],
                 temperature=0.1,
-                max_tokens=400,
+                max_tokens=1200,
+                response_format=structured_format("candidate_decision", RERANK_SCHEMA),
             )
-            gen_text = resp.choices[0].message.content or ""
-            parsed = extract_json_safely(gen_text)
-            if parsed and "decision" in parsed:
-                dec = str(parsed.get("decision", "")).strip().lower()
-                if dec not in ("exact_match", "ambiguous", "no_match"):
-                    dec = "no_match"
-                parsed["decision"] = dec
-                return parsed
+            parsed = completed_json(resp)
+            decision = parsed.get("decision")
+            index = parsed.get("selected_index")
+            if decision not in {"exact_match", "ambiguous", "no_match"}:
+                raise ValueError("Invalid candidate decision")
+            if decision == "exact_match" and (type(index) is not int or not 1 <= index <= len(candidates)):
+                raise ValueError("Invalid selected candidate")
+            if any(type(i) is not int or not 1 <= i <= len(candidates) for i in (parsed.get("candidate_indices") or [])):
+                raise ValueError("Invalid candidate indices")
+            parsed["reasoning"] = str(parsed.get("reasoning") or "")[:120]
+            return parsed
         except Exception as e:
             if self.strict_mode:
                 raise RuntimeError(
@@ -382,13 +421,11 @@ class MultiTurnSearchService:
             is_mpn_matched = bool(
                 target_mpn and (
                     target_mpn in (c_mpn, c_code_str, c_ext)
-                    or target_mpn in c_mpn
-                    or c_mpn in target_mpn
                 )
             )
 
             if is_mpn_matched:
-                if not target_pkg or target_pkg in c_pkg or c_pkg in target_pkg:
+                if not target_pkg or package_key(target_pkg) == package_key(c_pkg):
                     matching_indices.append(c["index"])
                 else:
                     excluded.append({"index": c["index"], "reason": f"封装不匹配 ({c_pkg} vs {target_pkg})"})
@@ -428,187 +465,54 @@ class MultiTurnSearchService:
             }
 
     def process(self, ocr_lines: List[str]) -> Dict[str, Any]:
-        """Execute complete multi-turn retrieval and candidate disambiguation pipeline."""
-        t0 = time.time()
-
-        # 1. Stage 1: LLM Extraction
-        stage1 = self.stage1_extract(ocr_lines)
-        queries = stage1.get("queries", [])
-        specs = stage1.get("specs", {})
-
-        # Extract primary MPN and LCSC queries
-        primary_mpn = ""
-        lcsc_code = ""
-        for q in queries:
-            k = q.get("kind", "").lower()
-            txt = q.get("text", "").strip()
-            if k == "lcsc" and not lcsc_code:
-                m = re.search(r"\bC\d{4,}\b", txt, re.IGNORECASE)
-                if m:
-                    lcsc_code = m.group(0).upper()
-            elif k == "mpn":
-                if not is_logistics_or_shelf_noise(txt) and not primary_mpn:
-                    primary_mpn = txt
-
-        # 2. Check if authoritative LCSC C-code lookup is valid
-        short_circuit_lcsc = False
-        lcsc_matched_item = None
-        if lcsc_code:
+        """Reuse OCR text; exact C-codes and full observed models precede specification search."""
+        started = time.time()
+        codes, observed = lcsc_codes(ocr_lines), model_tokens(ocr_lines)
+        code_candidates = []
+        for code in codes[:8]:
             try:
-                jlc_res = lib_svc.search_jlcparts(query=lcsc_code, limit=1)
-                if jlc_res.get("items"):
-                    lcsc_matched_item = jlc_res["items"][0]
-                    if not primary_mpn:
-                        short_circuit_lcsc = True
-                    else:
-                        mfr_code = (lcsc_matched_item.get("mfr") or lcsc_matched_item.get("mfr_part_number") or "").upper()
-                        if primary_mpn.upper() in mfr_code or mfr_code in primary_mpn.upper():
-                            short_circuit_lcsc = True
-                        else:
-                            # Reused bag conflict: foreground label differs from bag C-code
-                            short_circuit_lcsc = False
+                item = lib_svc.get_jlcparts_component(int(code[1:]))
+                if item:
+                    code_candidates.append(self.candidate(item, "jlcparts"))
             except Exception:
-                pass
+                LOGGER.warning("Exact supplier lookup failed for %s", code, exc_info=True)
+        if len(codes) == len(code_candidates) == 1:
+            candidate = code_candidates[0]
+            if all(model_key(token) == model_key(candidate["mfr_part_number"]) for token in observed):
+                return {"status": "success", "route": "direct_lcsc_match", "decision": "exact_match",
+                        "selected_component": candidate, "candidate_components": [],
+                        "reasoning": f"原文立创编号 {codes[0]} 与型号无冲突。",
+                        "latency_ms": round((time.time() - started) * 1000, 1)}
 
-        if short_circuit_lcsc and lcsc_matched_item:
-            return {
-                "status": "success",
-                "route": "direct_lcsc_match",
-                "decision": "exact_match",
-                "selected_component": {
-                    "library_source": "jlcparts",
-                    "external_part_id": str(lcsc_matched_item.get("lcsc") or ""),
-                    "name": lcsc_matched_item.get("mfr") or f"C{lcsc_matched_item.get('lcsc')}",
-                    "mfr_part_number": lcsc_matched_item.get("mfr") or "",
-                    "package": lcsc_matched_item.get("package") or "",
-                    "manufacturer": lcsc_matched_item.get("manufacturer") or "",
-                    "description": lcsc_matched_item.get("description") or "",
-                    "stock": lcsc_matched_item.get("stock", 0),
-                    "source": "jlcparts",
-                    "image": lcsc_matched_item.get("image_url_small") or "",
-                    "raw_item": lcsc_matched_item,
-                },
-                "candidate_components": [],
-                "reasoning": f"标签包含明确立创 C 码 [{lcsc_code}]，与物料型号相符，直接命中实物。",
-                "stage1_extraction": stage1,
-                "latency_ms": round((time.time() - t0) * 1000, 1)
-            }
-
-        # 3. Stage 2 Candidate Retrieval
-        mpn_candidates = []
-        for q in queries:
-            if q.get("kind") == "mpn":
-                txt = q.get("text", "").strip()
-                if txt and not is_logistics_or_shelf_noise(txt):
-                    if txt not in mpn_candidates:
-                        mpn_candidates.append(txt)
-                    words = [w for w in txt.split() if len(w) >= 4 and not is_logistics_or_shelf_noise(w)]
-                    for w in words:
-                        if w not in mpn_candidates:
-                            mpn_candidates.append(w)
-
-        # Also extract strong alphanumeric MPN candidates from raw OCR lines
-        for l in ocr_lines:
-            clean_l = l.strip()
-            if not is_logistics_or_shelf_noise(clean_l):
-                for tok in re.findall(r"\b[A-Za-z0-9._/+-]{5,35}\b", clean_l):
-                    if re.search(r"[A-Za-z]", tok) and re.search(r"\d", tok) and not is_logistics_or_shelf_noise(tok):
-                        if tok not in mpn_candidates:
-                            mpn_candidates.append(tok)
-
-        # Sort candidates: prioritize tokens containing BOTH digits and letters, and longer specific strings
-        mpn_candidates.sort(
-            key=lambda s: (
-                bool(re.search(r"\d", s) and re.search(r"[A-Za-z]", s)),
-                len(s)
-            ),
-            reverse=True,
-        )
-
-        candidates = []
-        for test_mpn in mpn_candidates:
-            cands = self.retrieve_candidates(test_mpn, max_candidates=5)
-            if cands:
-                candidates = cands
-                primary_mpn = test_mpn
-                break
-
-        if not candidates and primary_mpn:
-            candidates = self.retrieve_candidates(primary_mpn, max_candidates=5)
-        if not candidates and ocr_lines:
-            for l in ocr_lines:
-                clean_l = l.strip()
-                if clean_l and not is_logistics_or_shelf_noise(clean_l):
-                    cands = self.retrieve_candidates(clean_l, max_candidates=5)
-                    if cands:
-                        candidates = cands
-                        primary_mpn = clean_l
-                        break
-
-        # Conflicted LCSC item from a reused bag is added as candidate for Reranker to analyze and reject
-        if lcsc_matched_item and not short_circuit_lcsc:
-            candidates.insert(0, {
-                "mfr_part_number": lcsc_matched_item.get("mfr") or lcsc_matched_item.get("mfr_part_number") or "",
-                "manufacturer": lcsc_matched_item.get("manufacturer") or "",
-                "package": lcsc_matched_item.get("package") or "",
-                "category": lcsc_matched_item.get("category") or "",
-                "description": f"[底层旧包装印刷C码 {lcsc_code}] " + (lcsc_matched_item.get("description") or ""),
-                "source": "jlcparts",
-                "raw_item": lcsc_matched_item
-            })
-
+        stage1 = self.stage1_extract(ocr_lines)
+        queries, specs = stage1.get("queries", []), stage1.get("specs", {})
+        models = list(dict.fromkeys([model_key(q["text"]) for q in queries if q.get("kind") == "mpn"] + observed))
+        candidates = list(code_candidates)
+        for model in models[:6]:
+            candidates.extend(self.retrieve_candidates(model, max_candidates=8))
         if not candidates:
-            return {
-                "status": "success",
-                "route": "empty_candidates",
-                "decision": "no_match",
-                "selected_component": None,
-                "candidate_components": [],
-                "reasoning": f"未能在本地元器件库中检索到型号 [{primary_mpn}] 及其衍生系列的有效候选。",
-                "stage1_extraction": stage1,
-                "latency_ms": round((time.time() - t0) * 1000, 1)
-            }
-
-        # 4. Stage 2 Reranking & Disambiguation
-        label_ctx = {
-            "ocr_text": "\n".join(ocr_lines),
-            "extracted_mpn": primary_mpn,
-            "extracted_brand": stage1.get("specs", {}).get("manufacturer", ""),
-            "extracted_package": specs.get("package", ""),
-            "extracted_category": stage1.get("family", ""),
-            "packaging_note": f"检测到底层印刷旧 C 码 [{lcsc_code}] 与加贴新标签型号 [{primary_mpn}] 存在品类冲突。工业规则：加贴新标签优先级高于印刷旧底标。" if (lcsc_matched_item and not short_circuit_lcsc) else ""
-        }
-
-        stage2 = self.stage2_rerank(label_ctx, candidates)
-        decision = stage2.get("decision", "no_match")
-        selected_idx = stage2.get("selected_index")
-        cand_indices = stage2.get("candidate_indices") or []
-
-        selected_comp = None
-        ambiguous_comps = []
-
-        if decision == "exact_match" and selected_idx and 1 <= selected_idx <= len(candidates):
-            selected_comp = candidates[selected_idx - 1]
-        elif decision == "ambiguous":
-            for idx in cand_indices:
-                if 1 <= idx <= len(candidates):
-                    ambiguous_comps.append(candidates[idx - 1])
-            if not ambiguous_comps and candidates:
-                ambiguous_comps = candidates[:3]
-
-        return {
-            "status": "success",
-            "route": "reranker_adjudicated",
-            "decision": decision,
-            "selected_component": selected_comp,
-            "candidate_components": ambiguous_comps,
-            "reasoning": stage2.get("reasoning", ""),
-            "excluded": stage2.get("excluded", []),
-            "all_retrieved_candidates": candidates,
-            "stage1_extraction": stage1,
-            "stage2_decision": stage2,
-            "latency_ms": round((time.time() - t0) * 1000, 1)
-        }
+            value = specs.get("value") or specs.get("capacitance") or specs.get("resistance") or specs.get("inductance")
+            if value:
+                query = " ".join(filter(None, [value, specs.get("package")]))
+                candidates.extend(self.retrieve_candidates(query, max_candidates=8))
+        candidates = self.deduplicate(candidates)[:10]
+        if not candidates:
+            return {"status": "success", "route": "empty_candidates", "decision": "no_match",
+                    "selected_component": None, "candidate_components": [], "reasoning": "未找到原文型号或明确规格对应的目录记录。",
+                    "stage1_extraction": stage1, "latency_ms": round((time.time() - started) * 1000, 1)}
+        context = {"ocr_text": "\n".join(ocr_lines), "extracted_mpn": models[0] if models else "",
+                   "extracted_brand": specs.get("manufacturer", ""), "extracted_package": specs.get("package", ""),
+                   "extracted_value": specs.get("value", ""), "extracted_category": stage1.get("family", ""),
+                   "packaging_note": "存在多个型号或编号，需人工核查。" if len(models) > 1 or len(codes) > 1 else ""}
+        stage2 = self.stage2_rerank(context, candidates)
+        decision, index = stage2.get("decision", "no_match"), stage2.get("selected_index")
+        selected = candidates[index - 1] if decision == "exact_match" and type(index) is int and 1 <= index <= len(candidates) else None
+        ambiguous = [candidates[i - 1] for i in (stage2.get("candidate_indices") or []) if type(i) is int and 1 <= i <= len(candidates)]
+        return {"status": "success", "route": "reranker_adjudicated", "decision": decision,
+                "selected_component": selected, "candidate_components": ambiguous if decision == "ambiguous" else [],
+                "reasoning": stage2.get("reasoning", ""), "excluded": stage2.get("excluded", []),
+                "all_retrieved_candidates": candidates, "stage1_extraction": stage1, "stage2_decision": stage2,
+                "latency_ms": round((time.time() - started) * 1000, 1)}
 
     def process_bom_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """Execute multi-turn retrieval and candidate disambiguation for a structured BOM row."""
@@ -652,7 +556,7 @@ class MultiTurnSearchService:
                 if jlc_res.get("items"):
                     item = jlc_res["items"][0]
                     item_mpn = (item.get("mfr") or "").upper()
-                    if not mpn or mpn.upper() in item_mpn or item_mpn in mpn.upper():
+                    if not mpn or model_key(mpn) == model_key(item_mpn):
                         return {
                             "status": "success",
                             "route": "direct_lcsc_match",

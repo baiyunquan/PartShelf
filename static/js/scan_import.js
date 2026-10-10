@@ -18,6 +18,7 @@
   let decoderReady = false;
   let timer = null;
   let review = null;
+  let selectedIdentity = null;
   let history = [];
   const seen = new Set();
   const labelKey = label => JSON.stringify([label.pc, label.pm, label.qty, label.on || "", label.pdi || "", label.cc || ""]);
@@ -31,6 +32,7 @@
     imageInput.disabled = busy || !projectsReady || !decoderReady;
     node("scan-start").disabled = running || starting || busy || !projectsReady || !decoderReady;
     node("scan-stop").disabled = !running && !starting;
+    node("scan-capture").disabled = !running || busy;
     camera.disabled = busy;
     node("scan-review-confirm").disabled = busy;
     node("scan-review-retry").disabled = busy;
@@ -86,7 +88,9 @@
     const evidence = node("scan-evidence");
     evidence.replaceChildren();
     const component = scan.component || {};
-    evidence.append(element("p", `${text("catalog")}: C${component.lcsc || "?"} · ${component.mfr || "?"} · ${component.package || "?"}`, "fw-bold"));
+    selectedIdentity = component.library_source && component.external_part_id ? component : null;
+    const catalogCode = component.library_source === "jlcparts" ? `C${component.external_part_id}` : component.external_part_id || "?";
+    evidence.append(element("p", `${text("catalog")}: ${catalogCode} · ${component.mfr_part_number || component.mfr || component.name || "?"} · ${component.package || "?"}`, "fw-bold"));
     for (const [key, result] of Object.entries(scan.verification.fields || {})) {
       const status = text(result.matched ? "matched" : "unmatched");
       const value = `${text(key)}: ${status} · ${result.expected ?? ""} · ${result.text || ""}`;
@@ -95,7 +99,7 @@
     for (const reason of scan.verification.reasons || []) evidence.append(element("p", text(`reason_${reason}`), "text-danger"));
     const details = document.createElement("details");
     details.append(element("summary", text("ocr")));
-    for (const line of (scan.ocr || {}).lines || []) details.append(element("p", `${line.text} (${Math.round(line.confidence * 100)}%)`, "small"));
+    for (const line of (scan.ocr || {}).lines || []) details.append(element("p", line.text, "small"));
     evidence.append(details);
     const aiNote = node("scan-ai-note");
     if (aiNote) {
@@ -132,8 +136,9 @@
         selBtn.className = "btn btn-outline-primary btn-sm";
         selBtn.textContent = text("btn_select_candidate") || "Select";
         selBtn.addEventListener("click", () => {
-          const codeVal = cand.external_part_id ? (cand.source === "jlcparts" ? "C" + cand.external_part_id : cand.external_part_id) : (cand.lcsc ? "C" + cand.lcsc : title);
+          const codeVal = cand.external_part_id ? (cand.library_source === "jlcparts" ? "C" + cand.external_part_id : cand.external_part_id) : (cand.lcsc ? "C" + cand.lcsc : title);
           node("scan-review-code").value = codeVal;
+          selectedIdentity = cand;
         });
         row.append(info, selBtn);
         card.append(row);
@@ -145,7 +150,7 @@
       || (scan.label && scan.label.pc)
       || "";
     node("scan-review-code").value = resolvedCode;
-    node("scan-review-quantity").value = scan.quantity || (scan.label && scan.label.qty) || 1;
+    node("scan-review-quantity").value = scan.quantity || (scan.label && scan.label.qty) || "";
     node("scan-review-note").value = scan.note || "";
     node("scan-new-package").checked = false;
     node("scan-new-package-wrap").hidden = scan.status !== "duplicate";
@@ -158,8 +163,8 @@
       const card = document.createElement("article");
       const component = scan.component || {};
       const cardCode = (component.lcsc ? "C" + component.lcsc : component.external_part_id) || (scan.label && scan.label.pc) || "Part";
-      card.append(element("p", `${cardCode} · ${component.mfr || (scan.label && scan.label.pm) || ""} · ${component.package || ""}`, "fw-bold"));
-      card.append(element("p", `${text("quantity")}: ${scan.quantity || (scan.label && scan.label.qty) || 1} · ${scan.project_name || text("inventory_only")}`));
+      card.append(element("p", `${cardCode} · ${component.mfr_part_number || component.mfr || (scan.label && scan.label.pm) || ""} · ${component.package || ""}`, "fw-bold"));
+      card.append(element("p", `${text("quantity")}: ${scan.quantity || (scan.label && scan.label.qty) || "?"} · ${scan.project_name || text("inventory_only")}`));
       card.append(element("p", `${text(`status_${scan.status}`)} · ${new Date(scan.created_at).toLocaleString()} · ${scan.imported_by || scan.username || ""}`, scan.status === "imported" ? "text-success small" : "text-warning-emphasis small"));
       const actions = element("div", "", "scan-history-actions");
       const button = element("button", text("inspect"), "btn btn-outline-secondary btn-sm");
@@ -203,33 +208,24 @@
     message("decoding");
     try {
       const results = await ScanDecoder.decode(blob);
-      const valid = [];
-      for (const result of results) {
-        try { valid.push({raw: result.text, label: ScanLabel.parse(result.text)}); } catch (_error) { /* Other QR formats. */ }
-      }
-      const unique = [...new Map(valid.map(item => [labelKey(item.label), item])).values()];
-      let rawCandidate = "";
-      if (unique.length === 1) {
-        const candidate = unique[0];
-        const key = labelKey(candidate.label);
+      const choice = ScanLabel.decodeChoice(results);
+      if (choice.kind === "jlc") {
+        const key = labelKey(choice.label);
         if (fromCamera && seen.has(key)) { message("duplicate"); return; }
-        seen.add(key);
-        rawCandidate = candidate.raw;
-      } else if (results.length > 0) {
-        rawCandidate = results[0].text;
-      } else if (!fromCamera) {
-        rawCandidate = "";
-      } else {
+      } else if (fromCamera && choice.kind === "ordinary") {
+        // Continuous camera mode only imports QR codes; photos need an explicit capture.
         return;
       }
       const requestId = ScanLabel.requestId();
       const body = new FormData();
       body.append("image", blob, "label.jpg");
-      body.append("qr_text", rawCandidate);
+      body.append("qr_text", choice.qr_text || "");
+      if (choice.qr_texts) body.append("qr_texts", JSON.stringify(choice.qr_texts));
       body.append("request_id", requestId);
       if (project.value) body.append("project_id", project.value);
       message("processing");
       const result = await request("/api/scan/recognize", {method: "POST", body});
+      if (choice.kind === "jlc") seen.add(labelKey(choice.label));
       receive(result);
     } catch (error) {
       stopCamera();
@@ -310,6 +306,16 @@
     message("repeat_ready");
   });
   node("scan-stop").addEventListener("click", stopCamera);
+  node("scan-capture").addEventListener("click", async () => {
+    if (busy || !running || video.readyState < 2) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.95));
+    stopCamera();
+    if (blob) await processImage(blob);
+  });
   camera.addEventListener("change", () => { if (running) { stopCamera(); startCamera(); } });
   window.addEventListener("pagehide", stopCamera);
   imageInput.addEventListener("change", async () => {
@@ -319,6 +325,7 @@
     imageInput.value = "";
   });
   node("scan-refresh").addEventListener("click", () => loadHistory().catch(() => message("error", true)));
+  node("scan-review-code").addEventListener("input", () => { selectedIdentity = null; });
   node("scan-review-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (busy || !review || !event.target.reportValidity()) return;
@@ -327,7 +334,7 @@
     updateControls();
     try {
       const result = await request(`/api/scan/${review.id}/confirm`, {method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({lcsc_code: node("scan-review-code").value.trim(), quantity: Number(node("scan-review-quantity").value),
+        body: JSON.stringify({...ScanLabel.confirmationIdentity(node("scan-review-code").value.trim(), selectedIdentity), quantity: Number(node("scan-review-quantity").value),
           note: node("scan-review-note").value, new_package: node("scan-new-package").checked})});
       receive(result);
     } catch (error) { message("error", true); node("scan-message").append(document.createTextNode(` ${error.message}`)); }

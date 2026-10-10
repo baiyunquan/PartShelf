@@ -97,6 +97,8 @@ def _write_cached_component(item: Dict[str, Any]) -> bool:
     stock = int(item.get("stock", -1))
     last_on_stock = now if stock > 0 else 0
     try:
+        from app.services.numeric_alias_index import ensure_numeric_triggers
+        ensure_numeric_triggers(conn, "jlcparts")
         conn.execute("BEGIN IMMEDIATE")
         result = conn.execute(
             """

@@ -11,6 +11,7 @@ from app.models.warehouse_placement import WarehousePlacement
 from app.models.warehouse_drawer import WarehouseDrawer
 from app.models.project_component_history import ProjectComponentHistory
 from app.models.scan_session import ScanSession
+from app.models.scan_ocr_result import ScanOCRResult
 
 __all__ = [
     "Manufacturer",
@@ -26,4 +27,5 @@ __all__ = [
     "WarehouseDrawer",
     "ProjectComponentHistory",
     "ScanSession",
+    "ScanOCRResult",
 ]

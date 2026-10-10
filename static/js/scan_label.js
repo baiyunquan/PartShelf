@@ -1,6 +1,6 @@
 (function (root) {
   "use strict";
-  function parse(raw) {
+  function parse(raw, allowIncomplete = false) {
     if (typeof raw !== "string" || raw.length > 4096) throw new Error("Invalid label");
     const text = raw.trim();
     if (!text.startsWith("{") || !text.endsWith("}")) throw new Error("Invalid label");
@@ -15,11 +15,33 @@
       result[key] = body.slice(match.index + match[0].length, end).trim();
       if (/[{},]/.test(result[key])) throw new Error("Invalid label value");
     }
-    if (!/^C\d{3,10}$/i.test(result.pc || "") || !(result.pm || "").trim()) throw new Error("Missing component");
-    if (!/^\d+$/.test(result.qty || "") || !(Number(result.qty) > 0) || Number(result.qty) > 2147483647) throw new Error("Invalid quantity");
+    if (!/^C\d{3,10}$/i.test(result.pc || "") || (!allowIncomplete && !(result.pm || "").trim())) throw new Error("Missing component");
+    const validQuantity = /^\d+$/.test(result.qty || "") && Number(result.qty) > 0 && Number(result.qty) <= 2147483647;
+    if (!validQuantity && !allowIncomplete) throw new Error("Invalid quantity");
     result.pc = `C${Number(result.pc.slice(1))}`;
-    result.qty = Number(result.qty);
+    result.pm = result.pm || "";
+    result.qty = validQuantity ? Number(result.qty) : null;
     return result;
+  }
+  function decodeChoice(results) {
+    const labels = new Map();
+    for (const result of results) {
+      try {
+        const parsed = parse(result.text, true);
+        labels.set(JSON.stringify(parsed), {raw: result.text, label: parsed});
+      } catch (_error) { /* Ordinary barcode or unsupported QR. */ }
+    }
+    const valid = [...labels.values()];
+    if (valid.length > 1) return {kind: "multiple", qr_texts: valid.map(item => item.raw)};
+    if (valid.length === 1) return {kind: "jlc", qr_text: valid[0].raw, label: valid[0].label};
+    return {kind: "ordinary", qr_text: results[0]?.text || ""};
+  }
+  function confirmationIdentity(code, selected) {
+    if (selected && selected.library_source && selected.external_part_id) {
+      const expected = selected.library_source === "jlcparts" ? `C${selected.external_part_id}` : String(selected.external_part_id);
+      if (code === expected) return {library_source: selected.library_source, external_part_id: String(selected.external_part_id)};
+    }
+    return {lcsc_code: code};
   }
   function projectChoice(projects, saved, token = null) {
     return projects.some(project => !project.is_system && String(project.id) === String(saved)
@@ -36,7 +58,7 @@
     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  const api = {parse, projectChoice, requestId, repeatCameraScan};
+  const api = {parse, decodeChoice, confirmationIdentity, projectChoice, requestId, repeatCameraScan};
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.ScanLabel = api;
 })(globalThis);

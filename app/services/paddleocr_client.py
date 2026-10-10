@@ -39,6 +39,8 @@ def recognize_image(data: bytes) -> dict:
     result = json.loads(b"".join(chunks))
     if not isinstance(result, dict) or result.get("api_version") != "1" or not isinstance(result.get("lines"), list):
         raise RuntimeError("Unsupported OCR response format")
+    if result.get("engine") != "paddleocr-vl-llama.cpp":
+        raise RuntimeError("Only the llama.cpp PaddleOCR-VL adapter is supported; restart the updated adapter")
     if len(result["lines"]) > 2000:
         raise RuntimeError("Too many OCR text lines")
     return result

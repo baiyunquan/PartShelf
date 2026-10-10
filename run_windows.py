@@ -1,7 +1,7 @@
 """Windows startup launcher for PartShelf.
 
 Automatically orchestrates:
-1. PaddleOCR API service on port 8010.
+1. llama.cpp PaddleOCR-VL backend on port 8083 and HTTP adapter on port 8010.
 2. llama.cpp server Extractor (port 8081) with unquantized BF16 model by default.
 3. llama.cpp server Reranker (port 8082) with unquantized BF16 model by default.
 4. ADB reverse port forwarding for connected Android mobile devices (port 8000).
@@ -124,16 +124,6 @@ def kill_processes_by_port(port: int):
                 subprocess.run(["taskkill", "/F", "/T", "/PID", pid_str], capture_output=True)
     except Exception as exc:
         print(f"[WARN] Failed to inspect port {port}: {exc}")
-
-
-def find_ocr_python() -> list[str]:
-    """Determine the python command for running ElectronicQwen PaddleOCR."""
-    venv_py = ELECTRONIC_QWEN_DIR / ".venv" / "Scripts" / "python.exe"
-    if venv_py.is_file():
-        return [str(venv_py)]
-    if shutil.which("uv"):
-        return ["uv", "run", "--directory", str(ELECTRONIC_QWEN_DIR), "python"]
-    return [sys.executable]
 
 
 def spawn_process(cmd: list[str], log_path: Path, cwd: Path | None = None, env: dict | None = None) -> subprocess.Popen:
@@ -495,7 +485,7 @@ def main():
                 "--host",
                 "127.0.0.1",
                 "-c",
-                "2048",
+                "4096",
                 "--alias",
                 "electronic-qwen-extractor",
             ]
@@ -526,7 +516,7 @@ def main():
                 "--host",
                 "127.0.0.1",
                 "-c",
-                "2048",
+                "4096",
                 "--alias",
                 "electronic-qwen-reranker",
             ]

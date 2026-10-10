@@ -22,7 +22,7 @@ def compact(text):
     return re.sub(r"[\s_\-/]", "", normalized(text))
 
 
-def parse_label(raw: str) -> dict:
+def parse_label(raw: str, *, allow_incomplete=False) -> dict:
     if not isinstance(raw, str) or not 1 <= len(raw) <= 4096:
         raise ValueError("Invalid label length")
     raw = raw.strip()
@@ -58,12 +58,15 @@ def parse_label(raw: str) -> dict:
     if not re.fullmatch(r"C\d{3,10}", code):
         raise ValueError("Invalid LCSC number")
     model = values.get("pm")
-    if not isinstance(model, str) or not model.strip() or len(model) > 255:
+    if (not isinstance(model, str) or not model.strip() or len(model) > 255) and not allow_incomplete:
         raise ValueError("Missing manufacturer model")
+    if model is not None and (not isinstance(model, str) or len(model) > 255):
+        raise ValueError("Invalid manufacturer model")
     quantity = str(values.get("qty", ""))
-    if not re.fullmatch(r"\d+", quantity) or not 1 <= int(quantity) <= MAX_QUANTITY:
+    valid_quantity = bool(re.fullmatch(r"\d+", quantity)) and 1 <= int(quantity) <= MAX_QUANTITY
+    if not valid_quantity and not allow_incomplete:
         raise ValueError("Package quantity must be a positive integer")
-    values.update(pc=f"C{int(code[1:])}", pm=model.strip(), qty=int(quantity))
+    values.update(pc=f"C{int(code[1:])}", pm=(model or "").strip(), qty=int(quantity) if valid_quantity else None)
     return values
 
 

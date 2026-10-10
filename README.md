@@ -20,7 +20,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 
 - [部署指南（中文）](DEPLOY.md)
 - [使用指南（中文）](USAGE.md)
-- [独立 OCR 服务 API 与部署说明（中文）](services/paddleocr_api/API.md)
+- [独立 OCR 服务 API 与部署说明（中文）](paddleocr_vl/API.md)
 - [API 文档](http://127.0.0.1:8000/docs)（启动应用后访问 / available after startup）
 - 许可证 / License: [MIT](LICENSE)
 
@@ -29,7 +29,7 @@ PartShelf is a self-hosted web application built with FastAPI. It manages electr
 ### 功能
 
 - **库存管理**：记录元件来源、编号、数量、存储位置和备注；从元件库快速加入库存。
-- **扫码入库**：独立页面使用本地 ZXing WASM 识别嘉立创包装二维码，调用独立 PaddleOCR 服务核验编号、完整型号和封装。核验一致后按包自动入库存并关联顶部选定项目，无需再次确认；项目选择在连续扫码和刷新后保留。缺失元件通过已有远程查询与缓存补齐，异常进入人工核查，重复包装不会重复入库。
+- **扫码入库**：嘉立创二维码按 C 编号和二维码数量直接入库并加入所选项目，不调用 OCR 或 AI。其他照片仅使用一次 llama.cpp PaddleOCR-VL，识别结果保存供搜索、重试和核查复用；完整型号、封装、数量等证据充分时自动入库，冲突或缺失时人工核查。项目选择持续保留，缺失目录远程拉取并缓存，重复包装不重复入库。
 - **元件参考库**：查询 JLCParts、Altium、KiCad 和紧固件/机械标准件目录。
 - **项目与 BOM**：创建项目、维护项目用量，上传 CSV 或 Excel BOM，预览元件匹配结果并导入新项目或已有项目。
 - **采购缺料**：按项目或汇总视图查看需求量、库存量和缺料数量。
@@ -66,7 +66,8 @@ PartShelf/
 │   ├── libraries/      # 本地参考元件库数据库（需单独提供，不纳入 Git）
 │   └── scan_uploads/   # 扫码原图与待核查照片（运行时生成，不纳入 Git）
 ├── scripts/            # 数据转换、导入、数值别名索引和列表列宽辅助脚本
-├── services/paddleocr_api/ # 独立 OCR HTTP 服务源码、依赖和 API 文档
+├── paddleocr_vl/       # llama.cpp OCR HTTP 适配层及 API 文档
+├── services/paddleocr_api/ # 已停用的旧 PP-OCR 源码，仅供历史参考
 ├── vendor/zxing-wasm/  # 固定版本的 Sec-ant/zxing-wasm Git 子模块
 ├── static/
 │   ├── css/            # 页面样式
@@ -75,7 +76,9 @@ PartShelf/
 ├── templates/          # Jinja2 页面模板
 ├── tests/              # Python 与 JavaScript 测试
 ├── Resources/          # README 截图
-├── run.py              # 本地开发启动脚本
+├── run.py              # 本地 Web 开发启动脚本
+├── run_linux.py        # Linux 全栈启动器
+├── run_windows.py      # Windows 全栈启动器
 ├── requirements.txt    # 运行依赖
 ├── requirements-dev.txt # 测试依赖
 ├── DEPLOY.md           # 中文部署说明
@@ -101,7 +104,7 @@ python run.py
 
 - `DATABASE_URL` 设置本地业务数据库；默认值为 `sqlite:///./partshelf.db`，相对路径以项目目录为基准。MySQL 示例见部署文档。
 - `PARTSHELF_TEST_MODE` 默认是 `true`。设为 `false` 后，项目元件修改需要非空用户名 Cookie，以便历史记录归属到对应成员。用户名 Cookie 不是身份验证机制。
-- `PADDLEOCR_API_URL` 是独立 OCR 服务的根地址，默认 `http://127.0.0.1:8010`；`PADDLEOCR_TIMEOUT_SECONDS` 默认 `60`。扫码照片最大 10 MiB、2400 万像素，支持 JPEG、PNG、WebP。摄像头远程访问需要 HTTPS，照片上传也可使用 HTTP。
+- `PADDLEOCR_API_URL` 是独立 OCR 服务的根地址，默认 `http://127.0.0.1:8010`；`PADDLEOCR_TIMEOUT_SECONDS` 默认 `30`。扫码照片最大 10 MiB、2400 万像素，支持 JPEG、PNG、WebP。摄像头远程访问需要 HTTPS，照片上传也可使用 HTTP。
 - 元件参考库文件位于 `data/libraries/`：`jlcparts.db`、`altium_library.db`、`kicad_symbols.db`、`fasteners.db`。这些大文件被 Git 忽略，不随源码仓库分发。启动时应用会尝试初始化缺失的参考库；相应源数据不齐时，部分元件库可能不可用。
 - 首次访问时，浏览器会要求输入非空用户名。该用户名只用于协作记录，不是账号或身份验证。
 
@@ -112,25 +115,26 @@ python run.py
 ```bash
 git submodule update --init vendor/zxing-wasm
 python scripts/prepare_scan_assets.py
-python scripts/sync_ocr_api.py --destination ../ElectronicQwen
 ```
 
-OCR 使用独立环境，不安装到 PartShelf 主应用。服务可部署在另一台设备；依赖安装、启动命令和 HTTP 契约见 [OCR API 文档](services/paddleocr_api/API.md)。
+OCR 使用 llama.cpp 模型后端（8083）和 PartShelf 主环境中的 HTTP 适配层（8010），可部署到另一台设备。旧 PP-OCRv4/PaddlePaddle 默认推理已停用，无回退路径。部署与 HTTP 契约见 [OCR API 文档](paddleocr_vl/API.md)。
 
 ### AI 智能匹配与 llama.cpp 服务
 
 扫码入库（`/scan-import`）与 BOM 匹配（`/bom-import`）全面支持两阶段大模型交互式检索机制：
-- **Stage 1 (Extractor)**：从标签 OCR 或 BOM 原始文本中抽取标准化 MPN、品牌、封装与关键电气参数。
-- **Stage 2 (Reranker)**：基于本地元器件库（Altium / JLCParts）候选集合，执行基于思维链（CoT）的技术裁决（`exact_match`、`ambiguous`、`no_match`），自动识别旧包装袋复用冲突并给出严谨排他分析。
+- **Stage 1 (Extractor)**：从标签 OCR 或 BOM 原始文本中抽取标准化 MPN、品牌、封装与原文中明确出现的电气参数；JSON Schema 约束输出并检查是否完整结束。
+- **Stage 2 (Reranker)**：基于本地元器件库（Altium / JLCParts）候选集合，执行结构化技术裁决（`exact_match`、`ambiguous`、`no_match`），完整保留型号后缀，输出简短理由；普通照片的冲突仍需人工核查。嘉立创二维码绕过这两个阶段。
 
 大模型后端采用本地 `llama.cpp` 原生服务（OpenAI 兼容 `/v1/chat/completions` 接口），默认使用全精度未量化 BF16 模型：
 - **端口 8081**：Stage 1 Extractor (`ElectronicQwen-Extractor-v1-BF16.gguf`)
 - **端口 8082**：Stage 2 Reranker (`ElectronicQwen-Reranker-v1-BF16.gguf`)
 
-Windows 一键全栈启动（集成 PaddleOCR、llama.cpp BF16 双后端及 Web 服务）：
+Linux/Windows 全栈启动（llama.cpp OCR、BF16 双搜索后端及 Web 服务）：
 ```bash
-# Windows 一键全栈启动（自动拉起 PaddleOCR 8010、llama Extractor 8081、llama Reranker 8082 及 Web 8000，默认 BF16 模型，自动配置 ADB 手机反向代理）
+# OCR 模型 8083、OCR 适配层 8010、提取 8081、重排 8082、Web 8000
 python run_windows.py
+# Linux 使用相同服务配置
+python run_linux.py
 
 # 仅拉起 AI/OCR 模型后端服务（后台运行）
 python run_windows.py --no-web
@@ -189,7 +193,7 @@ python scripts/generate_list_widths.py --write
 ### Features
 
 - **Inventory management**: Track catalog source, part identifier, quantity, storage location, and notes; add catalog parts to inventory.
-- **Verified scan import**: A dedicated page reads JLC packaging QR codes with locally hosted ZXing WASM and checks the part number, complete model, and package against an independent PaddleOCR service. Matching bags are added to inventory and the selected project automatically. Project selection persists across scans and reloads; missing catalog entries use the existing remote lookup and cache. Conflicts require review, and repeated bags do not add stock twice.
+- **Scan import**: Local ZXing WASM reads JLC packaging QR codes. A valid C number and QR quantity import directly into inventory and the selected project, with zero OCR or AI calls. Other photos use one llama.cpp PaddleOCR-VL pass, persisted for matching, retries, and review. Complete label evidence can import automatically; conflicts and missing fields require review. Project selection persists, missing catalog entries are fetched and cached, and repeated bags do not add stock twice.
 - **Component catalogs**: Search JLCParts, Altium, KiCad, and fastener/mechanical standards.
 - **Projects and BOMs**: Create projects, maintain required quantities, upload CSV or Excel BOMs, review matching results, and import into a new or existing project.
 - **Procurement**: Review required, available, and shortage quantities per project or across projects.
@@ -225,14 +229,17 @@ PartShelf/
 ├── data/libraries/     # Local reference catalog databases (provided separately)
 ├── data/scan_uploads/  # Original scan photographs (generated at runtime, Git-ignored)
 ├── scripts/            # Catalog conversion, import, numeric aliases, and list-width tools
-├── services/paddleocr_api/ # Independent OCR HTTP service, dependencies, and API guide
+├── paddleocr_vl/       # llama.cpp OCR HTTP adapter and API guide
+├── services/paddleocr_api/ # Disabled legacy PP-OCR source, retained for reference
 ├── vendor/zxing-wasm/  # Pinned Sec-ant/zxing-wasm Git submodule
 ├── static/css/         # Page stylesheets
 ├── static/js/          # Page scripts
 ├── templates/          # Jinja2 page templates
 ├── tests/              # Python and JavaScript tests
 ├── Resources/          # README screenshots
-├── run.py              # Local development launcher
+├── run.py              # Local Web development launcher
+├── run_linux.py        # Linux full-stack launcher
+├── run_windows.py      # Windows full-stack launcher
 ├── requirements.txt    # Runtime dependencies
 ├── requirements-dev.txt # Test dependencies
 ├── DEPLOY.md           # Chinese deployment guide
@@ -258,7 +265,7 @@ Open <http://127.0.0.1:8000>. In Windows PowerShell, activate the environment wi
 
 - `DATABASE_URL` configures the application database. The default is `sqlite:///./partshelf.db`, resolved relative to the project directory. See the deployment guide for a MySQL example.
 - `PARTSHELF_TEST_MODE` defaults to `true`. Set it to `false` to require a non-empty username cookie for project component changes and attribute history entries to a member. The username cookie is not an authentication mechanism.
-- `PADDLEOCR_API_URL` points to the independent OCR service root, defaulting to `http://127.0.0.1:8010`; `PADDLEOCR_TIMEOUT_SECONDS` defaults to `60`. Scan photographs accept JPEG, PNG, and WebP up to 10 MiB and 24 million pixels. Remote camera access requires HTTPS; photograph uploads also work over HTTP.
+- `PADDLEOCR_API_URL` points to the independent OCR service root, defaulting to `http://127.0.0.1:8010`; `PADDLEOCR_TIMEOUT_SECONDS` defaults to `30`. Scan photographs accept JPEG, PNG, and WebP up to 10 MiB and 24 million pixels. Remote camera access requires HTTPS; photograph uploads also work over HTTP.
 - Reference catalogs live under `data/libraries/`: `jlcparts.db`, `altium_library.db`, `kicad_symbols.db`, and `fasteners.db`. These large files are Git-ignored and are not distributed with the source. On startup, the application attempts to initialize missing catalogs; some catalogs may remain unavailable if their source data is not present.
 - On first visit, the browser prompts for a non-empty username. It is used for activity attribution and is not an account or authentication mechanism.
 
@@ -269,10 +276,9 @@ Open `/scan-import` through the navigation menu or inventory page. Runtime QR as
 ```bash
 git submodule update --init vendor/zxing-wasm
 python scripts/prepare_scan_assets.py
-python scripts/sync_ocr_api.py --destination ../ElectronicQwen
 ```
 
-OCR runs in a separate environment and can be hosted on another device. Its setup commands and HTTP contract are documented in the [OCR API guide](services/paddleocr_api/API.md).
+OCR runs through llama.cpp on port 8083 and the PartShelf HTTP adapter on port 8010, and can be hosted on another device. The legacy PP-OCRv4/PaddlePaddle runtime is disabled and has no fallback path. Its setup commands and HTTP contract are documented in the [OCR API guide](paddleocr_vl/API.md).
 
 ### Development and verification
 

@@ -1,7 +1,8 @@
 from uuid import uuid4
+import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.i18n import get_current_language
@@ -15,10 +16,20 @@ router = APIRouter()
 
 
 class ScanConfirmation(BaseModel):
-    lcsc_code: str = Field(min_length=1, max_length=64, description="Component LCSC C-code or library identifier")
+    lcsc_code: str | None = Field(default=None, min_length=1, max_length=64, description="Legacy LCSC C-code")
+    library_source: str | None = Field(default=None, pattern="^(jlcparts|altium|kicad)$")
+    external_part_id: str | None = Field(default=None, min_length=1, max_length=64)
     quantity: int = Field(ge=1, le=service.MAX_QUANTITY)
     note: str = Field(default="", max_length=500)
     new_package: bool = False
+
+    @model_validator(mode="after")
+    def identity(self):
+        if bool(self.library_source) != bool(self.external_part_id):
+            raise ValueError("Provide both library_source and external_part_id")
+        if not self.library_source and not self.lcsc_code:
+            raise ValueError("Provide a catalog identity or LCSC C-code")
+        return self
 
 
 @router.get("/projects")
@@ -31,6 +42,7 @@ def scan_project_options(db: Session = Depends(get_db)):
 def recognize_label(
     request: Request,
     qr_text: str = Form(""),
+    qr_texts: str | None = Form(None),
     request_id: str | None = Form(None),
     project_id: str | int | None = Form(None),
     image: UploadFile = File(...),
@@ -44,7 +56,15 @@ def recognize_label(
             pid = int(p_str)
     data = image.file.read(service.MAX_UPLOAD_BYTES + 1)
     image.file.close()
-    scan = service.recognize(db, qr_text, data, pid, req_id, get_current_language(request))
+    payloads = None
+    if qr_texts is not None:
+        try:
+            payloads = json.loads(qr_texts)
+            if not isinstance(payloads, list) or len(payloads) > 8 or any(not isinstance(p, str) or len(p) > 4096 for p in payloads):
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise HTTPException(422, "qr_texts must be an array of up to eight QR payloads")
+    scan = service.recognize(db, qr_text, data, pid, req_id, get_current_language(request), qr_texts=payloads)
     return service.public_scan(scan)
 
 
@@ -58,7 +78,8 @@ def get_scan_history(status: str | None = Query(None), limit: int = Query(50, ge
 
 @router.post("/{scan_id}/confirm")
 def confirm_scan(scan_id: str, body: ScanConfirmation, request: Request, db: Session = Depends(get_db)):
-    scan = service.confirm(db, scan_id, body.lcsc_code, body.quantity, body.note, body.new_package, get_current_language(request))
+    scan = service.confirm(db, scan_id, body.lcsc_code, body.quantity, body.note, body.new_package,
+                           get_current_language(request), body.library_source, body.external_part_id)
     return service.public_scan(scan)
 
 
