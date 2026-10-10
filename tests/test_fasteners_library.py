@@ -367,3 +367,49 @@ def test_fasteners_assembly_guide():
     assert "torqueTable" in res_html.text
     assert "wrenchTable" in res_html.text
 
+
+def test_fastener_metadata_aggregation_endpoint():
+    # 1. Test aggregate endpoint without domain filter
+    res = client.get("/api/libraries/fasteners/metadata")
+    assert res.status_code == 200
+    data = res.json()
+    assert "domains" in data
+    assert "categories" in data
+    assert "authorities" in data
+
+    # Verify domains structure and contents
+    assert len(data["domains"]) == 3
+    domains = {d["domain"]: d["count"] for d in data["domains"]}
+    assert "fasteners" in domains
+    assert "power_transmission" in domains
+    assert "structural_materials" in domains
+    assert domains["fasteners"] > 0
+
+    # Verify categories structure
+    assert len(data["categories"]) >= 10
+    assert any("group" in c and "count" in c for c in data["categories"])
+
+    # Verify authorities structure
+    assert len(data["authorities"]) >= 4
+    auth_names = [a["authority"] for a in data["authorities"]]
+    assert "ISO" in auth_names
+    assert "DIN" in auth_names
+
+    # 2. Test aggregate endpoint with domain filter
+    res_pt = client.get("/api/libraries/fasteners/metadata?domain=power_transmission")
+    assert res_pt.status_code == 200
+    data_pt = res_pt.json()
+    assert "domains" in data_pt
+    assert "categories" in data_pt
+    assert "authorities" in data_pt
+    # Categories should be filtered to power_transmission
+    assert all(c["domain"] == "power_transmission" for c in data_pt["categories"])
+
+    # 3. Test service-level direct call
+    svc_data = lib_svc.get_fastener_metadata(domain="fasteners")
+    assert "domains" in svc_data
+    assert "categories" in svc_data
+    assert "authorities" in svc_data
+    assert all(c["domain"] == "fasteners" for c in svc_data["categories"])
+
+

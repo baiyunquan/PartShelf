@@ -36,9 +36,12 @@ class FastenersLibrary:
             return self._db_path
         return common.get_db_path("FASTENERS_DB_PATH", common.FASTENERS_DB_PATH)
 
-    def get_domains(self) -> List[Dict[str, Any]]:
+    def get_domains(self, conn: Optional[Any] = None) -> List[Dict[str, Any]]:
         """Returns domain groups (Fasteners, Power Transmission, Structural Materials) with counts."""
-        conn = common.get_connection(self.db_path)
+        close_conn = False
+        if conn is None:
+            conn = common.get_connection(self.db_path)
+            close_conn = True
         if not conn:
             return []
         try:
@@ -55,12 +58,16 @@ class FastenersLibrary:
                 })
             return res
         finally:
-            conn.close()
+            if close_conn:
+                conn.close()
 
 
-    def get_categories(self, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_categories(self, domain: Optional[str] = None, conn: Optional[Any] = None) -> List[Dict[str, Any]]:
         """Returns all category groups with counts from fasteners.db, optionally filtered by domain."""
-        conn = common.get_connection(self.db_path)
+        close_conn = False
+        if conn is None:
+            conn = common.get_connection(self.db_path)
+            close_conn = True
         if not conn:
             return []
         try:
@@ -90,12 +97,16 @@ class FastenersLibrary:
                 for row in cur.fetchall()
             ]
         finally:
-            conn.close()
+            if close_conn:
+                conn.close()
 
 
-    def get_authorities(self) -> List[Dict[str, Any]]:
+    def get_authorities(self, conn: Optional[Any] = None) -> List[Dict[str, Any]]:
         """Returns all standard authorities (ISO, DIN, ASME, JIS, KS, etc.) with counts."""
-        conn = common.get_connection(self.db_path)
+        close_conn = False
+        if conn is None:
+            conn = common.get_connection(self.db_path)
+            close_conn = True
         if not conn:
             return []
         try:
@@ -114,7 +125,28 @@ class FastenersLibrary:
                 for row in cur.fetchall()
             ]
         finally:
+            if close_conn:
+                conn.close()
+
+
+    def get_metadata(self, domain: Optional[str] = None) -> Dict[str, Any]:
+        """Returns aggregated metadata (domains, categories, authorities) using a single connection."""
+        conn = common.get_connection(self.db_path)
+        if not conn:
+            return {
+                "domains": [],
+                "categories": [],
+                "authorities": [],
+            }
+        try:
+            return {
+                "domains": self.get_domains(conn=conn),
+                "categories": self.get_categories(domain=domain, conn=conn),
+                "authorities": self.get_authorities(conn=conn),
+            }
+        finally:
             conn.close()
+
 
 
     def query(

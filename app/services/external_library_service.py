@@ -68,6 +68,7 @@ get_jlcparts_component = jlcparts_library.get_component
 get_fastener_domains = fasteners_library.get_domains
 get_fastener_categories = fasteners_library.get_categories
 get_fastener_authorities = fasteners_library.get_authorities
+get_fastener_metadata = fasteners_library.get_metadata
 query_fasteners = fasteners_library.query
 get_fastener_detail = fasteners_library.get_detail
 append_fastener_spec = fasteners_library.append_spec

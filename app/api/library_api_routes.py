@@ -199,6 +199,13 @@ def get_fastener_authorities():
     return lib_svc.get_fastener_authorities()
 
 
+@router.get("/fasteners/metadata")
+def get_fastener_metadata(domain: Optional[str] = Query(None)):
+    """Get aggregated metadata (domains, categories, authorities) in a single request."""
+    return lib_svc.get_fastener_metadata(domain=domain)
+
+
+
 @router.get("/fasteners/assembly-guide")
 def get_fastener_assembly_guide(nominal: Optional[str] = Query(None)):
     """Get torque specs and tool sizing assembly guidelines."""

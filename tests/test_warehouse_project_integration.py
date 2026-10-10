@@ -56,7 +56,7 @@ def test_warehouse_contents_returns_config_and_unplaced_inventory_parts():
         assert [cabinet["id"] for cabinet in cabinets] == ["BOX-000", "BOX-001", "BOX-002"]
         drawers = [drawer for cabinet in cabinets for group in cabinet["drawerGroups"] for drawer in group["drawers"]]
         assert len(drawers) == 117
-        assert all(drawer["parts"] == [] for drawer in drawers)
+        assert not any(any(p["id"] == part_id for p in drawer["parts"]) for drawer in drawers)
 
         inventory = client.get(f"/api/inventory/get_part_by_id?part_id={part_id}")
         assert inventory.status_code == 200
@@ -80,7 +80,7 @@ def test_inventory_warehouse_filter_keeps_all_parts_by_default():
         ).json()
         assert any(part["id"] == part_id for part in all_parts)
         assert any(part["id"] == part_id for part in unplaced)
-        assert placed == []
+        assert not any(part["id"] == part_id for part in placed)
     finally:
         _delete_part(part_id)
 

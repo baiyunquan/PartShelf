@@ -21,27 +21,55 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
         })[m]);
       }
 
+      function renderDomains(domains) {
+        let total = 0;
+        (domains || []).forEach(d => {
+          total += (d.count || 0);
+          if (d.domain === 'fasteners') {
+            const el = document.getElementById('domainCountFasteners');
+            if (el) el.textContent = d.count.toLocaleString();
+          } else if (d.domain === 'power_transmission') {
+            const el = document.getElementById('domainCountPowerTransmission');
+            if (el) el.textContent = d.count.toLocaleString();
+          } else if (d.domain === 'structural_materials') {
+            const el = document.getElementById('domainCountStructuralMaterials');
+            if (el) el.textContent = d.count.toLocaleString();
+          }
+        });
+        const allEl = document.getElementById('domainCountAll');
+        if (allEl) allEl.textContent = total.toLocaleString();
+      }
+
+      function renderCategories(categories) {
+        const catSelect = document.getElementById('categoryFilter');
+        if (!catSelect) return;
+        catSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_categories'] || '全部分类'}</option>`;
+        (categories || []).forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.group;
+          opt.textContent = `${c.group_zh || c.group} (${c.count})`;
+          catSelect.appendChild(opt);
+        });
+      }
+
+      function renderAuthorities(authorities) {
+        const authSelect = document.getElementById('authorityFilter');
+        if (!authSelect) return;
+        authSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_authorities'] || '全部体系'}</option>`;
+        (authorities || []).forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a.authority;
+          opt.textContent = `${a.authority} (${a.count})`;
+          authSelect.appendChild(opt);
+        });
+      }
+
       async function loadDomains() {
         try {
           const res = await fetch('/api/libraries/fasteners/domains');
           if (res.ok) {
             const domains = await res.json();
-            let total = 0;
-            domains.forEach(d => {
-              total += (d.count || 0);
-              if (d.domain === 'fasteners') {
-                const el = document.getElementById('domainCountFasteners');
-                if (el) el.textContent = d.count.toLocaleString();
-              } else if (d.domain === 'power_transmission') {
-                const el = document.getElementById('domainCountPowerTransmission');
-                if (el) el.textContent = d.count.toLocaleString();
-              } else if (d.domain === 'structural_materials') {
-                const el = document.getElementById('domainCountStructuralMaterials');
-                if (el) el.textContent = d.count.toLocaleString();
-              }
-            });
-            const allEl = document.getElementById('domainCountAll');
-            if (allEl) allEl.textContent = total.toLocaleString();
+            renderDomains(domains);
           }
         } catch (err) {
           console.error('Error loading domains:', err);
@@ -54,14 +82,7 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
           const res = await fetch(url);
           if (res.ok) {
             const categories = await res.json();
-            const catSelect = document.getElementById('categoryFilter');
-            catSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_categories'] || '全部分类'}</option>`;
-            categories.forEach(c => {
-              const opt = document.createElement('option');
-              opt.value = c.group;
-              opt.textContent = `${c.group_zh || c.group} (${c.count})`;
-              catSelect.appendChild(opt);
-            });
+            renderCategories(categories);
           }
         } catch (err) {
           console.error('Error loading categories:', err);
@@ -73,17 +94,31 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
           const res = await fetch('/api/libraries/fasteners/authorities');
           if (res.ok) {
             const authorities = await res.json();
-            const authSelect = document.getElementById('authorityFilter');
-            authSelect.innerHTML = `<option value="">${i18n['libraries_fasteners.filter_all_authorities'] || '全部体系'}</option>`;
-            authorities.forEach(a => {
-              const opt = document.createElement('option');
-              opt.value = a.authority;
-              opt.textContent = `${a.authority} (${a.count})`;
-              authSelect.appendChild(opt);
-            });
+            renderAuthorities(authorities);
           }
         } catch (err) {
           console.error('Error loading authorities:', err);
+        }
+      }
+
+      async function loadMetadata(domain = '') {
+        try {
+          const url = domain ? `/api/libraries/fasteners/metadata?domain=${encodeURIComponent(domain)}` : '/api/libraries/fasteners/metadata';
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.domains)) {
+              renderDomains(data.domains);
+            }
+            if (Array.isArray(data.categories)) {
+              renderCategories(data.categories);
+            }
+            if (Array.isArray(data.authorities)) {
+              renderAuthorities(data.authorities);
+            }
+          }
+        } catch (err) {
+          console.error('Error loading fastener metadata:', err);
         }
       }
 
@@ -269,8 +304,6 @@ const i18n = JSON.parse(document.getElementById('page-translations').textContent
 
       document.addEventListener('DOMContentLoaded', () => {
         setupDomainButtons();
-        loadDomains();
-        loadCategories('');
-        loadAuthorities();
+        loadMetadata('');
         fetchFasteners(1);
       });
