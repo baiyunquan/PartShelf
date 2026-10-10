@@ -1,3 +1,4 @@
+from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -27,11 +28,23 @@ def scan_project_options(db: Session = Depends(get_db)):
 
 
 @router.post("/recognize")
-def recognize_label(request: Request, qr_text: str = Form(...), request_id: str = Form(...),
-                    project_id: int | None = Form(None), image: UploadFile = File(...), db: Session = Depends(get_db)):
+def recognize_label(
+    request: Request,
+    qr_text: str = Form(""),
+    request_id: str | None = Form(None),
+    project_id: str | int | None = Form(None),
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    req_id = str(request_id).strip() if request_id and str(request_id).strip() else str(uuid4())
+    pid = None
+    if project_id is not None:
+        p_str = str(project_id).strip()
+        if p_str.isdigit():
+            pid = int(p_str)
     data = image.file.read(service.MAX_UPLOAD_BYTES + 1)
     image.file.close()
-    scan = service.recognize(db, qr_text, data, project_id, request_id, get_current_language(request))
+    scan = service.recognize(db, qr_text, data, pid, req_id, get_current_language(request))
     return service.public_scan(scan)
 
 

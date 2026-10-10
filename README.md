@@ -123,11 +123,26 @@ OCR 使用独立环境，不安装到 PartShelf 主应用。服务可部署在�
 - **Stage 1 (Extractor)**：从标签 OCR 或 BOM 原始文本中抽取标准化 MPN、品牌、封装与关键电气参数。
 - **Stage 2 (Reranker)**：基于本地元器件库（Altium / JLCParts）候选集合，执行基于思维链（CoT）的技术裁决（`exact_match`、`ambiguous`、`no_match`），自动识别旧包装袋复用冲突并给出严谨排他分析。
 
-大模型后端采用本地 `llama.cpp` 原生服务（OpenAI 兼容 `/v1/chat/completions` 接口）：
-- **端口 8081**：Stage 1 Extractor (`ElectronicQwen-Extractor-v1-Q4_K_M.gguf`)
-- **端口 8082**：Stage 2 Reranker (`ElectronicQwen-Reranker-v1-Q4_K_M.gguf`)
+大模型后端采用本地 `llama.cpp` 原生服务（OpenAI 兼容 `/v1/chat/completions` 接口），默认使用全精度未量化 BF16 模型：
+- **端口 8081**：Stage 1 Extractor (`ElectronicQwen-Extractor-v1-BF16.gguf`)
+- **端口 8082**：Stage 2 Reranker (`ElectronicQwen-Reranker-v1-BF16.gguf`)
 
-服务启停与运维：
+Windows 一键全栈启动（集成 PaddleOCR、llama.cpp BF16 双后端及 Web 服务）：
+```bash
+# Windows 一键全栈启动（自动拉起 PaddleOCR 8010、llama Extractor 8081、llama Reranker 8082 及 Web 8000，默认 BF16 模型，自动配置 ADB 手机反向代理）
+python run_windows.py
+
+# 仅拉起 AI/OCR 模型后端服务（后台运行）
+python run_windows.py --no-web
+
+# 查看所有服务健康状态
+python run_windows.py --status
+
+# 优雅停止所有后端服务
+python run_windows.py --stop
+```
+
+独立服务管理与运维：
 ```bash
 # 启动 Extractor 与 Reranker 双服务（后台常驻）
 python scripts/manage_llama_servers.py start

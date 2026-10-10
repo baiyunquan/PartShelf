@@ -39,12 +39,14 @@ env/
 *.sqlite3-wal
 .main_database_test_reset.done
 data/*.db
+data/models/paddleocr_vl/*.gguf
 data/libraries/
 data/cache/
 data/temp/
 data/scan_uploads/
 data/logs/
 data/llama_servers_state.json
+data/run_windows_state.json
 
 # Large media, downloaded images, and resource assets
 static/images/*

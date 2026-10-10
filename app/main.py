@@ -9,7 +9,7 @@ if str(BASE_DIR) not in sys.path:
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.api import inventory_api_routes, project_api_routes, web_routes, library_api_routes, search_api_routes, bom_api_routes, warehouse_api_routes, scan_api_routes
+from app.api import inventory_api_routes, project_api_routes, web_routes, library_api_routes, search_api_routes, bom_api_routes, warehouse_api_routes, scan_api_routes, ocr_api_routes
 from app.services.external_library_service import ensure_libraries_on_startup
 from db.database import engine
 import app.models
@@ -37,6 +37,8 @@ app.include_router(library_api_routes.router, prefix="/api/libraries", tags=["Ex
 app.include_router(search_api_routes.router, prefix="/api/search", tags=["Global Search"])
 app.include_router(warehouse_api_routes.router, prefix="/api/warehouse", tags=["Warehouse"])
 app.include_router(scan_api_routes.router, prefix="/api/scan", tags=["Scan Import"])
+app.include_router(ocr_api_routes.router, prefix="/v1", tags=["PaddleOCR Compatibility API"])
+app.include_router(ocr_api_routes.router, prefix="/api/ocr", tags=["OCR API"])
 
 if __name__ == "__main__":
     import uvicorn
