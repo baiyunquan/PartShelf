@@ -117,3 +117,19 @@ def test_warehouse_translations_are_available_in_both_languages():
 
     assert "<h1>Parts Warehouse</h1>" in english.text
     assert "<h1>仓储箱</h1>" in chinese.text
+
+
+def test_warehouse_drawer_occupancy_colors_and_styles():
+    stylesheet = client.get("/static/css/warehouse.css")
+    assert stylesheet.status_code == 200
+    assert ".warehouse-drawer-face {\n  fill: transparent;" in stylesheet.text
+    assert ".warehouse-drawer.has-parts .warehouse-drawer-face" in stylesheet.text
+    assert "fill: #198754;" in stylesheet.text
+    assert ".warehouse-drawer.has-parts .warehouse-drawer-label {\n  fill: #ffffff;" in stylesheet.text
+
+    page_script = client.get("/static/js/warehouse.js")
+    assert page_script.status_code == 200
+    assert "hasParts = (drawer.parts || []).length > 0" in page_script.text
+    assert "has-parts" in page_script.text
+    assert "data-has-parts" in page_script.text
+

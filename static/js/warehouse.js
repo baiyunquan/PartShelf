@@ -192,17 +192,19 @@
 
     for (const group of cabinet.drawerGroups) {
       for (const drawer of group.drawers) {
+        const hasParts = (drawer.parts || []).length > 0;
         const drawerGroup = makeSvgElement("g", {
-          class: "warehouse-drawer",
+          class: `warehouse-drawer${hasParts ? " has-parts" : ""}`,
           role: "button",
           tabindex: 0,
           "aria-pressed": "false",
           "aria-label": `${cabinet.id} ${drawer.code}, ${drawerTypeName(group)}`,
           "data-drawer-code": drawer.code,
+          "data-has-parts": hasParts ? "true" : "false",
         });
         drawerGroup.appendChild(
           makeSvgElement("rect", {
-            class: "warehouse-drawer-face",
+            class: `warehouse-drawer-face${hasParts ? " has-parts" : ""}`,
             x: drawer.xMm,
             y: drawer.yMm,
             width: drawer.widthMm,

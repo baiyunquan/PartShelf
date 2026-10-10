@@ -134,21 +134,21 @@
 }
 
 .warehouse-drawer-face {
-  fill: #fff;
+  fill: transparent;
   stroke: #bd560b;
   stroke-width: 0.8;
-  transition: fill 120ms ease, stroke-width 120ms ease;
+  transition: fill 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
 }
 
 .warehouse-drawer:hover .warehouse-drawer-face,
 .warehouse-drawer:focus .warehouse-drawer-face {
-  fill: #fff7ed;
+  fill: rgba(255, 255, 255, 0.18);
   stroke: #8c3c07;
   stroke-width: 1.8;
 }
 
 .warehouse-drawer.is-selected .warehouse-drawer-face {
-  fill: #ffedd5;
+  fill: rgba(255, 255, 255, 0.35);
   stroke: #7c2d12;
   stroke-width: 2;
 }
@@ -160,6 +160,30 @@
   pointer-events: none;
   text-anchor: middle;
   dominant-baseline: central;
+}
+
+.warehouse-drawer.has-parts .warehouse-drawer-face,
+.warehouse-drawer-face.has-parts {
+  fill: #198754;
+  stroke: #146c43;
+  stroke-width: 0.9;
+}
+
+.warehouse-drawer.has-parts:hover .warehouse-drawer-face,
+.warehouse-drawer.has-parts:focus .warehouse-drawer-face {
+  fill: #157347;
+  stroke: #0f5132;
+  stroke-width: 1.8;
+}
+
+.warehouse-drawer.has-parts.is-selected .warehouse-drawer-face {
+  fill: #146c43;
+  stroke: #ffffff;
+  stroke-width: 2.2;
+}
+
+.warehouse-drawer.has-parts .warehouse-drawer-label {
+  fill: #ffffff;
 }
 
 .warehouse-print-note {
